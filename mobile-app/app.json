@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "my-ex-coach",
+    "slug": "my-ex-coach",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Esta app necesita acceso al micrófono para entrada de voz.",
+        "NSUserNotificationsUsageDescription": "Esta app envía notificaciones motivacionales diarias para apoyar tu proceso de sanación."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "RECORD_AUDIO",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#a855f7"
+        }
+      ]
+    ],
+    "scheme": "my-ex-coach"
+  }
+}
