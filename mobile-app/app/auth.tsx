@@ -16,7 +16,10 @@ export default function AuthScreen() {
 
     const handleAuth = async () => {
         setErrorMsg(null);
-        if (!email || !password) {
+        const trimmedEmail = email.trim();
+        const trimmedPassword = password.trim();
+
+        if (!trimmedEmail || !trimmedPassword) {
             setErrorMsg('Por favor completa todos los campos');
             return;
         }
@@ -25,8 +28,8 @@ export default function AuthScreen() {
         try {
             if (isSignUp) {
                 const { data, error } = await supabase.auth.signUp({
-                    email,
-                    password,
+                    email: trimmedEmail,
+                    password: trimmedPassword,
                 });
 
                 if (error) throw error;
@@ -40,8 +43,8 @@ export default function AuthScreen() {
                 }
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
-                    email,
-                    password,
+                    email: trimmedEmail,
+                    password: trimmedPassword,
                 });
 
                 if (error) throw error;
@@ -49,7 +52,13 @@ export default function AuthScreen() {
             }
         } catch (error: any) {
             console.error("Auth error:", error);
-            setErrorMsg(error.message || "Ocurrió un error");
+            if (error.message.includes("invalid login credentials")) {
+                setErrorMsg("Credenciales inválidas. Verifica tu correo y contraseña.");
+            } else if (error.message.includes("User already registered")) {
+                setErrorMsg("Este correo ya está registrado. Intenta iniciar sesión.");
+            } else {
+                setErrorMsg(error.message || "Ocurrió un error");
+            }
         } finally {
             setLoading(false);
         }
@@ -64,7 +73,11 @@ export default function AuthScreen() {
             router.replace('/(tabs)');
         } catch (error: any) {
             console.error("Anon auth error:", error);
-            setErrorMsg("Inicio anónimo fallido. Habilítalo en Supabase o regístrate.");
+            if (error.message.includes("Anonymous sign-ins are disabled")) {
+                setErrorMsg("El inicio de sesión anónimo está desactivado en la configuración de Supabase.");
+            } else {
+                setErrorMsg("Inicio anónimo fallido. Intenta registrarte.");
+            }
         } finally {
             setLoading(false);
         }

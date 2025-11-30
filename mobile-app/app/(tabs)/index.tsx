@@ -3,7 +3,6 @@ import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView
 import { Send, X, Sparkles, Plus, MessageSquare, Wrench, Heart, BookOpen, Mic } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { sendMessageToChatGPT, extractKeyFacts, checkForCrisisKeywords } from '../../lib/openai';
-import { canUseFeature, incrementFeatureUsage } from '../../lib/subscriptions';
 import { supabase } from '../../lib/supabase';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,12 +14,9 @@ import DecoderModal from '../../components/DecoderModal';
 import ConversationAnalyzerModal from '../../components/ConversationAnalyzerModal';
 import SocialMediaAnalyzerModal from '../../components/SocialMediaAnalyzerModal';
 import StalkerDetectorModal from '../../components/StalkerDetectorModal';
-import ConversationHistory from '../../components/ConversationHistory';
+import ToolsToolbar from '../../components/ToolsToolbar';
+import ToolModal from '../../components/ToolModal';
 import { useLanguage } from '../../lib/i18n';
-import { registerForPushNotifications, scheduleDailyNotification } from '../../lib/notificationService';
-import { conversationManager } from '../../lib/conversationManager';
-import { useContextualSuggestions, ToolSuggestion } from '../../lib/contextualSuggestions';
-import SuggestionBanner from '../../components/SuggestionBanner';
 
 type Message = {
     id: string;
@@ -37,19 +33,18 @@ export default function ChatScreen() {
     const [loading, setLoading] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [currentUser, setCurrentUser] = useState<any>(null);
-    const [darkMode, setDarkMode] = useState(true);
     const [sidebarVisible, setSidebarVisible] = useState(false);
+
+    // Tool States
     const [decoderVisible, setDecoderVisible] = useState(false);
     const [conversationAnalyzerVisible, setConversationAnalyzerVisible] = useState(false);
     const [socialMediaAnalyzerVisible, setSocialMediaAnalyzerVisible] = useState(false);
     const [stalkerDetectorVisible, setStalkerDetectorVisible] = useState(false);
-    const [historyVisible, setHistoryVisible] = useState(false);
-    const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-    const [suggestion, setSuggestion] = useState<ToolSuggestion | null>(null);
-    const [recentToolUsage, setRecentToolUsage] = useState<string[]>([]);
+    const [journalVisible, setJournalVisible] = useState(false);
+    const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
+
     const flatListRef = useRef<FlatList>(null);
     const { t } = useLanguage();
-    const { analyze, shouldAnalyze } = useContextualSuggestions();
 
     useEffect(() => {
         initializeChat();
@@ -84,12 +79,8 @@ export default function ChatScreen() {
             if (data && data.length > 0) {
                 setMessages(data as any);
             } else {
-                setMessages([{
-                    id: 'welcome',
-                    content: 'Hola. Soy tu Ex Coach, potenciado por IA. Estoy aquí para ayudarte a sanar, crecer y seguir adelante. ¿Qué tienes en mente hoy?',
-                    sender: 'ai',
-                    created_at: new Date().toISOString()
-                }]);
+                // No welcome message - clean start
+                setMessages([]);
             }
         } catch (error) {
             console.error('Error loading messages:', error);
@@ -117,6 +108,35 @@ export default function ChatScreen() {
         setInputText(prompt);
     };
 
+    const handleToolSelect = (tool: string) => {
+        // Instead of opening modals, insert tool-specific prompts into chat
+        switch (tool) {
+            case 'decoder':
+                setInputText('🔍 Decodificar mensaje: ');
+                break;
+            case 'conversation':
+                setInputText('📊 Analizar conversación: ');
+                break;
+            case 'social':
+                setInputText('📱 Analizar publicación: ');
+                break;
+            case 'stalker':
+                setInputText('👁️ Detectar stalking: ');
+                break;
+            case 'journal':
+                setInputText('📖 Registrar emoción: ');
+                break;
+            case 'panic':
+                // Panic button sends immediate help message
+                setInputText('🆘 Necesito ayuda urgente, estoy en crisis');
+                setTimeout(() => sendMessage(), 100);
+                break;
+            case 'progress':
+                router.push('/(tabs)/progress');
+                break;
+        }
+    };
+
     const pickImage = async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -134,12 +154,18 @@ export default function ChatScreen() {
         if ((!inputText.trim() && !selectedImage) || loading) return;
 
         if (currentUser) {
-            const access = await canUseFeature(currentUser.id, 'message');
+            // Check and increment usage limit atomically
+            const { data: allowed, error } = await supabase.rpc('increment_usage', {
+                user_id: currentUser.id,
+                feature_type: 'message'
+            });
 
-            if (!access.allowed) {
+            if (error) {
+                console.error('Error checking limits:', error);
+            } else if (allowed === false) {
                 Alert.alert(
                     'Límite Diario Alcanzado',
-                    access.reason || `Has usado ${access.current}/${access.limit} mensajes hoy. Actualiza a Warrior para mensajes ilimitados.`,
+                    'Has alcanzado tus 10 mensajes diarios gratuitos. Actualiza a Warrior para mensajes ilimitados.',
                     [
                         { text: 'Cancelar', style: 'cancel' },
                         {
@@ -185,14 +211,13 @@ export default function ChatScreen() {
                     sender: userMsg.sender,
                     image: userMsg.image,
                 });
-
-                await incrementFeatureUsage(currentUser.id, 'message');
             }
 
             const response = await sendMessageToChatGPT(
                 userMsg.content,
                 imageToSend,
-                currentUser?.id
+                currentUser?.id,
+                messages // Pass current messages for context
             );
 
             const aiMsg: Message = {
@@ -203,6 +228,11 @@ export default function ChatScreen() {
             };
 
             setMessages((prev) => [...prev, aiMsg]);
+
+            // Set suggested replies
+            if (response.suggestedReplies && response.suggestedReplies.length > 0) {
+                setSuggestedReplies(response.suggestedReplies);
+            }
 
             if (currentUser) {
                 await supabase.from('chat_messages').insert({
@@ -299,7 +329,6 @@ export default function ChatScreen() {
     }, []);
 
     const displayedActions = quickActions.slice(currentPromptIndex * 4, (currentPromptIndex * 4) + 4);
-    // If we run out of items, wrap around or show what's left plus start
     const visibleActions = displayedActions.length === 4 ? displayedActions : [...displayedActions, ...quickActions.slice(0, 4 - displayedActions.length)];
 
     return (
@@ -316,8 +345,6 @@ export default function ChatScreen() {
             {/* Sidebar */}
             <Sidebar
                 onNewChat={handleNewChat}
-                darkMode={darkMode}
-                onToggleDarkMode={() => setDarkMode(!darkMode)}
                 isPremium={false}
                 visible={sidebarVisible}
                 onClose={() => setSidebarVisible(false)}
@@ -326,27 +353,25 @@ export default function ChatScreen() {
             {/* Main Chat Area */}
             <View className="flex-1">
                 <SafeAreaView className="flex-1">
-                    {/* Header with Hamburger Menu */}
+                    {/* Header with User Greeting */}
                     <View className="px-6 py-4 border-b border-white/10 flex-row items-center justify-between">
-                        <View className="flex-row items-center">
-                            {/* Hamburger button - visible only on mobile */}
-                            <TouchableOpacity
-                                onPress={() => setSidebarVisible(true)}
-                                className="mr-4 md:hidden"
-                            >
-                                <View className="w-6 h-6 justify-center">
-                                    <View className="w-full h-0.5 bg-white mb-1.5" />
-                                    <View className="w-full h-0.5 bg-white mb-1.5" />
-                                    <View className="w-full h-0.5 bg-white" />
-                                </View>
-                            </TouchableOpacity>
-                            <View className="flex-1 items-center">
-                                <Text className="text-white text-2xl font-bold">
-                                    {currentUser?.user_metadata?.full_name || currentUser?.email?.split('@')[0] || 'Usuario'}
-                                </Text>
-                                <Text className="text-gray-400 text-sm">¿Cómo puedo ayudarte hoy?</Text>
+                        <TouchableOpacity
+                            onPress={() => setSidebarVisible(true)}
+                            className="w-10 h-10 items-center justify-center"
+                        >
+                            <View className="w-6 h-6 justify-center">
+                                <View className="w-full h-0.5 bg-white mb-1.5" />
+                                <View className="w-full h-0.5 bg-white mb-1.5" />
+                                <View className="w-full h-0.5 bg-white" />
                             </View>
+                        </TouchableOpacity>
+                        <View className="flex-1 items-center">
+                            <Text className="text-white text-xl font-bold">
+                                {currentUser?.user_metadata?.full_name || currentUser?.email?.split('@')[0] || 'Usuario'}
+                            </Text>
+                            <Text className="text-gray-400 text-sm">¿Cómo puedo ayudarte hoy?</Text>
                         </View>
+                        <View className="w-10" />
                     </View>
 
                     <KeyboardAvoidingView
@@ -392,8 +417,31 @@ export default function ChatScreen() {
                             />
                         )}
 
+                        {/* Suggested Replies */}
+                        {suggestedReplies.length > 0 && (
+                            <View className="px-5 pb-3">
+                                <View className="flex-row flex-wrap gap-2">
+                                    {suggestedReplies.map((reply, index) => (
+                                        <TouchableOpacity
+                                            key={index}
+                                            onPress={() => {
+                                                setInputText(reply);
+                                                setSuggestedReplies([]);
+                                            }}
+                                            className="bg-white/5 border border-purple-500/30 px-4 py-2 rounded-full"
+                                        >
+                                            <Text className="text-purple-300 text-sm">💬 {reply}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
+
+                        {/* Tools Toolbar */}
+                        <ToolsToolbar onToolSelect={handleToolSelect} />
+
                         {/* Input Area */}
-                        <View className="px-5 pb-6 pt-3">
+                        <View className="px-5 pb-6 pt-3 bg-[#0a0a0a]">
                             {selectedImage && (
                                 <View className="flex-row items-center mb-3 bg-white/5 backdrop-blur-xl border border-white/10 p-2 rounded-2xl self-start">
                                     <Image
@@ -417,37 +465,6 @@ export default function ChatScreen() {
                                     <Plus size={18} color="#a855f7" />
                                 </TouchableOpacity>
 
-                                <TouchableOpacity
-                                    onPress={() => setDecoderVisible(true)}
-                                    className="w-9 h-9 items-center justify-center rounded-full bg-white/10 ml-2"
-                                    title="Decodificador"
-                                >
-                                    <Wrench size={18} color="#a855f7" />
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    onPress={() => setConversationAnalyzerVisible(true)}
-                                    className="w-9 h-9 items-center justify-center rounded-full bg-white/10 ml-2"
-                                    title="Analizar Conversación"
-                                >
-                                    <MessageSquare size={18} color="#3b82f6" />
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    onPress={() => setSocialMediaAnalyzerVisible(true)}
-                                    className="w-9 h-9 items-center justify-center rounded-full bg-white/10 ml-2"
-                                    title="Analizar Redes Sociales"
-                                >
-                                    <Heart size={18} color="#ec4899" />
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    onPress={() => Alert.alert('Próximamente', 'La función de voz estará disponible pronto.')}
-                                    className="w-9 h-9 items-center justify-center rounded-full bg-white/10 ml-2"
-                                >
-                                    <Mic size={18} color="#a855f7" />
-                                </TouchableOpacity>
-
                                 <TextInput
                                     className="flex-1 px-4 text-white text-[15px] max-h-32"
                                     placeholder="Escribe tu mensaje..."
@@ -458,7 +475,6 @@ export default function ChatScreen() {
                                     onKeyPress={handleKeyPress}
                                     style={{ outlineStyle: 'none' } as any}
                                 />
-
 
                                 {inputText.trim() || selectedImage ? (
                                     <TouchableOpacity
@@ -481,255 +497,66 @@ export default function ChatScreen() {
                                     </TouchableOpacity>
                                 ) : (
                                     <TouchableOpacity
+                                        onPress={() => Alert.alert('Próximamente', 'La función de voz estará disponible pronto.')}
                                         className="w-9 h-9 items-center justify-center rounded-full bg-white/10 mr-1"
                                     >
-                                        <Mic size={18} color="#9ca3af" />
+                                        <Mic size={18} color="#a855f7" />
                                     </TouchableOpacity>
                                 )}
                             </View>
+                            <Text className="text-center text-gray-500 text-[10px] mt-3">
+                                La IA puede cometer errores. Verifica la información importante.
+                            </Text>
                         </View>
                     </KeyboardAvoidingView>
                 </SafeAreaView>
-            </View>
 
-            {/* Modals */}
-            <Sidebar
-                onNewChat={handleNewChat}
-                darkMode={darkMode}
-                onToggleDarkMode={() => setDarkMode(!darkMode)}
-                isPremium={false}
-                visible={sidebarVisible}
-                onClose={() => setSidebarVisible(false)}
-            />
+                {/* Modals */}
+                <DecoderModal
+                    visible={decoderVisible}
+                    onClose={() => setDecoderVisible(false)}
+                    onInsertResponse={(text) => setInputText(text)}
+                />
 
-            <DecoderModal
-                visible={decoderVisible}
-                onClose={() => setDecoderVisible(false)}
-            />
+                <ConversationAnalyzerModal
+                    visible={conversationAnalyzerVisible}
+                    onClose={() => setConversationAnalyzerVisible(false)}
+                />
 
-            <ConversationAnalyzerModal
-                visible={conversationAnalyzerVisible}
-                onClose={() => setConversationAnalyzerVisible(false)}
-            />
+                <SocialMediaAnalyzerModal
+                    visible={socialMediaAnalyzerVisible}
+                    onClose={() => setSocialMediaAnalyzerVisible(false)}
+                />
 
-            <SocialMediaAnalyzerModal
-                visible={socialMediaAnalyzerVisible}
-                onClose={() => setSocialMediaAnalyzerVisible(false)}
-            />
+                <StalkerDetectorModal
+                    visible={stalkerDetectorVisible}
+                    onClose={() => setStalkerDetectorVisible(false)}
+                    onAnalyzeInChat={(text) => setInputText(text)}
+                />
 
-            <StalkerDetectorModal
-                visible={stalkerDetectorVisible}
-                onClose={() => setStalkerDetectorVisible(false)}
-                onAnalyzeInChat={(analysis) => {
-                    setInputText(analysis);
-                    setStalkerDetectorVisible(false);
-                }}
-            />
+                {/* Journal Modal - Placeholder for now */}
+                <ToolModal
+                    visible={journalVisible}
+                    onClose={() => setJournalVisible(false)}
+                    title="Diario de Ánimo"
+                >
+                    <View className="flex-1 items-center justify-center p-6">
+                        <Text className="text-white text-center mb-4">
+                            La versión rápida del diario está en construcción.
+                        </Text>
+                        <TouchableOpacity
+                            onPress={() => {
+                                setJournalVisible(false);
+                                router.push('/tools/journal');
+                            }}
+                            className="bg-blue-600 px-6 py-3 rounded-xl"
+                        >
+                            <Text className="text-white font-bold">Ir al Diario Completo</Text>
+                        </TouchableOpacity>
+                    </View>
+                </ToolModal>
 
-            <ConversationHistory
-                className="mr-4 md:hidden"
-            >
-                <View className="w-6 h-6 justify-center">
-                    <View className="w-full h-0.5 bg-white mb-1.5" />
-                    <View className="w-full h-0.5 bg-white mb-1.5" />
-                    <View className="w-full h-0.5 bg-white" />
-                </View>
-            </TouchableOpacity>
-            <View className="flex-1 items-center">
-                <Text className="text-white text-2xl font-bold">
-                    {currentUser?.user_metadata?.full_name || currentUser?.email?.split('@')[0] || 'Usuario'}
-                </Text>
-                <Text className="text-gray-400 text-sm">¿Cómo puedo ayudarte hoy?</Text>
             </View>
         </View>
-                    </View >
-
-        <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-            className="flex-1"
-        >
-            {messages.length === 0 ? (
-                <View className="flex-1 items-center justify-center px-8">
-                    <Sparkles size={64} color="#a855f7" />
-                    <Text className="text-white text-2xl font-bold mt-6 text-center">
-                        Inicia una conversación
-                    </Text>
-                    <Text className="text-gray-400 text-center mt-3 leading-6 mb-8">
-                        Estoy aquí para escucharte, apoyarte y guiarte en tu proceso de sanación.
-                    </Text>
-
-                    {/* Quick Action Cards */}
-                    <View className="w-full max-w-2xl">
-                        <View className="flex-row flex-wrap gap-4">
-                            {visibleActions.map((action, index) => (
-                                <View key={index} className="w-[48%]">
-                                    <QuickActionCard
-                                        icon={action.icon}
-                                        title={action.title}
-                                        subtitle={action.subtitle}
-                                        color={action.color}
-                                        onPress={() => handleQuickAction(action.prompt)}
-                                    />
-                                </View>
-                            ))}
-                        </View>
-                    </View>
-                </View>
-            ) : (
-                <FlatList
-                    ref={flatListRef}
-                    data={messages}
-                    keyExtractor={(item) => item.id}
-                    renderItem={({ item }) => <MessageItem item={item} />}
-                    contentContainerStyle={{ paddingVertical: 15, paddingBottom: 25 }}
-                    showsVerticalScrollIndicator={false}
-                />
-            )}
-
-            {/* Input Area */}
-            <View className="px-5 pb-6 pt-3">
-                {selectedImage && (
-                    <View className="flex-row items-center mb-3 bg-white/5 backdrop-blur-xl border border-white/10 p-2 rounded-2xl self-start">
-                        <Image
-                            source={{ uri: `data:image/jpeg;base64,${selectedImage}` }}
-                            className="w-14 h-14 rounded-xl"
-                        />
-                        <TouchableOpacity
-                            onPress={() => setSelectedImage(null)}
-                            className="ml-2 bg-red-500/20 rounded-full p-1.5"
-                        >
-                            <X size={14} color="#ef4444" />
-                        </TouchableOpacity>
-                    </View>
-                )}
-
-                <View className="flex-row items-center bg-white/5 backdrop-blur-xl border border-white/10 rounded-[28px] px-3 py-2.5 min-h-[60px]">
-                    <TouchableOpacity
-                        onPress={pickImage}
-                        className="w-9 h-9 items-center justify-center rounded-full bg-white/10 ml-1"
-                    >
-                        <Plus size={18} color="#a855f7" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        onPress={() => setDecoderVisible(true)}
-                        className="w-9 h-9 items-center justify-center rounded-full bg-white/10 ml-2"
-                        title="Decodificador"
-                    >
-                        <Wrench size={18} color="#a855f7" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        onPress={() => setConversationAnalyzerVisible(true)}
-                        className="w-9 h-9 items-center justify-center rounded-full bg-white/10 ml-2"
-                        title="Analizar Conversación"
-                    >
-                        <MessageSquare size={18} color="#3b82f6" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        onPress={() => setSocialMediaAnalyzerVisible(true)}
-                        className="w-9 h-9 items-center justify-center rounded-full bg-white/10 ml-2"
-                        title="Analizar Redes Sociales"
-                    >
-                        <Heart size={18} color="#ec4899" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        onPress={() => Alert.alert('Próximamente', 'La función de voz estará disponible pronto.')}
-                        className="w-9 h-9 items-center justify-center rounded-full bg-white/10 ml-2"
-                    >
-                        <Mic size={18} color="#a855f7" />
-                    </TouchableOpacity>
-
-                    <TextInput
-                        className="flex-1 px-4 text-white text-[15px] max-h-32"
-                        placeholder="Escribe tu mensaje..."
-                        placeholderTextColor="#6b7280"
-                        value={inputText}
-                        onChangeText={setInputText}
-                        multiline
-                        onKeyPress={handleKeyPress}
-                        style={{ outlineStyle: 'none' } as any}
-                    />
-
-
-                    {inputText.trim() || selectedImage ? (
-                        <TouchableOpacity
-                            onPress={sendMessage}
-                            disabled={loading}
-                            className="w-9 h-9 items-center justify-center rounded-full mr-1"
-                        >
-                            <LinearGradient
-                                colors={['#3b82f6', '#a855f7']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                                className="w-full h-full rounded-full items-center justify-center"
-                            >
-                                {loading ? (
-                                    <ActivityIndicator size="small" color="white" />
-                                ) : (
-                                    <Send size={16} color="white" fill="white" />
-                                )}
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    ) : (
-                        <TouchableOpacity
-                            className="w-9 h-9 items-center justify-center rounded-full bg-white/10 mr-1"
-                        >
-                            <Mic size={18} color="#9ca3af" />
-                        </TouchableOpacity>
-                    )}
-                </View>
-            </View>
-        </KeyboardAvoidingView>
-                </SafeAreaView >
-            </View >
-
-        {/* Modals */ }
-        < Sidebar
-    onNewChat = { handleNewChat }
-    darkMode = { darkMode }
-    onToggleDarkMode = {() => setDarkMode(!darkMode)
-}
-isPremium = { false}
-visible = { sidebarVisible }
-onClose = {() => setSidebarVisible(false)}
-            />
-
-    < DecoderModal
-visible = { decoderVisible }
-onClose = {() => setDecoderVisible(false)}
-            />
-
-    < ConversationAnalyzerModal
-visible = { conversationAnalyzerVisible }
-onClose = {() => setConversationAnalyzerVisible(false)}
-            />
-
-    < SocialMediaAnalyzerModal
-visible = { socialMediaAnalyzerVisible }
-onClose = {() => setSocialMediaAnalyzerVisible(false)}
-            />
-
-    < StalkerDetectorModal
-visible = { stalkerDetectorVisible }
-onClose = {() => setStalkerDetectorVisible(false)}
-onAnalyzeInChat = {(analysis) => {
-    setInputText(analysis);
-    setStalkerDetectorVisible(false);
-}}
-            />
-
-    < ConversationHistory
-visible = { historyVisible }
-onClose = {() => setHistoryVisible(false)}
-onLoadConversation = {(conversationId) => {
-    // Load conversation logic here
-    setHistoryVisible(false);
-}}
-            />
-        </View >
     );
 }

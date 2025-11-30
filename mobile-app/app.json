@@ -16,12 +16,14 @@
     ],
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.myexcoach.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Esta app necesita acceso al micrófono para entrada de voz.",
         "NSUserNotificationsUsageDescription": "Esta app envía notificaciones motivacionales diarias para apoyar tu proceso de sanación."
       }
     },
     "android": {
+      "package": "com.myexcoach.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -43,7 +45,8 @@
           "icon": "./assets/icon.png",
           "color": "#a855f7"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "scheme": "my-ex-coach"
   }

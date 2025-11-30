@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Alert, Animated } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import { User, LogOut, Mail, Calendar, Award, Shield } from 'lucide-react-native';
+import { User, LogOut, Mail, Calendar, Award, Shield, ArrowLeft } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -106,10 +106,26 @@ export default function ProfileScreen() {
             />
 
             <SafeAreaView className="flex-1">
-                <AppHeader
-                    title={t('profile_title')}
-                    onMenuPress={() => setMenuVisible(true)}
-                />
+                {/* Custom Header with Back Button */}
+                <View className="px-6 py-4 border-b border-white/10 flex-row items-center justify-between">
+                    <TouchableOpacity
+                        onPress={() => router.back()}
+                        className="w-10 h-10 items-center justify-center rounded-full bg-white/5"
+                    >
+                        <ArrowLeft size={20} color="#fff" />
+                    </TouchableOpacity>
+                    <Text className="text-white text-lg font-bold">{t('profile_title')}</Text>
+                    <TouchableOpacity
+                        onPress={() => setMenuVisible(true)}
+                        className="w-10 h-10 items-center justify-center"
+                    >
+                        <View className="w-6 h-6 justify-center">
+                            <View className="w-full h-0.5 bg-white mb-1.5" />
+                            <View className="w-full h-0.5 bg-white mb-1.5" />
+                            <View className="w-full h-0.5 bg-white" />
+                        </View>
+                    </TouchableOpacity>
+                </View>
 
                 <HamburgerMenu
                     visible={menuVisible}

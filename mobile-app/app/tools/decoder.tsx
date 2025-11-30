@@ -51,14 +51,20 @@ export default function DecoderAdvanced() {
                 return;
             }
 
-            const access = await canUseFeature(user.id, 'decoder');
+            // Check and increment usage limit atomically
+            const { data: allowed, error } = await supabase.rpc('increment_usage', {
+                user_id: user.id,
+                feature_type: 'decoder'
+            });
 
-            if (!access.allowed) {
+            if (error) {
+                console.error('Error checking limits:', error);
+            } else if (allowed === false) {
                 Alert.alert(
-                    language === 'es' ? 'Límite Alcanzado' : 'Limit Reached',
-                    access.reason || (language === 'es'
-                        ? 'Has alcanzado tu límite semanal. Actualiza a Warrior para análisis ilimitados.'
-                        : 'You\'ve reached your weekly limit. Upgrade to Warrior for unlimited analysis.'),
+                    language === 'es' ? 'Límite Semanal Alcanzado' : 'Weekly Limit Reached',
+                    language === 'es'
+                        ? 'Has alcanzado tu límite de 1 análisis semanal gratuito. Actualiza a Warrior para análisis ilimitados.'
+                        : 'You\'ve reached your limit of 1 free weekly analysis. Upgrade to Warrior for unlimited analysis.',
                     [
                         { text: language === 'es' ? 'Cancelar' : 'Cancel', style: 'cancel' },
                         {
@@ -73,9 +79,7 @@ export default function DecoderAdvanced() {
             // Analyze the message
             const analysis = await analyzeMessage(message);
             setResult(analysis);
-
-            // Increment usage counter
-            await incrementFeatureUsage(user.id, 'decoder');
+            // Usage is already incremented by the RPC call above if allowed
 
         } catch (error) {
             console.error('Error analyzing message:', error);

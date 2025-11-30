@@ -1,19 +1,17 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
-import { Heart, MessageCircle, Wrench, TrendingUp, BookOpen, Settings, Plus, Moon, Sun, Crown, X } from 'lucide-react-native';
+import { Heart, MessageCircle, Wrench, TrendingUp, BookOpen, Settings, Plus, Crown, X } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface SidebarProps {
     onNewChat?: () => void;
-    darkMode?: boolean;
-    onToggleDarkMode?: () => void;
     isPremium?: boolean;
     visible?: boolean;
     onClose?: () => void;
 }
 
-export default function Sidebar({ onNewChat, darkMode = true, onToggleDarkMode, isPremium = false, visible = true, onClose }: SidebarProps) {
+export default function Sidebar({ onNewChat, isPremium = false, visible = true, onClose }: SidebarProps) {
     const router = useRouter();
     const pathname = usePathname();
 
@@ -111,21 +109,7 @@ export default function Sidebar({ onNewChat, darkMode = true, onToggleDarkMode, 
                     )}
                 </View>
 
-                {/* Dark Mode Toggle */}
-                {onToggleDarkMode && (
-                    <View className="px-4 pb-4">
-                        <TouchableOpacity
-                            onPress={onToggleDarkMode}
-                            className="flex-row items-center justify-between bg-white/5 rounded-xl p-3"
-                        >
-                            <View className="flex-row items-center">
-                                {darkMode ? <Moon size={18} color="#9ca3af" /> : <Sun size={18} color="#f59e0b" />}
-                                <Text className="text-gray-400 ml-2">Tema</Text>
-                            </View>
-                            <Text className="text-white text-sm">{darkMode ? 'Oscuro' : 'Claro'}</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
+
             </ScrollView>
         </View>
     );
