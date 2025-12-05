@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OAuth Test - My Ex Coach</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #0a0a0a;
+            color: white;
+        }
+        .section {
+            background: #1a1a1a;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+            border: 1px solid #333;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .log {
+            background: #000;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .success { color: #22c55e; }
+        .error { color: #ef4444; }
+        .info { color: #3b82f6; }
+    </style>
+</head>
+<body>
+    <h1>🔍 OAuth Debug Tool</h1>
+    
+    <div class="section">
+        <h2>Step 1: Check Current URL</h2>
+        <p><strong>Current URL:</strong> <span id="currentUrl"></span></p>
+        <p><strong>Has Hash:</strong> <span id="hasHash"></span></p>
+        <p><strong>Hash Content:</strong> <span id="hashContent"></span></p>
+        <button onclick="checkHash()">Refresh Check</button>
+    </div>
+
+    <div class="section">
+        <h2>Step 2: Test OAuth Redirect</h2>
+        <p>This will show you exactly what URL Supabase is using for redirect</p>
+        <button onclick="testOAuth()">Test Google OAuth</button>
+    </div>
+
+    <div class="section">
+        <h2>Step 3: Process Hash (if present)</h2>
+        <button onclick="processHash()">Process OAuth Callback</button>
+        <button onclick="clearHash()">Clear Hash</button>
+    </div>
+
+    <div class="section">
+        <h2>Console Logs:</h2>
+        <div class="log" id="logs"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const SUPABASE_URL = 'https://mrosbufuwpxisgdqmuy.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yb3NidWZ1d3B4aXNnZHFtdXkiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTczNTY3NTIwNiwiZXhwIjoyMDUxMjUxMjA2fQ.Ej-cOlI4Lh1sIddqSa_cith4ub1s0u0339kbI-dPXNI';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            logs.innerHTML += `<div class="${type}">[${timestamp}] ${message}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+            console.log(message);
+        }
+
+        function checkHash() {
+            const url = window.location.href;
+            const hash = window.location.hash;
+            
+            document.getElementById('currentUrl').textContent = url;
+            document.getElementById('hasHash').textContent = hash ? 'YES' : 'NO';
+            document.getElementById('hashContent').textContent = hash || '(none)';
+            
+            log(`Current URL: ${url}`, 'info');
+            log(`Hash: ${hash || '(none)'}`, hash ? 'success' : 'info');
+            
+            if (hash) {
+                const params = new URLSearchParams(hash.substring(1));
+                const accessToken = params.get('access_token');
+                const refreshToken = params.get('refresh_token');
+                const errorParam = params.get('error');
+                
+                if (errorParam) {
+                    log(`ERROR in hash: ${errorParam}`, 'error');
+                    log(`Error description: ${params.get('error_description')}`, 'error');
+                }
+                
+                if (accessToken) {
+                    log(`✅ Access token found: ${accessToken.substring(0, 20)}...`, 'success');
+                }
+                if (refreshToken) {
+                    log(`✅ Refresh token found: ${refreshToken.substring(0, 20)}...`, 'success');
+                }
+            }
+        }
+
+        async function testOAuth() {
+            try {
+                log('Starting OAuth test...', 'info');
+                const redirectUrl = `${window.location.origin}/auth`;
+                log(`Redirect URL will be: ${redirectUrl}`, 'info');
+                
+                const { data, error } = await supabase.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: {
+                        redirectTo: redirectUrl,
+                        queryParams: {
+                            access_type: 'offline',
+                            prompt: 'consent',
+                        }
+                    }
+                });
+                
+                if (error) {
+                    log(`❌ OAuth error: ${error.message}`, 'error');
+                } else {
+                    log(`✅ OAuth initiated successfully`, 'success');
+                    log(`Provider: ${data.provider}`, 'info');
+                    log(`URL: ${data.url}`, 'info');
+                }
+            } catch (error) {
+                log(`❌ Exception: ${error.message}`, 'error');
+            }
+        }
+
+        async function processHash() {
+            const hash = window.location.hash;
+            if (!hash) {
+                log('❌ No hash found in URL', 'error');
+                return;
+            }
+            
+            try {
+                log('Processing hash...', 'info');
+                const params = new URLSearchParams(hash.substring(1));
+                const accessToken = params.get('access_token');
+                const refreshToken = params.get('refresh_token');
+                
+                if (!accessToken) {
+                    log('❌ No access_token in hash', 'error');
+                    return;
+                }
+                
+                log('Setting session with tokens...', 'info');
+                const { data, error } = await supabase.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken || '',
+                });
+                
+                if (error) {
+                    log(`❌ Error setting session: ${error.message}`, 'error');
+                } else if (data.session) {
+                    log(`✅ Session set successfully!`, 'success');
+                    log(`User: ${data.session.user.email}`, 'success');
+                    log(`Expires: ${new Date(data.session.expires_at * 1000).toLocaleString()}`, 'info');
+                }
+            } catch (error) {
+                log(`❌ Exception: ${error.message}`, 'error');
+            }
+        }
+
+        function clearHash() {
+            window.history.replaceState(null, '', window.location.pathname);
+            log('✅ Hash cleared from URL', 'success');
+            checkHash();
+        }
+
+        // Auto-check on load
+        window.onload = () => {
+            log('OAuth Debug Tool loaded', 'success');
+            checkHash();
+            
+            // Auto-process if hash is present
+            if (window.location.hash && window.location.hash.includes('access_token')) {
+                log('Auto-processing OAuth callback...', 'info');
+                setTimeout(processHash, 1000);
+            }
+        };
+    </script>
+</body>
+</html>
