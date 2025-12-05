@@ -6,7 +6,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Mail, Lock, ArrowRight, User, CheckCircle2 } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 
+// Log immediately when file loads
+console.log('[Auth] auth.tsx file loaded');
+
 export default function AuthScreen() {
+    console.log('[Auth] AuthScreen component rendering');
+    console.log('[Auth] Window hash:', typeof window !== 'undefined' ? window.location.hash.substring(0, 100) : 'no window');
+
     const router = useRouter();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -16,10 +22,17 @@ export default function AuthScreen() {
 
     // Check for active session on mount (for OAuth callback)
     useEffect(() => {
+        console.log('[Auth] useEffect STARTED');
+
         const handleOAuthCallback = async () => {
+            console.log('[OAuth] handleOAuthCallback called');
+            console.log('[OAuth] window exists:', typeof window !== 'undefined');
+            console.log('[OAuth] hash exists:', typeof window !== 'undefined' && !!window.location.hash);
+
             // Check if there's a hash fragment (OAuth callback)
             if (typeof window !== 'undefined' && window.location.hash) {
-                console.log('[OAuth] Hash detected:', window.location.hash.substring(0, 50) + '...');
+                const hash = window.location.hash;
+                console.log('[OAuth] Hash detected (length:', hash.length, '):', hash.substring(0, 100) + '...');
 
                 try {
                     // Parse the hash to extract access_token and refresh_token
@@ -28,7 +41,9 @@ export default function AuthScreen() {
                     const refreshToken = hashParams.get('refresh_token');
 
                     if (accessToken) {
-                        console.log('[OAuth] Access token found, setting session...');
+                        console.log('[OAuth] ✅ Access token found! Length:', accessToken.length);
+                        console.log('[OAuth] Refresh token:', refreshToken ? 'present' : 'missing');
+                        console.log('[OAuth] Calling supabase.auth.setSession...');
 
                         // Set the session with the tokens from the hash
                         const { data, error } = await supabase.auth.setSession({
@@ -36,16 +51,25 @@ export default function AuthScreen() {
                             refresh_token: refreshToken || '',
                         });
 
+                        console.log('[OAuth] setSession response - error:', !!error, 'session:', !!data?.session);
+
                         if (error) {
-                            console.error('[OAuth] Error setting session:', error);
-                            setErrorMsg('Error al iniciar sesión con Google');
+                            console.error('[OAuth] ❌ Error setting session:', error.message, error);
+                            setErrorMsg('Error al iniciar sesión con Google: ' + error.message);
                         } else if (data.session) {
-                            console.log('[OAuth] Session set successfully, redirecting...');
+                            console.log('[OAuth] ✅ Session set successfully!');
+                            console.log('[OAuth] User email:', data.session.user.email);
+                            console.log('[OAuth] Clearing hash from URL...');
                             // Clear the hash from URL
                             window.history.replaceState(null, '', window.location.pathname);
+                            console.log('[OAuth] Redirecting to /(tabs)...');
                             router.replace('/(tabs)');
                             return;
+                        } else {
+                            console.warn('[OAuth] ⚠️ No error but also no session in response');
                         }
+                    } else {
+                        console.log('[OAuth] ❌ No access_token found in hash params');
                     }
                 } catch (error) {
                     console.error('[OAuth] Error processing callback:', error);
