@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Lock } from 'lucide-react-native';
 import { useSubscription } from '../lib/SubscriptionContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { supabase } from '../lib/supabase';
 
 interface FeatureGateProps {
     feature: string;
@@ -12,9 +13,16 @@ interface FeatureGateProps {
 }
 
 export default function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
-    const { checkFeatureAccess } = useSubscription();
+    const { checkFeatureAccess, tier } = useSubscription();
     const router = useRouter();
     const hasAccess = checkFeatureAccess(feature);
+    const [userId, setUserId] = useState<string | null>(null);
+
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data }) => {
+            setUserId(data.user?.id || 'NO USER');
+        });
+    }, []);
 
     if (hasAccess) {
         return <>{children}</>;
@@ -38,6 +46,16 @@ export default function FeatureGate({ feature, children, fallback }: FeatureGate
                 Actualiza a Warrior o Phoenix para desbloquear esta herramienta y acelerar tu recuperación.
             </Text>
 
+            {/* DEBUG INFO */}
+            <View className="mb-4 p-2 bg-red-500/10 rounded border border-red-500/20">
+                <Text className="text-red-400 text-xs text-center">
+                    Debug: Feature={feature}, Access={hasAccess ? 'YES' : 'NO'}
+                </Text>
+                <Text className="text-red-400 text-xs text-center">
+                    Tier={tier}, User={userId ? userId.slice(0, 8) + '...' : 'Checking...'}
+                </Text>
+            </View>
+
             <TouchableOpacity
                 onPress={() => router.push('/paywall')}
                 className="w-full rounded-xl overflow-hidden"
@@ -52,6 +70,13 @@ export default function FeatureGate({ feature, children, fallback }: FeatureGate
                         Ver Planes
                     </Text>
                 </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+                onPress={() => router.back()}
+                className="mt-4 py-2"
+            >
+                <Text className="text-gray-400 font-semibold">Volver</Text>
             </TouchableOpacity>
         </View>
     );

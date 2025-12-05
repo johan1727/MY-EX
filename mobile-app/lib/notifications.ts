@@ -2,13 +2,15 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-    }),
-});
+if (Platform.OS !== 'web') {
+    Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+        }),
+    });
+}
 
 export class NotificationManager {
     static async requestPermissions() {
@@ -83,5 +85,68 @@ export class NotificationManager {
             },
             trigger: null, // Send immediately
         });
+    }
+
+    // Send notification for proactive message from Ex
+    static async sendProactiveMessageNotification(
+        exName: string,
+        messageContent: string,
+        profileId: string
+    ) {
+        if (Platform.OS === 'web') return;
+
+        await Notifications.scheduleNotificationAsync({
+            content: {
+                title: `${exName} te ha enviado un mensaje`,
+                body: messageContent.substring(0, 100) + (messageContent.length > 100 ? '...' : ''),
+                data: {
+                    type: 'proactive_message',
+                    profileId,
+                    exName,
+                    screen: `/tools/ex-simulator/simulate/${profileId}`
+                },
+                sound: true,
+            },
+            trigger: null, // Send immediately
+        });
+    }
+
+    // Schedule proactive message for later
+    static async scheduleProactiveMessage(
+        exName: string,
+        messageContent: string,
+        profileId: string,
+        delaySeconds: number
+    ) {
+        if (Platform.OS === 'web') return;
+
+        await Notifications.scheduleNotificationAsync({
+            content: {
+                title: `${exName} te ha enviado un mensaje`,
+                body: messageContent.substring(0, 100) + (messageContent.length > 100 ? '...' : ''),
+                data: {
+                    type: 'proactive_message',
+                    profileId,
+                    exName,
+                    screen: `/tools/ex-simulator/simulate/${profileId}`
+                },
+                sound: true,
+            },
+            trigger: { seconds: delaySeconds },
+        });
+    }
+
+    // Setup notification listeners
+    static setupListeners(
+        onNotificationReceived: (notification: Notifications.Notification) => void,
+        onNotificationTapped: (response: Notifications.NotificationResponse) => void
+    ) {
+        const receivedSubscription = Notifications.addNotificationReceivedListener(onNotificationReceived);
+        const responseSubscription = Notifications.addNotificationResponseReceivedListener(onNotificationTapped);
+
+        return () => {
+            receivedSubscription.remove();
+            responseSubscription.remove();
+        };
     }
 }

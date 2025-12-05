@@ -18,13 +18,6 @@ export default function RootLayout() {
     const router = useRouter();
 
     useEffect(() => {
-        // Initialize notifications
-        NotificationManager.requestPermissions().then((granted) => {
-            if (granted) {
-                NotificationManager.scheduleDailyCheckIn();
-            }
-        });
-
         // Check current session
         supabase.auth.getSession().then(({ data: { session } }) => {
             setSession(session);
@@ -65,13 +58,14 @@ export default function RootLayout() {
         if (loading) return;
 
         const inAuthGroup = segments[0] === 'auth';
+        const inLogin = segments[0] === 'login';
         const inOnboarding = segments[0] === 'onboarding';
 
-        if (!session && !inAuthGroup) {
-            // Redirect to auth if not logged in and not in auth group
-            router.replace('/auth');
-        } else if (session && inAuthGroup) {
-            // If logged in and in auth group, check onboarding
+        if (!session && !inAuthGroup && !inLogin) {
+            // Redirect to login if not logged in
+            router.replace('/login');
+        } else if (session && (inAuthGroup || inLogin)) {
+            // If logged in and in auth/login group, check onboarding
             checkOnboardingStatus();
         }
     }, [session, segments, loading]);
@@ -100,12 +94,16 @@ export default function RootLayout() {
         <SubscriptionProvider>
             <View className="flex-1">
                 <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="login" />
                     <Stack.Screen name="auth" />
                     <Stack.Screen name="onboarding" />
                     <Stack.Screen name="onboarding-extended" />
                     <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="tools/decoder" />
                     <Stack.Screen name="tools/panic" />
+                    <Stack.Screen name="tools/ex-simulator/index" />
+                    <Stack.Screen name="tools/ex-simulator/import" />
+                    <Stack.Screen name="tools/journal" />
                     <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
                     <Stack.Screen name="security-setup" />
                 </Stack>

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "my-ex-coach",
-    "slug": "my-ex-coach",
+    "name": "My Ex Chat",
+    "slug": "my-ex-chat",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

@@ -1,7 +1,8 @@
-import React from 'react';
-import { View, Text, Image, Animated } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Sparkles } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { View, Text, Image, TouchableOpacity, TextInput } from 'react-native';
+import { Sparkles, Check, X } from 'lucide-react-native';
+import Markdown from 'react-native-markdown-display';
+import MessageActions from './MessageActions';
 
 type Message = {
     id: string;
@@ -13,73 +14,145 @@ type Message = {
 
 interface MessageItemProps {
     item: Message;
+    onEdit?: (newContent: string) => void;
+    onRegenerate?: () => void;
+    onDelete?: () => void;
 }
 
-export default function MessageItem({ item }: MessageItemProps) {
+export default function MessageItem({ item, onEdit, onRegenerate, onDelete }: MessageItemProps) {
     const isUser = item.sender === 'user';
+    const [isEditing, setIsEditing] = useState(false);
+    const [editContent, setEditContent] = useState(item.content);
+
+    const handleSaveEdit = () => {
+        if (onEdit && editContent.trim() !== item.content) {
+            onEdit(editContent.trim());
+        }
+        setIsEditing(false);
+    };
+
+    const handleCancelEdit = () => {
+        setEditContent(item.content);
+        setIsEditing(false);
+    };
+
+    const markdownStyles = {
+        body: {
+            color: '#ececec',
+            fontSize: 15,
+            lineHeight: 24,
+        },
+        paragraph: {
+            marginTop: 0,
+            marginBottom: 8,
+        },
+        strong: {
+            fontWeight: '600' as '600',
+            color: '#ffffff',
+        },
+        em: {
+            fontStyle: 'italic' as 'italic',
+        },
+        code_inline: {
+            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+            color: '#a78bfa',
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 4,
+            fontFamily: 'monospace',
+            fontSize: 14,
+        },
+        code_block: {
+            backgroundColor: '#000000',
+            padding: 12,
+            borderRadius: 8,
+            marginVertical: 8,
+        },
+        fence: {
+            backgroundColor: '#000000',
+            padding: 12,
+            borderRadius: 8,
+            marginVertical: 8,
+        },
+        bullet_list: {
+            marginVertical: 4,
+        },
+        ordered_list: {
+            marginVertical: 4,
+        },
+        list_item: {
+            marginVertical: 2,
+        },
+    };
 
     return (
-        <View className={`flex-row ${isUser ? 'justify-end' : 'justify-start'} mb-5 px-5`}>
+        <View className={`flex-row ${isUser ? 'justify-end' : 'justify-start'} mb-6 px-5`}>
             {!isUser && (
-                <View className="w-10 h-10 rounded-full items-center justify-center mr-3 self-start mt-1">
-                    <LinearGradient
-                        colors={['#a855f7', '#3b82f6']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        className="w-full h-full rounded-full items-center justify-center"
-                        style={{
-                            shadowColor: '#a855f7',
-                            shadowOffset: { width: 0, height: 4 },
-                            shadowOpacity: 0.5,
-                            shadowRadius: 10,
-                        }}
-                    >
-                        <Sparkles size={20} color="white" />
-                    </LinearGradient>
+                <View className="w-8 h-8 rounded-full bg-purple-600 items-center justify-center mr-3 self-start mt-1">
+                    <Sparkles size={16} color="white" />
                 </View>
             )}
-            <View className={`max-w-[75%]`}>
+            <View className={`max-w-[80%]`}>
                 <View
-                    className={`px-5 py-4 ${isUser
-                        ? 'rounded-[24px] rounded-br-[4px]'
-                        : 'rounded-[24px] rounded-bl-[4px]'
+                    className={`px-4 py-3 rounded-2xl ${isUser
+                            ? 'bg-[#2f2f2f]'
+                            : 'bg-transparent'
                         }`}
-                    style={{
-                        backgroundColor: isUser ? undefined : 'rgba(255, 255, 255, 0.05)',
-                        borderWidth: isUser ? 0 : 1,
-                        borderColor: isUser ? undefined : 'rgba(255, 255, 255, 0.1)',
-                        shadowColor: isUser ? '#3b82f6' : 'transparent',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: isUser ? 0.4 : 0,
-                        shadowRadius: 12,
-                    }}
                 >
-                    {isUser && (
-                        <LinearGradient
-                            colors={['#3b82f6', '#8b5cf6']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            className="absolute inset-0 rounded-[24px] rounded-br-[4px]"
-                        />
-                    )}
-                    <View style={{ position: 'relative', zIndex: 1 }}>
+                    <View>
                         {item.image && (
                             <Image
                                 source={{ uri: item.image }}
-                                className="w-full h-60 rounded-2xl mb-3"
+                                className="w-full h-60 rounded-xl mb-3"
                                 resizeMode="cover"
                             />
                         )}
-                        {item.content ? (
-                            <Text className={`text-[15px] leading-6 ${isUser ? 'text-white font-semibold' : 'text-gray-100'}`}>
-                                {item.content}
-                            </Text>
-                        ) : null}
+
+                        {isEditing ? (
+                            <View>
+                                <TextInput
+                                    value={editContent}
+                                    onChangeText={setEditContent}
+                                    multiline
+                                    className="text-white text-[15px] leading-6 p-0 min-h-[60px]"
+                                    autoFocus
+                                    style={{ outlineStyle: 'none' } as any}
+                                />
+                                <View className="flex-row justify-end mt-2 gap-2">
+                                    <TouchableOpacity onPress={handleCancelEdit} className="bg-white/10 p-2 rounded-lg">
+                                        <X size={16} color="white" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity onPress={handleSaveEdit} className="bg-white/20 p-2 rounded-lg">
+                                        <Check size={16} color="white" />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        ) : (
+                            item.content ? (
+                                <Markdown style={markdownStyles}>
+                                    {item.content}
+                                </Markdown>
+                            ) : null
+                        )}
                     </View>
                 </View>
-                <Text className={`text-[10px] text-gray-500 mt-1.5 ${isUser ? 'text-right mr-1' : 'text-left ml-1'}`}>
-                    {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
+
+                {/* Actions and Timestamp */}
+                <View className={`flex-row items-center justify-between mt-1 ${isUser ? 'flex-row-reverse' : ''}`}>
+                    <Text className="text-[11px] text-gray-500">
+                        {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+
+                    {!isEditing && (
+                        <MessageActions
+                            isUser={isUser}
+                            content={item.content}
+                            onEdit={onEdit ? () => setIsEditing(true) : undefined}
+                            onRegenerate={onRegenerate}
+                            onDelete={onDelete}
+                        />
+                    )}
+                </View>
             </View>
         </View>
     );

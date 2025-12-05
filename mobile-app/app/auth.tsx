@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
@@ -13,6 +13,65 @@ export default function AuthScreen() {
     const [loading, setLoading] = useState(false);
     const [isSignUp, setIsSignUp] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+    // Check for active session on mount (for OAuth callback)
+    useEffect(() => {
+        const handleOAuthCallback = async () => {
+            // Check if there's a hash fragment (OAuth callback)
+            if (typeof window !== 'undefined' && window.location.hash) {
+                console.log('[OAuth] Hash detected:', window.location.hash.substring(0, 50) + '...');
+
+                try {
+                    // Parse the hash to extract access_token and refresh_token
+                    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+                    const accessToken = hashParams.get('access_token');
+                    const refreshToken = hashParams.get('refresh_token');
+
+                    if (accessToken) {
+                        console.log('[OAuth] Access token found, setting session...');
+
+                        // Set the session with the tokens from the hash
+                        const { data, error } = await supabase.auth.setSession({
+                            access_token: accessToken,
+                            refresh_token: refreshToken || '',
+                        });
+
+                        if (error) {
+                            console.error('[OAuth] Error setting session:', error);
+                            setErrorMsg('Error al iniciar sesión con Google');
+                        } else if (data.session) {
+                            console.log('[OAuth] Session set successfully, redirecting...');
+                            // Clear the hash from URL
+                            window.history.replaceState(null, '', window.location.pathname);
+                            router.replace('/(tabs)');
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('[OAuth] Error processing callback:', error);
+                }
+            }
+
+            // Check for existing session
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                console.log('[Auth] Existing session found, redirecting...');
+                router.replace('/(tabs)');
+            }
+        };
+
+        handleOAuthCallback();
+
+        // Listen for auth state changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            console.log('[Auth] State change:', event);
+            if (event === 'SIGNED_IN' && session) {
+                router.replace('/(tabs)');
+            }
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
 
     const handleAuth = async () => {
         setErrorMsg(null);
@@ -107,16 +166,29 @@ export default function AuthScreen() {
                         className="flex-row items-center justify-center bg-[#1a1a1a] border border-white/10 h-14 rounded-xl mb-8 hover:bg-[#252525]"
                         onPress={async () => {
                             try {
-                                const { error } = await supabase.auth.signInWithOAuth({
+                                console.log('[OAuth] Starting Google sign in...');
+                                const redirectUrl = Platform.OS === 'web'
+                                    ? `${window.location.origin}/auth`
+                                    : 'myexcoach://auth/callback';
+
+                                console.log('[OAuth] Redirect URL:', redirectUrl);
+
+                                const { data, error } = await supabase.auth.signInWithOAuth({
                                     provider: 'google',
                                     options: {
-                                        redirectTo: Platform.OS === 'web'
-                                            ? window.location.origin
-                                            : 'myexcoach://auth/callback'
+                                        redirectTo: redirectUrl,
+                                        queryParams: {
+                                            access_type: 'offline',
+                                            prompt: 'consent',
+                                        }
                                     }
                                 });
+
+                                console.log('[OAuth] Response:', { data, error });
+
                                 if (error) throw error;
                             } catch (error: any) {
+                                console.error('[OAuth] Error:', error);
                                 setErrorMsg(error.message || "Google login failed");
                             }
                         }}

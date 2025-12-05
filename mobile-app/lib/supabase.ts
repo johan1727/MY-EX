@@ -1,34 +1,24 @@
-import 'react-native-url-polyfill/auto';
+// import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
-import * as SecureStore from 'expo-secure-store';
-
-import { Platform } from 'react-native';
-
+// Temporary debug adapter
 const ExpoSecureStoreAdapter = {
     getItem: (key: string) => {
-        if (Platform.OS === 'web') {
-            if (typeof localStorage === 'undefined') return Promise.resolve(null);
-            return Promise.resolve(localStorage.getItem(key));
+        if (typeof window !== 'undefined' && window.localStorage) {
+            return Promise.resolve(window.localStorage.getItem(key));
         }
-        return SecureStore.getItemAsync(key);
+        return Promise.resolve(null);
     },
     setItem: (key: string, value: string) => {
-        if (Platform.OS === 'web') {
-            if (typeof localStorage !== 'undefined') {
-                localStorage.setItem(key, value);
-            }
-            return Promise.resolve();
+        if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.setItem(key, value);
         }
-        return SecureStore.setItemAsync(key, value);
+        return Promise.resolve();
     },
     removeItem: (key: string) => {
-        if (Platform.OS === 'web') {
-            if (typeof localStorage !== 'undefined') {
-                localStorage.removeItem(key);
-            }
-            return Promise.resolve();
+        if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.removeItem(key);
         }
-        return SecureStore.deleteItemAsync(key);
+        return Promise.resolve();
     },
 };
 
@@ -41,6 +31,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         storage: ExpoSecureStoreAdapter,
         autoRefreshToken: true,
         persistSession: true,
-        detectSessionInUrl: false,
+        detectSessionInUrl: typeof window !== 'undefined',
     },
 });

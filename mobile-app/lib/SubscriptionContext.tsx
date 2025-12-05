@@ -1,7 +1,24 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import Purchases, { CustomerInfo, PurchasesPackage } from 'react-native-purchases';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
+import type { CustomerInfo, PurchasesPackage } from 'react-native-purchases';
+
+// Dynamic import for native modules
+let Purchases: any;
+if (Platform.OS !== 'web') {
+    Purchases = require('react-native-purchases').default;
+} else {
+    // Mock for web
+    Purchases = {
+        configure: async () => { },
+        logIn: async () => { },
+        logOut: async () => { },
+        getCustomerInfo: async () => ({ entitlements: { active: {} } }),
+        getOfferings: async () => ({ current: { availablePackages: [] } }),
+        purchasePackage: async () => ({ customerInfo: { entitlements: { active: {} } } }),
+        restorePurchases: async () => ({ entitlements: { active: {} } }),
+    };
+}
 
 // Definición de tipos
 export type SubscriptionTier = 'survivor' | 'warrior' | 'phoenix';
@@ -26,6 +43,7 @@ const TIER_LIMITS = {
         vault_access: false,
         mood_journal: false,
         export_data: false,
+        ex_simulator: false,
     },
     warrior: {
         daily_messages: -1, // Ilimitado
@@ -33,6 +51,7 @@ const TIER_LIMITS = {
         vault_access: true,
         mood_journal: true,
         export_data: true,
+        ex_simulator: true,
     },
     phoenix: {
         daily_messages: -1,
@@ -40,6 +59,7 @@ const TIER_LIMITS = {
         vault_access: true,
         mood_journal: true,
         export_data: true,
+        ex_simulator: true,
     },
 };
 
@@ -51,7 +71,52 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
     useEffect(() => {
         initRevenueCat();
+
+        // Listen for auth changes to update tier immediately when user signs in
+        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (event === 'SIGNED_IN' && session?.user) {
+                await fetchTierFromSupabase(session.user.id);
+                if (Platform.OS !== 'web') {
+                    await Purchases.logIn(session.user.id);
+                    const info = await Purchases.getCustomerInfo();
+                    setCustomerInfo(info);
+                    updateTierFromInfo(info);
+                }
+            } else if (event === 'SIGNED_OUT') {
+                setTier('survivor');
+                setCustomerInfo(null);
+                if (Platform.OS !== 'web') {
+                    await Purchases.logOut();
+                }
+            }
+        });
+
+        return () => {
+            authListener.subscription.unsubscribe();
+        };
     }, []);
+
+    const fetchTierFromSupabase = async (userId: string) => {
+        try {
+            const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('subscription_tier')
+                .eq('id', userId)
+                .single();
+
+            if (error) {
+                console.error('Error fetching tier from Supabase:', error);
+                return;
+            }
+
+            if (profile && profile.subscription_tier) {
+                console.log('Setting tier from Supabase:', profile.subscription_tier);
+                setTier(profile.subscription_tier as SubscriptionTier);
+            }
+        } catch (err) {
+            console.error('Exception fetching tier from Supabase:', err);
+        }
+    };
 
     const initRevenueCat = async () => {
         try {
@@ -64,13 +129,21 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
             // Identificar usuario si está logueado
             const { data: { user } } = await supabase.auth.getUser();
+
             if (user) {
-                await Purchases.logIn(user.id);
+                if (Platform.OS !== 'web') {
+                    await Purchases.logIn(user.id);
+                }
+                await fetchTierFromSupabase(user.id);
             }
 
             const info = await Purchases.getCustomerInfo();
             setCustomerInfo(info);
-            updateTierFromInfo(info);
+
+            // Only use RevenueCat info if we didn't get it from Supabase or if it's a native purchase
+            if (Platform.OS !== 'web') {
+                updateTierFromInfo(info);
+            }
 
             await loadOfferings();
         } catch (e) {
@@ -92,12 +165,22 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     };
 
     const updateTierFromInfo = (info: CustomerInfo) => {
+        // If we already have a tier from Supabase (e.g. set in initRevenueCat), 
+        // we might want to keep it unless RevenueCat has a newer/better one.
+        // For now, we'll let RevenueCat override ONLY if it detects a paid tier.
+
         if (info.entitlements.active['phoenix']) {
             setTier('phoenix');
         } else if (info.entitlements.active['warrior']) {
             setTier('warrior');
         } else {
-            setTier('survivor');
+            // Only revert to survivor if we are NOT on web (where we rely on Supabase)
+            // or if we want to enforce RevenueCat's source of truth.
+            // For this specific case, we'll leave it as is, but the initRevenueCat logic 
+            // handles the initial load from Supabase.
+            if (Platform.OS !== 'web') {
+                setTier('survivor');
+            }
         }
     };
 

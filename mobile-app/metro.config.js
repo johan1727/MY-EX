@@ -3,4 +3,9 @@ const { withNativeWind } = require("nativewind/metro");
 
 const config = getDefaultConfig(__dirname);
 
-module.exports = withNativeWind(config, { input: "./global.css" });
+// Only use NativeWind in development to avoid Vercel build issues
+if (process.env.NODE_ENV !== 'production') {
+    module.exports = withNativeWind(config, { input: "./global.css" });
+} else {
+    module.exports = config;
+}

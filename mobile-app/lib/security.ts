@@ -14,8 +14,8 @@ let LocalAuthentication: any = null;
 let SecureStore: any = null;
 
 if (Platform.OS !== 'web') {
-    LocalAuthentication = require('expo-local-authentication');
-    SecureStore = require('expo-secure-store');
+    // LocalAuthentication = require('expo-local-authentication');
+    // SecureStore = require('expo-secure-store');
 }
 
 const SECURITY_ENABLED_KEY = 'security_enabled';
