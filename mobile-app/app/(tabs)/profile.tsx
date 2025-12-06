@@ -48,7 +48,7 @@ export default function ProfileScreen() {
                 const { data } = await supabase
                     .from('profiles')
                     .select('breakup_date, no_contact_since')
-                    .eq('user_id', user.id)
+                    .eq('id', user.id)
                     .single();
 
                 if (data) {
