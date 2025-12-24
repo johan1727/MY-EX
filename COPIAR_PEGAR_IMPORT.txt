@@ -1,0 +1,101 @@
+// ============================================
+// INSTRUCCIONES SIMPLES PARA import.tsx
+// ============================================
+
+// COPIA Y PEGA ESTAS 2 LÍNEAS después de la línea que dice:
+// import { intelligentTokenSampling } from '../../../lib/messageSampling';
+
+import { generateMasterPrompt } from '../../../lib/masterPromptGenerator';
+import { saveMasterPrompt } from '../../../lib/masterPromptSupabase';
+
+
+// LUEGO, busca esta sección (aprox línea 369-378):
+/*
+const profileData = {
+    id: `local_${Date.now()}`,
+    exName,
+    profile,
+    messageCount: parsedMessages.length,
+    createdAt: new Date().toISOString(),
+ };
+
+localStorage.setItem('exSimulator_currentProfile', JSON.stringify(profileData));
+*/
+
+// Y REEMPLÁZALA POR ESTO (copia TODO desde "const profileData" hasta el final):
+
+const profileData = {
+    id: `local_${Date.now()}`,
+    exName,
+    profile,
+    messageCount: parsedMessages.length,
+    createdAt: new Date().toISOString(),
+};
+
+// ========== MASTER PROMPT GENERATION ==========
+try {
+    console.log('[handleAnalyze] 🧠 Generating Master Prompt...');
+    
+    const senderCounts = new Map();
+    parsedMessages.forEach(msg => {
+        senderCounts.set(msg.sender, (senderCounts.get(msg.sender) || 0) + 1);
+    });
+
+    const exNameLower = exName.toLowerCase().trim();
+    const exSenderName = Array.from(senderCounts.keys()).find(name => {
+        const nameLower = name.toLowerCase().trim();
+        return nameLower === exNameLower || nameLower.includes(exNameLower) || exNameLower.includes(nameLower);
+    });
+
+    if (exSenderName) {
+        const masterPromptResult = await generateMasterPrompt(
+            parsedMessages,
+            exSenderName,
+            exName,
+            (progress, status) => {
+                setProgress(Math.floor(90 + (progress * 0.1)));
+                setProgressStatus(status);
+            }
+        );
+
+        console.log('[handleAnalyze] ✅ Master Prompt:', masterPromptResult.tokenCount, 'tokens');
+
+        profileData.masterPrompt = masterPromptResult.masterPrompt;
+        profileData.tokenCount = masterPromptResult.tokenCount;
+
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (user?.id) {
+            const { data: savedProfile } = await supabase
+                .from('ex_profiles')
+                .insert({
+                    user_id: user.id,
+                    ex_name: exName,
+                    profile_data: profile,
+                    message_count: parsedMessages.length
+                })
+                .select('id')
+                .single();
+
+            if (savedProfile) {
+                profileData.supabaseId = savedProfile.id;
+
+                await saveMasterPrompt({
+                    exProfileId: savedProfile.id,
+                    masterPrompt: masterPromptResult.masterPrompt,
+                    tokenCount: masterPromptResult.tokenCount,
+                    version: 1,
+                    analysisDurationSeconds: masterPromptResult.analysisDurationSeconds,
+                    categoriesAnalyzed: masterPromptResult.categoriesAnalyzed
+                });
+
+                console.log('[handleAnalyze] ✅ Saved to Supabase');
+            }
+        }
+    }
+} catch (err) {
+    console.error('[handleAnalyze] Master Prompt error:', err);
+}
+// ========== END MASTER PROMPT ==========
+
+localStorage.setItem('exSimulator_currentProfile', JSON.stringify(profileData));

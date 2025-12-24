@@ -1,0 +1,46 @@
+# ============================================
+# INSTRUCCIONES: AGREGAR AL ARCHIVO .env
+# ============================================
+
+COPIA ESTA LÍNEA COMPLETA y pégala al FINAL del archivo mobile-app/.env:
+
+GEMINI_API_KEY=AIzaSyBQTXlWGlqQ38zQnwHi5L0115rM26Vae5w
+
+
+# ============================================
+# PASOS DETALLADOS:
+# ============================================
+
+1. Abre: mobile-app/.env (ya lo tienes abierto)
+
+2. Ve al FINAL del archivo (después de la última línea)
+
+3. Presiona ENTER para crear una nueva línea vacía
+
+4. COPIA Y PEGA esta línea COMPLETA:
+
+   GEMINI_API_KEY=AIzaSyBQTXlWGlqQ38zQnwHi5L0115rM26Vae5w
+
+5. Guarda el archivo (Ctrl+S)
+
+6. Reinicia el servidor:
+   - Ve a la terminal
+   - Presiona Ctrl+C
+   - Ejecuta: npm start
+
+7. BORRA este archivo después
+
+
+# ============================================
+# RESULTADO ESPERADO EN .env:
+# ============================================
+
+Tu archivo .env debe terminar así:
+
+-------------------------------------------
+EXPO_PUBLIC_SUPABASE_URL=...
+EXPO_PUBLIC_SUPABASE_ANON_KEY=...
+EXPO_PUBLIC_OPENAI_API_KEY=...
+EXPO_PUBLIC_REVENUECAT_ANDROID_KEY=...
+GEMINI_API_KEY=AIzaSyBQTXlWGlqQ38zQnwHi5L0115rM26Vae5w
+-------------------------------------------

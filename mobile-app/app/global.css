@@ -1,0 +1,32 @@
+/* Global styles for REMI - especially for web */
+
+/* Remove focus outline on all inputs (web only) */
+input:focus,
+textarea:focus {
+    outline: none !important;
+    box-shadow: none !important;
+    border-color: rgba(168, 85, 247, 0.3) !important;
+}
+
+/* Remove default outline on all focusable elements */
+*:focus {
+    outline: none !important;
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #444;
+}

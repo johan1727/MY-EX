@@ -1,0 +1,133 @@
+// ========================================
+// MODIFICACIONES PARA chat.tsx
+// ========================================
+
+// 1. AGREGAR ESTE IMPORT (al inicio del archivo, después de otros imports)
+import { loadMasterPrompt } from '../../../lib/masterPromptSupabase';
+
+// 2. MODIFICAR LA FUNCIÓN loadProfile
+// Busca esta función (aprox línea 34):
+
+/*
+const loadProfile = () => {
+    const stored = localStorage.getItem('exSimulator_currentProfile');
+    if (stored) {
+        const data = JSON.parse(stored);
+        setProfileData(data);
+        // ... resto
+    }
+};
+*/
+
+// REEMPLAZAR POR ESTO:
+
+const loadProfile = async () => {
+    const stored = localStorage.getItem('exSimulator_currentProfile');
+    if (stored) {
+        const data = JSON.parse(stored);
+        
+        // ✨ CARGAR MASTER PROMPT desde Supabase si existe
+        if (data.supabaseId) {
+            try {
+                console.log('[Chat] Loading Master Prompt from Supabase...');
+                const masterPromptData = await loadMasterPrompt(data.supabaseId);
+                
+                if (masterPromptData) {
+                    data.masterPrompt = masterPromptData.masterPrompt;
+                    data.tokenCount = masterPromptData.tokenCount;
+                    console.log('[Chat] ✅ Master Prompt loaded:', {
+                        tokenCount: masterPromptData.tokenCount,
+                        version: masterPromptData.version
+                    });
+                } else {
+                    console.log('[Chat] No Master Prompt found in Supabase');
+                }
+            } catch (err) {
+                console.warn('[Chat] Could not load Master Prompt from Supabase:', err);
+                // Continuar con datos de localStorage
+            }
+        } else {
+            console.log('[Chat] No Supabase ID, using localStorage only');
+        }
+        
+        setProfileData(data);
+
+        const userNameFromData = extractUserName(data);
+        setUserName(userNameFromData);
+
+        // ... resto del código original (conversación guardada, mensaje inicial, etc.)
+        const conversationKey = `exSimulator_conversation_${data.id}`;
+        const savedConversation = localStorage.getItem(conversationKey);
+
+        if (savedConversation) {
+            const parsed = JSON.parse(savedConversation);
+            setMessages(parsed.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) })));
+        } else {
+            setMessages([{
+                role: 'assistant',
+                content: `Hola${userNameFromData ? ` ${userNameFromData}` : ''}... ¿Qué quieres decirme?`,
+                timestamp: new Date(),
+                seen: false
+            }]);
+        }
+    } else {
+        router.back();
+    }
+};
+
+// 3. TAMBIÉN cambiar useEffect para que llame a loadProfile como async:
+// Busca (aprox línea 26):
+
+/*
+useEffect(() => {
+    loadProfile();
+}, []);
+*/
+
+// REEMPLAZAR POR:
+
+useEffect(() => {
+    loadProfile();  // Ahora loadProfile es async, pero no necesitamos await aquí
+}, []);
+
+// 4. MODIFICAR sendMessage PARA USAR MASTER PROMPT
+// Busca donde se construye el prompt:
+
+/*
+// ✨ USE ENHANCED PROMPT WITH REAL EXAMPLES
+const systemPrompt = buildEnhancedPrompt(profileData, userName, currentInput, messages);
+*/
+
+// REEMPLAZAR POR:
+
+// ✨ USE MASTER PROMPT if available, otherwise fall back to enhanced prompt
+let systemPrompt: string;
+
+if (profileData.masterPrompt) {
+    // Usar Master Prompt (100k+ tokens de contexto completo)
+    const recentContext = messages.slice(-6).map(m => 
+        `${m.role === 'user' ? userName : profileData.exName}: ${m.content}`
+    ).join('\n');
+    
+    systemPrompt = `${profileData.masterPrompt}
+
+═══════════════════════════════════════════════════════════════
+CONTEXTO CONVERSACIONAL RECIENTE:
+═══════════════════════════════════════════════════════════════
+
+${recentContext}
+
+═══════════════════════════════════════════════════════════════
+
+MENSAJE ACTUAL DE ${userName}: "${currentInput}"
+
+RESPONDE COMO ${profileData.exName} (natural, auténtico, mensajes cortos):`;
+
+    console.log('[Chat] ✅ Using MASTER PROMPT (', profileData.tokenCount, 'tokens)');
+} else {
+    // Fallback a enhanced prompt (con ejemplos)
+    systemPrompt = buildEnhancedPrompt(profileData, userName, currentInput, messages);
+    console.log('[Chat] Using enhanced prompt (no master prompt found)');
+}
+
+// El resto del código sigue igual (generateContent, fragmentación, etc.)

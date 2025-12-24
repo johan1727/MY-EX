@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "REMI",
+    "slug": "my-ex-chat",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.myexcoach.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Esta app necesita acceso al micrófono para entrada de voz.",
+        "NSUserNotificationsUsageDescription": "Esta app envía notificaciones motivacionales diarias para apoyar tu proceso de sanación."
+      }
+    },
+    "android": {
+      "package": "com.soyremi.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "RECORD_AUDIO",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#a855f7"
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "scheme": "my-ex-coach",
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "8a1e2561-ba30-4712-8e66-c2487a0d0e23"
+      }
+    }
+  }
+}
