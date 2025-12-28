@@ -20,9 +20,18 @@ import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { BlurView } from 'expo-blur';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
 // Complete auth session for web browsers
 WebBrowser.maybeCompleteAuthSession();
+
+// Configure Google Sign-In for native authentication (Android/iOS)
+if (Platform.OS !== 'web') {
+    GoogleSignin.configure({
+        webClientId: '217853738800-ncr5qhb1aatrhqskthmr2llulj6vgkkp.apps.googleusercontent.com',
+        offlineAccess: true,
+    });
+}
 
 const { width, height } = Dimensions.get('window');
 
@@ -159,42 +168,72 @@ export default function AuthScreen() {
 
                 if (error) throw error;
             } else {
-                // Mobile: use WebBrowser with deep link for all providers
-                const redirectUrl = 'my-ex-coach://auth/callback';
+                // Mobile: Use NATIVE Google Sign-In or WebBrowser for other providers
+                if (provider === 'google') {
+                    console.log('[Auth] Starting native Google Sign-In...');
+                    try {
+                        await GoogleSignin.hasPlayServices();
+                        const userInfo = await GoogleSignin.signIn();
+                        console.log('[Auth] Google Sign-In successful:', userInfo.data?.user?.email);
 
-                const { data, error } = await supabase.auth.signInWithOAuth({
-                    provider,
-                    options: {
-                        redirectTo: redirectUrl,
-                        skipBrowserRedirect: true,
+                        const tokens = await GoogleSignin.getTokens();
+                        const idToken = tokens.idToken;
+
+                        if (!idToken) {
+                            throw new Error('No se pudo obtener el token de Google');
+                        }
+
+                        const { data, error } = await supabase.auth.signInWithIdToken({
+                            provider: 'google',
+                            token: idToken,
+                        });
+
+                        if (error) throw error;
+                        console.log('[Auth] ✅ Supabase sign-in successful!');
+                        router.replace('/(tabs)');
+
+                    } catch (nativeError: any) {
+                        if (nativeError.code === statusCodes.SIGN_IN_CANCELLED) {
+                            console.log('[Auth] User cancelled Google Sign-In');
+                            return;
+                        } else if (nativeError.code === statusCodes.IN_PROGRESS) {
+                            return;
+                        } else if (nativeError.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+                            throw new Error('Google Play Services no está disponible');
+                        } else {
+                            throw nativeError;
+                        }
                     }
-                });
+                } else {
+                    // Discord and other providers: use WebBrowser
+                    const redirectUrl = 'my-ex-coach://auth/callback';
+                    const { data, error } = await supabase.auth.signInWithOAuth({
+                        provider,
+                        options: {
+                            redirectTo: redirectUrl,
+                            skipBrowserRedirect: true,
+                        }
+                    });
 
-                if (error) throw error;
+                    if (error) throw error;
 
-                if (data.url) {
-                    const result = await WebBrowser.openAuthSessionAsync(
-                        data.url,
-                        redirectUrl
-                    );
-
-                    if (result.type === 'success' && result.url) {
-                        const url = result.url;
-                        const hashIndex = url.indexOf('#');
-                        if (hashIndex !== -1) {
-                            const hashParams = new URLSearchParams(url.substring(hashIndex + 1));
-                            const accessToken = hashParams.get('access_token');
-                            const refreshToken = hashParams.get('refresh_token');
-
-                            if (accessToken && refreshToken) {
-                                const { error: sessionError } = await supabase.auth.setSession({
-                                    access_token: accessToken,
-                                    refresh_token: refreshToken,
-                                });
-
-                                if (sessionError) throw sessionError;
-                                console.log('[Auth] ✅ OAuth session set successfully');
-                                router.replace('/(tabs)');
+                    if (data.url) {
+                        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+                        if (result.type === 'success' && result.url) {
+                            const url = result.url;
+                            const hashIndex = url.indexOf('#');
+                            if (hashIndex !== -1) {
+                                const hashParams = new URLSearchParams(url.substring(hashIndex + 1));
+                                const accessToken = hashParams.get('access_token');
+                                const refreshToken = hashParams.get('refresh_token');
+                                if (accessToken && refreshToken) {
+                                    const { error: sessionError } = await supabase.auth.setSession({
+                                        access_token: accessToken,
+                                        refresh_token: refreshToken,
+                                    });
+                                    if (sessionError) throw sessionError;
+                                    router.replace('/(tabs)');
+                                }
                             }
                         }
                     }

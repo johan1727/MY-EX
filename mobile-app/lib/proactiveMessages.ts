@@ -1,207 +1,185 @@
 import { supabase } from './supabase';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { ExProfile, ParsedMessage } from './exSimulator';
 
-const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
+/**
+ * Sistema de Mensajes Proactivos usando proactive_messages_queue
+ */
 
-export interface ProactiveMessageConfig {
-    profileId: string;
-    exName: string;
-    profile: ExProfile;
-    lastMessages: ParsedMessage[];
-    frequency: 'low' | 'normal' | 'high';
+export interface ProactiveMessage {
+    id: string;
+    exProfileId: string;
+    userId: string;
+    messageContent: string;
+    scheduledFor: Date;
+    sentAt?: Date;
+    status: 'pending' | 'sent' | 'failed';
 }
 
 /**
- * Generate a contextual proactive message from the Ex
- * Based on personality profile and recent conversation
+ * Verificar si debe enviar un mensaje proactivo
  */
-export async function generateProactiveMessage(config: ProactiveMessageConfig): Promise<string> {
-    const { exName, profile, lastMessages, frequency } = config;
-
-    // Build context from last messages
-    const conversationContext = lastMessages
-        .slice(-5)
-        .map(m => `${m.sender === 'user' ? 'Usuario' : exName}: ${m.content}`)
-        .join('\n');
-
-    const prompt = `Eres ${exName}, y estás enviando un mensaje proactivo a tu ex pareja.
-
-PERFIL DE PERSONALIDAD:
-- Estilo de comunicación: ${profile.communicationStyle}
-- Tono emocional: ${profile.emotionalTone}
-- Frases características: ${profile.commonPhrases?.join(', ')}
-- Patrones de respuesta: ${profile.responsePatterns?.join(', ')}
-
-ÚLTIMOS MENSAJES DE LA CONVERSACIÓN:
-${conversationContext || 'No hay mensajes previos'}
-
-FRECUENCIA DE MENSAJES: ${frequency}
-${frequency === 'high' ? '(Eres muy activo/a, envías mensajes frecuentemente)' : ''}
-${frequency === 'low' ? '(Eres más reservado/a, envías mensajes ocasionalmente)' : ''}
-
-INSTRUCCIONES:
-1. Genera UN mensaje corto y natural que ${exName} enviaría
-2. Debe ser coherente con la conversación previa (si existe)
-3. Usa el estilo de comunicación y frases características del perfil
-4. El mensaje debe sentirse REAL, como si ${exName} realmente lo escribiera
-5. NO uses emojis excesivos, mantén el estilo del perfil
-6. El mensaje debe invitar a continuar la conversación
-
-IMPORTANTE: Responde SOLO con el mensaje, sin explicaciones adicionales.`;
-
+export async function checkProactiveMessage(
+    userId: string,
+    exProfileId: string
+): Promise<{ shouldSend: boolean; message?: string }> {
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-        const result = await model.generateContent(prompt);
-        const message = result.response.text().trim();
+        console.log(`[ProactiveMessages] Checking for profile ${exProfileId}`);
 
-        return message;
-    } catch (error) {
-        console.error('Error generating proactive message:', error);
-        // Fallback to common phrase
-        if (profile.commonPhrases && profile.commonPhrases.length > 0) {
-            return profile.commonPhrases[Math.floor(Math.random() * profile.commonPhrases.length)];
+        // 1. Obtener última actividad de la conversación
+        const { data: conv } = await supabase
+            .from('simulation_conversations')
+            .select('last_message_at')
+            .eq('user_id', userId)
+            .eq('ex_profile_id', exProfileId)
+            .maybeSingle();
+
+        if (!conv || !conv.last_message_at) {
+            return { shouldSend: false };
         }
-        return 'Hola, cómo estás?';
+
+        // 2. Calcular horas desde último mensaje
+        const lastMessageDate = new Date(conv.last_message_at);
+        const hoursSinceLastMessage =
+            (Date.now() - lastMessageDate.getTime()) / (1000 * 60 * 60);
+
+        console.log(`[ProactiveMessages] Hours since last message: ${hoursSinceLastMessage.toFixed(1)}`);
+
+        // 3. Si > 12 horas, verificar si ya hay mensaje pendiente
+        if (hoursSinceLastMessage > 12) {
+            // Verificar si ya se envió uno recientemente
+            const { data: existing } = await supabase
+                .from('proactive_messages_queue')
+                .select('*')
+                .eq('ex_profile_id', exProfileId)
+                .eq('status', 'sent')
+                .gte('sent_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Últimas 24h
+                .maybeSingle();
+
+            if (existing) {
+                console.log('[ProactiveMessages] Already sent proactive message in last 24h');
+                return { shouldSend: false };
+            }
+
+            // 4. Generar mensaje proactivo
+            const messages = [
+                "Ey, todo bien? 👋",
+                "Qué onda? Hace rato no hablamos",
+                "Hey! Cómo has estado?",
+                "Hace días no sé de ti, todo ok?",
+                "Qué tal todo?"
+            ];
+
+            const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+
+            return {
+                shouldSend: true,
+                message: randomMessage
+            };
+        }
+
+        return { shouldSend: false };
+    } catch (error: any) {
+        console.error('[ProactiveMessages] ❌ Error checking:', error);
+        return { shouldSend: false };
     }
 }
 
 /**
- * Calculate next proactive message time based on frequency
+ * Programar un mensaje proactivo
  */
-export function calculateNextMessageTime(frequency: 'low' | 'normal' | 'high'): number {
-    const baseHours = {
-        low: 24,      // Once a day
-        normal: 12,   // Twice a day
-        high: 6       // 4 times a day
-    };
-
-    const hours = baseHours[frequency];
-    // Add some randomness (±2 hours)
-    const randomOffset = (Math.random() - 0.5) * 4;
-    const totalHours = hours + randomOffset;
-
-    return totalHours * 60 * 60; // Convert to seconds
-}
-
-/**
- * Schedule a proactive message for an ex profile
- */
-export async function scheduleProactiveMessageForProfile(profileId: string) {
+export async function scheduleProactiveMessage(
+    userId: string,
+    exProfileId: string,
+    message: string,
+    scheduledFor?: Date
+): Promise<{ success: boolean; error?: string }> {
     try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        // Get profile data
-        const { data: exProfile, error: profileError } = await supabase
-            .from('ex_profiles')
-            .select('*')
-            .eq('id', profileId)
-            .single();
-
-        if (profileError || !exProfile) {
-            console.error('Error loading ex profile:', profileError);
-            return;
-        }
-
-        // Check if profile is active
-        if (!exProfile.is_active) {
-            console.log('Profile is paused, skipping proactive message');
-            return;
-        }
-
-        // Get last messages from simulation sessions
-        const { data: sessions } = await supabase
-            .from('simulation_sessions')
-            .select('messages')
-            .eq('ex_profile_id', profileId)
-            .order('created_at', { ascending: false })
-            .limit(1);
-
-        const lastMessages: ParsedMessage[] = sessions && sessions[0]?.messages
-            ? sessions[0].messages.slice(-5)
-            : [];
-
-        // Generate message
-        const config: ProactiveMessageConfig = {
-            profileId,
-            exName: exProfile.ex_name,
-            profile: exProfile.profile_data,
-            lastMessages,
-            frequency: exProfile.message_frequency || 'normal'
-        };
-
-        const messageContent = await generateProactiveMessage(config);
-
-        // Calculate when to send
-        const delaySeconds = calculateNextMessageTime(config.frequency);
-
-        // Save to queue
-        const { error: queueError } = await supabase
+        const { error } = await supabase
             .from('proactive_messages_queue')
             .insert({
-                ex_profile_id: profileId,
-                user_id: user.id,
-                message_content: messageContent,
-                scheduled_for: new Date(Date.now() + delaySeconds * 1000).toISOString(),
+                user_id: userId,
+                ex_profile_id: exProfileId,
+                message_content: message,
+                scheduled_for: (scheduledFor || new Date()).toISOString(),
                 status: 'pending'
             });
 
-        if (queueError) {
-            console.error('Error queuing proactive message:', queueError);
-        } else {
-            console.log(`Proactive message scheduled for ${exProfile.ex_name} in ${Math.round(delaySeconds / 3600)} hours`);
-        }
+        if (error) throw error;
 
-        // Update last proactive message time
-        await supabase
-            .from('ex_profiles')
-            .update({ last_proactive_message: new Date().toISOString() })
-            .eq('id', profileId);
-
-    } catch (error) {
-        console.error('Error scheduling proactive message:', error);
+        console.log('[ProactiveMessages] ✅ Scheduled message');
+        return { success: true };
+    } catch (error: any) {
+        console.error('[ProactiveMessages] ❌ Error scheduling:', error);
+        return { success: false, error: error.message };
     }
 }
 
 /**
- * Process pending proactive messages (call this periodically)
+ * Marcar mensaje como enviado
  */
-export async function processPendingProactiveMessages() {
+export async function markProactiveMessageSent(
+    messageId: string
+): Promise<boolean> {
     try {
-        const { data: pendingMessages } = await supabase
+        const { error } = await supabase
             .from('proactive_messages_queue')
-            .select('*, ex_profiles(ex_name)')
+            .update({
+                sent_at: new Date().toISOString(),
+                status: 'sent'
+            })
+            .eq('id', messageId);
+
+        if (error) throw error;
+        return true;
+    } catch (error: any) {
+        console.error('[ProactiveMessages] ❌ Error marking sent:', error);
+        return false;
+    }
+}
+
+/**
+ * Obtener mensajes proactivos pendientes
+ */
+export async function getPendingProactiveMessages(
+    userId: string
+): Promise<ProactiveMessage[]> {
+    try {
+        const { data, error } = await supabase
+            .from('proactive_messages_queue')
+            .select('*')
+            .eq('user_id', userId)
             .eq('status', 'pending')
             .lte('scheduled_for', new Date().toISOString())
-            .limit(10);
+            .order('scheduled_for', { ascending: true });
 
-        if (!pendingMessages || pendingMessages.length === 0) {
-            return;
-        }
+        if (error) throw error;
 
-        for (const msg of pendingMessages) {
-            // Send notification
-            const { NotificationManager } = await import('./notifications');
-            await NotificationManager.sendProactiveMessageNotification(
-                msg.ex_profiles.ex_name,
-                msg.message_content,
-                msg.ex_profile_id
-            );
+        return (data || []).map(d => ({
+            id: d.id,
+            exProfileId: d.ex_profile_id,
+            userId: d.user_id,
+            messageContent: d.message_content,
+            scheduledFor: new Date(d.scheduled_for),
+            sentAt: d.sent_at ? new Date(d.sent_at) : undefined,
+            status: d.status
+        }));
+    } catch (error: any) {
+        console.error('[ProactiveMessages] ❌ Error getting pending:', error);
+        return [];
+    }
+}
 
-            // Mark as sent
-            await supabase
-                .from('proactive_messages_queue')
-                .update({
-                    status: 'sent',
-                    sent_at: new Date().toISOString()
-                })
-                .eq('id', msg.id);
-
-            // Schedule next message
-            await scheduleProactiveMessageForProfile(msg.ex_profile_id);
-        }
+/**
+ * Actualizar timestamp de último mensaje proactivo en perfil
+ */
+export async function updateLastProactiveTimestamp(
+    exProfileId: string
+): Promise<void> {
+    try {
+        await supabase
+            .from('ex_profiles')
+            .update({ last_proactive_message: new Date().toISOString() })
+            .eq('id', exProfileId);
     } catch (error) {
-        console.error('Error processing proactive messages:', error);
+        console.error('[ProactiveMessages] ❌ Error updating timestamp:', error);
     }
 }

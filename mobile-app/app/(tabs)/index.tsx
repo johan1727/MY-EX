@@ -94,6 +94,7 @@ export default function MainScreen() {
     const [dailyMessageCount, setDailyMessageCount] = useState(0);
     const [showLimitWarning, setShowLimitWarning] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [showGuestBanner, setShowGuestBanner] = useState(false); // Registration banner for guests
 
     // Get subscription status to show upgrade banner
     const { tier } = useSubscription();
@@ -262,7 +263,11 @@ export default function MainScreen() {
         }
     };
 
-    const handleSwitchProfile = async (profileId: string) => {
+    const handleSwitchProfile = async (profileOrId: any) => {
+        // Accept either a profile object or just an ID
+        const profileId = typeof profileOrId === 'string' ? profileOrId : profileOrId?.id;
+        const profileFromParam = typeof profileOrId === 'object' ? profileOrId : null;
+
         console.log('[handleSwitchProfile] ========= INICIANDO CAMBIO DE PERFIL =========');
         console.log('[handleSwitchProfile] Target profile ID:', profileId);
         setLoading(true);
@@ -275,9 +280,13 @@ export default function MainScreen() {
                 console.log('[handleSwitchProfile] ✅ Conversación guardada:', messages.length, 'mensajes');
             }
 
-            // 1. Find the profile
-            console.log('[handleSwitchProfile] Buscando en', allProfiles.length, 'perfiles...');
-            const targetProfile = allProfiles.find(p => p.id === profileId);
+            // 1. Find the profile (or use the one passed directly)
+            let targetProfile = profileFromParam;
+            if (!targetProfile) {
+                console.log('[handleSwitchProfile] Buscando en', allProfiles.length, 'perfiles...');
+                targetProfile = allProfiles.find(p => p.id === profileId);
+            }
+
             if (!targetProfile) {
                 console.error('[handleSwitchProfile] ❌ Perfil NO encontrado:', profileId);
                 console.log('[handleSwitchProfile] IDs disponibles:', allProfiles.map(p => p.id));
@@ -332,10 +341,7 @@ export default function MainScreen() {
             setSidebarVisible(false);
             console.log('[handleSwitchProfile] ========= CAMBIO COMPLETADO =========');
 
-            // 5. Show confirmation
-            if (Platform.OS !== 'web') {
-                Alert.alert("Perfil cambiado", `Ahora chateas con ${targetProfile.exName}`);
-            }
+            // Profile switched silently - no alert needed
             setLoading(false);
 
         } catch (error) {
@@ -573,6 +579,22 @@ export default function MainScreen() {
                     setMessages(prev => {
                         const updated = [...prev, assistantMsg];
                         storage.setItem(convKey, JSON.stringify(updated));
+
+                        // Auto-save to cloud when conversation updates (only on last fragment)
+                        if (index === fragments.length - 1 && !isGuest && currentProfile) {
+                            const cloudMessages = updated.map(m => ({
+                                role: m.role,
+                                content: typeof m.content === 'string' ? m.content : String(m.content),
+                                timestamp: typeof m.timestamp === 'number' ? m.timestamp : m.timestamp.getTime()
+                            }));
+                            const profileCloudId = (currentProfile as any).supabaseId || currentProfile.id;
+                            supabase.auth.getUser().then(({ data }) => {
+                                if (data?.user?.id) {
+                                    saveConversationToCloud(data.user.id, profileCloudId, cloudMessages);
+                                }
+                            });
+                        }
+
                         return updated;
                     });
 
@@ -590,8 +612,15 @@ export default function MainScreen() {
                     }
                 }, delayAccumulator);
 
-                // Add delay for next fragment
-                delayAccumulator += fragment.delay || Math.max(1000, fragment.text.length * 50);
+                // Add realistic typing delay (max 5 seconds)
+                // Formula: 500ms base + (20ms per character) = more natural
+                // Short message (50 chars) = 500ms + 1000ms = 1.5s
+                // Long message (200 chars) = 500ms + 4000ms = 4.5s
+                const baseDelay = 500; // Base thinking time
+                const charDelay = 20; // ms per character (simular tipeo)
+                const calculatedDelay = baseDelay + (fragment.text.length * charDelay);
+                const realisticDelay = Math.min(calculatedDelay, 5000); // Cap at 5 seconds
+                delayAccumulator += fragment.delay || realisticDelay;
             });
 
         } catch (error) {

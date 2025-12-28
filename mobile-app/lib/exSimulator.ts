@@ -1,5 +1,6 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+Ôªøimport { GoogleGenerativeAI } from '@google/generative-ai';
 import { intelligentTokenSampling } from './messageSampling';
+import { extractConversationContext } from './conversationHelpers';
 import { extractMessageSamples, MessageSamples } from './messageSampleExtractor';
 
 // TEMPORAL: Hardcodeando la API Key para bypasear el problema de Expo Web
@@ -31,15 +32,15 @@ export interface ExProfile {
     // === BASIC COMMUNICATION ===
     communicationStyle: 'directa' | 'pasivo-agresiva' | 'evasiva' | 'afectuosa' | 'mixta';
     commonPhrases: string[];
-    emotionalTone: 'c·lida' | 'frÌa' | 'variable';
+    emotionalTone: 'cÔøΩlida' | 'frÔøΩa' | 'variable';
     commonEmojis?: string[];
 
     // === BIG FIVE (OCEAN) - Personality ===
     bigFive: {
         openness: number;         // 1-10: Creatividad, curiosidad
-        conscientiousness: number; // 1-10: OrganizaciÛn, responsabilidad
-        extraversion: number;      // 1-10: Sociabilidad, energÌa
-        agreeableness: number;     // 1-10: CooperaciÛn, empatÌa
+        conscientiousness: number; // 1-10: OrganizaciÔøΩn, responsabilidad
+        extraversion: number;      // 1-10: Sociabilidad, energÔøΩa
+        agreeableness: number;     // 1-10: CooperaciÔøΩn, empatÔøΩa
         neuroticism: number;       // 1-10: Reactividad emocional
     };
 
@@ -73,17 +74,17 @@ export interface ExProfile {
     mbtiPatterns: {
         energySource: 'extrovertida' | 'introvertida';
         informationStyle: 'detallista' | 'conceptual';
-        decisionStyle: 'lÛgica' | 'emocional';
+        decisionStyle: 'lÔøΩgica' | 'emocional';
         lifestyleStyle: 'estructurada' | 'flexible';
     };
 
     // === EMOTIONAL TRIGGERS & REACTIONS ===
     triggers: {
-        positive: string[];      // QuÈ le alegra
-        negative: string[];      // QuÈ le molesta
-        calming: string[];       // QuÈ la calma
+        positive: string[];      // QuÔøΩ le alegra
+        negative: string[];      // QuÔøΩ le molesta
+        calming: string[];       // QuÔøΩ la calma
         angerResponse: 'explota' | 'se cierra' | 'sarcasmo' | 'llora' | 'confronta';
-        sadnessResponse: 'busca consuelo' | 'se aÌsla' | 'indirectas' | 'comparte';
+        sadnessResponse: 'busca consuelo' | 'se aÔøΩsla' | 'indirectas' | 'comparte';
         jealousyResponse: 'preguntas' | 'distancia' | 'acusaciones' | 'ninguno';
     };
 
@@ -92,20 +93,20 @@ export interface ExProfile {
         formality: 'muy informal' | 'informal' | 'mixto' | 'formal';
         avgMessageLength: 'corto' | 'medio' | 'largo';
         emojiFrequency: 'nunca' | 'raro' | 'frecuente' | 'excesivo';
-        responseTime: 'instant·neo' | 'normal' | 'lento' | 'inconsistente';
+        responseTime: 'instantÔøΩneo' | 'normal' | 'lento' | 'inconsistente';
         initiatesConversation: number; // 0-1
-        humorType: 'sarc·stico' | 'dulce' | 'negro' | 'absurdo' | 'ninguno';
+        humorType: 'sarcÔøΩstico' | 'dulce' | 'negro' | 'absurdo' | 'ninguno';
         signatureWords: string[];
         typosFrequency: 'ninguno' | 'raro' | 'frecuente';
         // NEW: LIWC-inspired fields
         ghostingTendency: 'nunca' | 'rara vez' | 'ocasional' | 'frecuente';
-        capitalization: 'normal' | 'TODO MAY⁄SCULAS' | 'todo min˙sculas' | 'mixto';
+        capitalization: 'normal' | 'TODO MAYÔøΩSCULAS' | 'todo minÔøΩsculas' | 'mixto';
         petNames: string[];      // ["amor", "bb", "mi vida"]
         insultPatterns: string[]; // ["tonto", "idiota"] - when angry
         pronounUsage: {
-            firstPerson: 'alto' | 'medio' | 'bajo';  // CorrelaciÛn con neuroticismo
-            secondPerson: 'alto' | 'medio' | 'bajo'; // CorrelaciÛn con agreeableness
-            weUs: 'alto' | 'medio' | 'bajo';         // ConexiÛn relacional
+            firstPerson: 'alto' | 'medio' | 'bajo';  // CorrelaciÔøΩn con neuroticismo
+            secondPerson: 'alto' | 'medio' | 'bajo'; // CorrelaciÔøΩn con agreeableness
+            weUs: 'alto' | 'medio' | 'bajo';         // ConexiÔøΩn relacional
         };
     };
 
@@ -115,7 +116,7 @@ export interface ExProfile {
         jealousyLevel: number;   // 1-10
         trustDefault: number;    // 1-10
         conflictStyle: 'habla' | 'evita' | 'explota' | 'manipula';
-        forgivenessStyle: 'f·cil' | 'con tiempo' | 'difÌcil' | 'rencorosa';
+        forgivenessStyle: 'fÔøΩcil' | 'con tiempo' | 'difÔøΩcil' | 'rencorosa';
     };
 
     // === CONTEXTUAL RESPONSE PATTERNS ===
@@ -135,11 +136,11 @@ export interface ExProfile {
     // === NEW: LINGUISTIC FINGERPRINT (Idiolecto Digital) ===
     linguisticFingerprint?: {
         // Micro-sintaxis
-        usesCapitals: boolean;           // øMay˙scula inicial?
-        usesOpeningMarks: boolean;       // øUsa ø y °?
+        usesCapitals: boolean;           // ÔøΩMayÔøΩscula inicial?
+        usesOpeningMarks: boolean;       // ÔøΩUsa ÔøΩ y ÔøΩ?
         periodMeaning: 'normal' | 'pasivo-agresivo';
 
-        // GestiÛn de risa
+        // GestiÔøΩn de risa
         laughStyle: string[];            // ["jajaja", "JAJA", "jiji", "??"]
 
         // Muletillas y regionalismos
@@ -147,15 +148,15 @@ export interface ExProfile {
         regionalisms: string[];          // Palabras regionales
 
         // Saludos y despedidas
-        greetings: string[];             // ["holi", "quÈ onda", "hey bb"]
+        greetings: string[];             // ["holi", "quÔøΩ onda", "hey bb"]
         farewells: string[];             // ["bye", "tkm", "besitos"]
     };
 
     // === NEW: COGNITIVE PATTERNS (Defectos y Sesgos) ===
     cognitivePatterns?: {
         rigidity: number;                // 1-10: Terquedad
-        narcissismLevel: number;         // 1-10: øGira todo hacia Èl/ella?
-        victimMentality: number;         // 1-10: øSe victimiza?
+        narcissismLevel: number;         // 1-10: ÔøΩGira todo hacia ÔøΩl/ella?
+        victimMentality: number;         // 1-10: ÔøΩSe victimiza?
         deflectionStyle: 'culpa al otro' | 'cambia tema' | 'niega' | 'ninguno';
         triggerTopics: string[];         // Temas que lo enojan
     };
@@ -164,7 +165,7 @@ export interface ExProfile {
     manipulationPatterns?: {
         gaslighting: {
             detected: boolean;
-            phrases: string[];           // ["est·s loca", "yo nunca dije eso"]
+            phrases: string[];           // ["estÔøΩs loca", "yo nunca dije eso"]
         };
         guiltTripping: {
             detected: boolean;
@@ -175,7 +176,7 @@ export interface ExProfile {
             typicalDuration: string;
         };
         loveBombing: boolean;
-        controlBehavior: string[];       // ["dÛnde est·s", "con quiÈn"]
+        controlBehavior: string[];       // ["dÔøΩnde estÔøΩs", "con quiÔøΩn"]
     };
 
     // === NEW: SHARED MEMORY (Memoria Compartida) ===
@@ -183,7 +184,7 @@ export interface ExProfile {
         insideJokes: string[];           // Chistes internos
         mentionedPeople: {
             name: string;
-            relationship: string;        // "amiga", "mam·"
+            relationship: string;        // "amiga", "mamÔøΩ"
             sentiment: 'positivo' | 'negativo' | 'neutral';
         }[];
         importantDates: string[];        // Fechas mencionadas
@@ -194,15 +195,15 @@ export interface ExProfile {
 
     // === NEW: DIGITAL BODY LANGUAGE ===
     digitalBodyLanguage?: {
-        responseSpeed: 'instant·neo' | 'minutos' | 'horas' | 'inconsistente';
-        doubleTexting: boolean;          // øManda mensaje tras mensaje?
-        readReceiptAnxiety: boolean;     // øSe queja del "visto"?
+        responseSpeed: 'instantÔøΩneo' | 'minutos' | 'horas' | 'inconsistente';
+        doubleTexting: boolean;          // ÔøΩManda mensaje tras mensaje?
+        readReceiptAnxiety: boolean;     // ÔøΩSe queja del "visto"?
         emojiToTextRatio: 'bajo' | 'medio' | 'alto';
         voiceNoteUsage: 'nunca' | 'raro' | 'frecuente';
         allCapsWhen: 'enojado' | 'emocionado' | 'siempre' | 'nunca';
     };
 
-    // === NEW: DARK TRIAD (Narcisismo, Maquiavelismo, PsicopatÌa) ===
+    // === NEW: DARK TRIAD (Narcisismo, Maquiavelismo, PsicopatÔøΩa) ===
     darkTriad?: {
         narcissism: {
             level: number;               // 1-10
@@ -226,22 +227,22 @@ export interface ExProfile {
             examples: string[];
         };
         overallDarkness: number;         // 1-10 promedio
-        warningFlags: string[];          // SeÒales de alerta
+        warningFlags: string[];          // SeÔøΩales de alerta
     };
 
     // === NEW: LA SOMBRA (Jung - Lo que reprime) ===
     shadow?: {
         repressedTraits: string[];       // Rasgos que reprime
         emergentBehavior: {
-            underStress: string[];       // CÛmo act˙a bajo estrÈs
-            whenHurt: string[];          // Cuando est· herida
+            underStress: string[];       // CÔøΩmo actÔøΩa bajo estrÔøΩs
+            whenHurt: string[];          // Cuando estÔøΩ herida
             whenCornered: string[];      // Cuando se siente acorralada
         };
         projections: string[];           // Defectos que proyecta en otros
         contradictions: string[];        // Contradicciones palabras/acciones
         defenseMechanisms: string[];     // Mecanismos de defensa
         hiddenFears: string[];           // Miedos ocultos
-        triggerTopics: string[];         // Temas que provocan reacciÛn
+        triggerTopics: string[];         // Temas que provocan reacciÔøΩn
     };
 
     // === LEGACY (keeping for compatibility) ===
@@ -473,7 +474,35 @@ export async function analyzePersonality(
     // --- REQUEST 1: DEEP PSYCHOLOGICAL PROFILE ---
     onProgress?.(15, 'Analizando perfil psicol√≥gico profundo...');
 
+    // Identify the user (the other participant in the chat)
+    const allParticipants = Array.from(senderCounts.keys());
+    const userSenderName = allParticipants.find(name => name !== exSenderName) || 'Usuario';
+
+    // Get sample of the full conversation with context
+    const contextSample = sampledMessages.slice(0, 50).map(m => `${m.sender}: ${m.content.substring(0, 200)}`).join('\n');
+
+    // Extract context for enhanced analysis
+    const context = extractConversationContext(sampledMessages, exName);
+
     const request1Prompt = `Analiza profundamente a "${exName}" bas√°ndote en estos mensajes.
+
+CONTEXTO CR√çTICO:
+- Persona a simular: ${context.participants.target}
+- Usuario real: ${context.participants.user}
+
+HUELLA LING√ú√çSTICA:
+- Emojis favoritos: ${context.fingerprint.topEmojis.join(' ') || 'ninguno'}
+- Palabras signature: ${context.fingerprint.signatureWords.join(', ') || 'ninguna'}
+- Estilo de risa: ${context.fingerprint.laughStyle.join(', ') || 'jajaja'}
+    
+    CONTEXTO IMPORTANTE:
+    - La persona a analizar es: ${exSenderName}
+    - La otra persona en la conversaci√≥n (usuario) es: ${userSenderName}
+    - Total de participantes detectados: ${allParticipants.join(', ')}
+    - La simulaci√≥n ser√° para que el usuario (${userSenderName}) pueda hablar con una IA que imita a ${exSenderName}
+    
+    MUESTRA DE CONVERSACI√ìN PARA ENTENDER EL CONTEXTO:
+    ${contextSample}
     
     MENSAJES:
     ${styleSample.slice(0, 30000)} // Limit to fit context
@@ -622,12 +651,12 @@ export async function extractChatFromImages(base64Images: string[]): Promise<Par
     const messages: ParsedMessage[] = [];
 
     for (const base64 of base64Images) {
-        const prompt = `Analiza esta captura de pantalla de una conversaciÛn de chat (WhatsApp, Telegram, iMessage, etc.).
-Extrae TODOS los mensajes visibles en orden cronolÛgico.
-Identifica quiÈn es el remitente (si es el dueÒo del telÈfono "user" o la otra persona "ex").
-Si hay fechas u horas visibles, ˙salas. Si no, estima el orden.
+        const prompt = `Analiza esta captura de pantalla de una conversaciÔøΩn de chat (WhatsApp, Telegram, iMessage, etc.).
+Extrae TODOS los mensajes visibles en orden cronolÔøΩgico.
+Identifica quiÔøΩn es el remitente (si es el dueÔøΩo del telÔøΩfono "user" o la otra persona "ex").
+Si hay fechas u horas visibles, ÔøΩsalas. Si no, estima el orden.
 
-Responde SOLO con un JSON v·lido con esta estructura:
+Responde SOLO con un JSON vÔøΩlido con esta estructura:
 {
   "messages": [
     {
@@ -681,7 +710,7 @@ export async function simulateResponse(
     if (userMessage) {
         fullPrompt += `Usuario: ${userMessage}`;
     } else {
-        fullPrompt += `(Contexto: El usuario ha estado en silencio. Inicia t˙ una conversaciÛn casual o contin˙a un tema pendiente.)`;
+        fullPrompt += `(Contexto: El usuario ha estado en silencio. Inicia tÔøΩ una conversaciÔøΩn casual o continÔøΩa un tema pendiente.)`;
     }
 
     const promptParts: any[] = [fullPrompt];
@@ -724,26 +753,26 @@ export async function analyzeConversation(
         `${m.role === 'user' ? 'Usuario' : profile.exName}: ${m.content}`
     ).join('\n');
 
-    const prompt = `Analiza esta conversaciÛn simulada entre un usuario y su ex (${profile.exName}):
+    const prompt = `Analiza esta conversaciÔøΩn simulada entre un usuario y su ex (${profile.exName}):
 
 ${conversationText}
 
 PERFIL DE LA EX:
 - Estilo: ${profile.communicationStyle}
 - Tono: ${profile.emotionalTone}
-- SeÒales de alerta: ${profile.redFlags.join(', ')}
+- SeÔøΩales de alerta: ${profile.redFlags.join(', ')}
 
-Proporciona un an·lisis en formato JSON:
+Proporciona un anÔøΩlisis en formato JSON:
 {
   "strengths": ["fortaleza1", "fortaleza2"],
-  "improvements": ["·rea de mejora 1", "·rea de mejora 2"],
+  "improvements": ["ÔøΩrea de mejora 1", "ÔøΩrea de mejora 2"],
   "suggestions": ["sugerencia concreta 1", "sugerencia concreta 2"],
-  "patternsDetected": ["patrÛn detectado 1", "patrÛn detectado 2"]
+  "patternsDetected": ["patrÔøΩn detectado 1", "patrÔøΩn detectado 2"]
 }
 
-EnfÛcate en:
-1. ComunicaciÛn no violenta
-2. Establecimiento de lÌmites
+EnfÔøΩcate en:
+1. ComunicaciÔøΩn no violenta
+2. Establecimiento de lÔøΩmites
 3. Patrones de codependencia
 4. Respuestas emocionales saludables
 
@@ -756,13 +785,13 @@ Responde SOLO con el JSON.`;
 
         const jsonMatch = response.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
-            throw new Error('No se pudo generar el an·lisis');
+            throw new Error('No se pudo generar el anÔøΩlisis');
         }
 
         return JSON.parse(jsonMatch[0]);
     } catch (error) {
         console.error('Error analyzing conversation:', error);
-        throw new Error('Error al analizar la conversaciÛn. Intenta de nuevo.');
+        throw new Error('Error al analizar la conversaciÔøΩn. Intenta de nuevo.');
     }
 }
 
@@ -817,3 +846,4 @@ function safeParseJSON(jsonString: string, defaultValue: any): any {
         return defaultValue;
     }
 }
+
