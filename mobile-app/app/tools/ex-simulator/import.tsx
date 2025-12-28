@@ -199,13 +199,13 @@ export default function ImportChat() {
             let text = await response.text();
             addDebug(`📏 Tamaño: ${(text.length / 1024 / 1024).toFixed(1)}MB`);
 
-            // LIMIT: Use last 4MB max (stable limit)
-            // This prevents Android from freezing on massive files
-            const MAX_TEXT_SIZE = 4 * 1024 * 1024; // 4MB - stable
+            // LIMIT: Use last 15MB max (supports large WhatsApp exports)
+            // intelligentTokenSampling will further optimize this
+            const MAX_TEXT_SIZE = 15 * 1024 * 1024; // 15MB
             if (text.length > MAX_TEXT_SIZE) {
                 const originalSize = text.length;
                 addDebug(`⚠️ Archivo muy grande, optimizando...`);
-                // Take only the LAST 2MB (most recent messages)
+                // Take only the LAST 15MB (most recent messages)
                 text = text.slice(-MAX_TEXT_SIZE);
                 // Find first complete line
                 const firstNewline = text.indexOf('\n');
