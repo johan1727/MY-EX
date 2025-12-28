@@ -37,6 +37,8 @@ import { haptics } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { storage } from '@/lib/storage';
+import { extractConversationContext } from '@/lib/conversationHelpers';
+import { extractAndSaveMemoryFromConversation } from '@/lib/memorySync';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SIDEBAR_WIDTH = Math.min(SCREEN_WIDTH * 0.85, 300);
@@ -170,6 +172,116 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
                 [
                     { text: 'Cancelar', style: 'cancel' },
                     { text: 'Eliminar', style: 'destructive', onPress: doDelete }
+                ]
+            );
+        }
+    };
+
+    const handleUpdateProfile = async () => {
+        if (!menuProfile) return;
+        setShowProfileMenu(false);
+
+        const doUpdate = async () => {
+            try {
+                console.log('[Sidebar] Actualizando perfil:', menuProfile.exName);
+
+                // 1. Cargar conversaciones existentes
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    Alert.alert('Error', 'Debes iniciar sesión para actualizar');
+                    return;
+                }
+
+                const profileId = (menuProfile as any).supabaseId || menuProfile.id;
+
+                const { data: conv } = await supabase
+                    .from('simulation_conversations')
+                    .select('messages')
+                    .eq('user_id', user.id)
+                    .eq('ex_profile_id', profileId)
+                    .maybeSingle();
+
+                if (!conv || !conv.messages || conv.messages.length === 0) {
+                    Alert.alert('Info', 'No hay conversaciones para analizar aún');
+                    return;
+                }
+
+                // 2. Extraer contexto de las conversaciones
+                const messages = conv.messages.map((m: any) => ({
+                    sender: m.role === 'user' ? 'Usuario' : menuProfile.exName,
+                    content: m.content,
+                    timestamp: m.timestamp
+                }));
+
+                const context = extractConversationContext(messages, menuProfile.exName);
+
+                // 3. Actualizar profile_data con nueva información
+                const updatedProfileData = {
+                    ...(menuProfile.profile_data || {}),
+                    fingerprint: context.fingerprint,
+                    participants: context.participants,
+                    updatedAt: new Date().toISOString()
+                };
+
+                await supabase
+                    .from('ex_profiles')
+                    .update({
+                        profile_data: updatedProfileData,
+                        conversation_memory: {
+                            keyFacts: context.memory.keyFacts,
+                            lastUpdated: new Date().toISOString()
+                        },
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', profileId);
+
+                // 4. Guardar memoria en ex_memory_facts
+                await extractAndSaveMemoryFromConversation(
+                    user.id,
+                    profileId,
+                    messages.slice(-20)
+                );
+
+                console.log('[Sidebar] ✅ Perfil actualizado con mejoras');
+
+                if (Platform.OS === 'web') {
+                    alert('✅ Perfil actualizado con nuevas mejoras');
+                } else {
+                    Alert.alert(
+                        '✅ Actualizado',
+                        `"${menuProfile.exName}" ahora tiene:\n\n` +
+                        `• Emojis favoritos: ${context.fingerprint.topEmojis.join(' ')}\n` +
+                        `• Palabras signature: ${context.fingerprint.signatureWords.slice(0, 3).join(', ')}\n` +
+                        `• ${context.memory.keyFacts.length} hechos en memoria`
+                    );
+                }
+            } catch (error: any) {
+                console.error('[Sidebar] Error actualizando perfil:', error);
+                if (Platform.OS === 'web') {
+                    alert('Error al actualizar: ' + error.message);
+                } else {
+                    Alert.alert('Error', 'No se pudo actualizar el perfil');
+                }
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            const confirmed = confirm(
+                `¿Actualizar "${menuProfile.exName}" con las nuevas mejoras?\n\n` +
+                `Se mantendrán todas las conversaciones.`
+            );
+            if (confirmed) doUpdate();
+        } else {
+            Alert.alert(
+                '🔄 Actualizar Perfil',
+                `Esto aplicará las nuevas mejoras a "${menuProfile.exName}":\n\n` +
+                `✅ Detección de emojis favoritos\n` +
+                `✅ Palabras signature\n` +
+                `✅ Memoria episódica\n\n` +
+                `Tus conversaciones se mantendrán intactas.`,
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    { text: '🔄 Actualizar', onPress: doUpdate }
                 ]
             );
         }
