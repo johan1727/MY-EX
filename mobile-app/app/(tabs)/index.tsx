@@ -78,6 +78,7 @@ export default function MainScreen() {
     const [allProfiles, setAllProfiles] = useState<any[]>([]);
     const [sidebarVisible, setSidebarVisible] = useState(false);
     const [checkInVisible, setCheckInVisible] = useState(false);
+    const [showAIDisclaimer, setShowAIDisclaimer] = useState(false);
     const [isGuest, setIsGuest] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputText, setInputText] = useState('');

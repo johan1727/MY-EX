@@ -243,18 +243,7 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
                 );
 
                 console.log('[Sidebar] ✅ Perfil actualizado con mejoras');
-
-                if (Platform.OS === 'web') {
-                    alert('✅ Perfil actualizado con nuevas mejoras');
-                } else {
-                    Alert.alert(
-                        '✅ Actualizado',
-                        `"${menuProfile.exName}" ahora tiene:\n\n` +
-                        `• Emojis favoritos: ${context.fingerprint.topEmojis.join(' ')}\n` +
-                        `• Palabras signature: ${context.fingerprint.signatureWords.slice(0, 3).join(', ')}\n` +
-                        `• ${context.memory.keyFacts.length} hechos en memoria`
-                    );
-                }
+                // Silently updated - changes will be visible immediately
             } catch (error: any) {
                 console.error('[Sidebar] Error actualizando perfil:', error);
                 if (Platform.OS === 'web') {
