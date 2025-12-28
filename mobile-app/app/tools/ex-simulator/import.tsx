@@ -265,6 +265,58 @@ export default function ImportChat() {
             return;
         }
 
+        // Check for existing profile with same name
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: existingProfile } = await supabase
+                    .from('ex_profiles')
+                    .select('id, ex_name')
+                    .eq('user_id', user.id)
+                    .ilike('ex_name', exName)
+                    .maybeSingle();
+
+                if (existingProfile) {
+                    // Profile exists - ask user what to do
+                    return new Promise<void>((resolve) => {
+                        Alert.alert(
+                            '⚠️ Perfil Existente',
+                            `Ya existe un perfil llamado "${existingProfile.ex_name}".\\n\\n¿Qué quieres hacer?`,
+                            [
+                                {
+                                    text: '🔄 Actualizar Existente',
+                                    onPress: async () => {
+                                        // Set a flag to update instead of create
+                                        (window as any).__updateProfileId = existingProfile.id;
+                                        await continueAnalysis();
+                                        resolve();
+                                    }
+                                },
+                                {
+                                    text: '➕ Crear Nuevo',
+                                    onPress: async () => {
+                                        // Clear flag to create new
+                                        delete (window as any).__updateProfileId;
+                                        await continueAnalysis();
+                                        resolve();
+                                    }
+                                },
+                                { text: 'Cancelar', style: 'cancel', onPress: () => resolve() }
+                            ]
+                        );
+                    });
+                }
+            }
+        } catch (err) {
+            console.log('[handleAnalyze] Error checking for duplicates:', err);
+            // Continue anyway
+        }
+
+        // No duplicate - proceed normally
+        await continueAnalysis();
+    };
+
+    const continueAnalysis = async () => {
         // Helper to force UI update on Android
         const forceProgressUpdate = async (value: number) => {
             setProgress(value);
@@ -278,10 +330,10 @@ export default function ImportChat() {
         setAnalyzing(true);
 
         // Now add debug AFTER clearing
-        addDebug('🚀 Análisis iniciado');
+        const isUpdate = !!(window as any).__updateProfileId;
+        addDebug(isUpdate ? '🔄 Actualizando perfil' : '🚀 Análisis iniciado');
         addDebug(`Ex: ${exName}`);
         await forceProgressUpdate(1);
-
 
         try {
             if (!parsedMessages || parsedMessages.length === 0) {
@@ -415,9 +467,31 @@ export default function ImportChat() {
                 console.log('[handleAnalyze] Profile data keys:', Object.keys(profileData));
                 console.log('[handleAnalyze] Profile has masterPrompt:', !!profileData.masterPrompt);
 
-                // Save using profile sync service (local + cloud)
-                await saveProfile(profileData, userId);
-                console.log('[handleAnalyze] ✅ Profile saved (local + cloud)');
+                // Check if we're updating an existing profile
+                const updateProfileId = (window as any).__updateProfileId;
+
+                if (updateProfileId && userId) {
+                    // UPDATE existing profile
+                    console.log('[handleAnalyze] 🔄 Updating existing profile:', updateProfileId);
+
+                    await supabase
+                        .from('ex_profiles')
+                        .update({
+                            profile_data: profileData.profile,
+                            message_count: profileData.messageCount,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', updateProfileId)
+                        .eq('user_id', userId);
+
+                    // Clean up flag
+                    delete (window as any).__updateProfileId;
+                    console.log('[handleAnalyze] ✅ Profile updated successfully');
+                } else {
+                    // CREATE new profile
+                    await saveProfile(profileData, userId);
+                    console.log('[handleAnalyze] ✅ Profile saved (local + cloud)');
+                }
 
             } catch (saveError: any) {
                 console.error('[handleAnalyze] ❌ Save error:', saveError);
