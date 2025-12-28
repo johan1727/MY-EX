@@ -24,19 +24,62 @@
     },
     "android": {
       "package": "com.soyremi.app",
-      "versionCode": 1,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#1a1025"
       },
       "permissions": [
         "RECORD_AUDIO",
         "POST_NOTIFICATIONS"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "my-ex-coach"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "SEND",
+          "category": [
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "mimeType": "text/plain"
+            }
+          ]
+        },
+        {
+          "action": "SEND",
+          "category": [
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "mimeType": "application/zip"
+            }
+          ]
+        }
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "backgroundColor": "#0a0a0a",
+      "splash": {
+        "image": "./assets/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0a0a0a"
+      }
     },
     "plugins": [
       "expo-router",
@@ -47,7 +90,8 @@
           "color": "#a855f7"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-share-intent"
     ],
     "scheme": "my-ex-coach",
     "extra": {
@@ -55,8 +99,26 @@
         "origin": false
       },
       "eas": {
-        "projectId": "8a1e2561-ba30-4712-8e66-c2487a0d0e23"
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "ShareExtension",
+                  "bundleIdentifier": "com.myexcoach.app.share-extension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.myexcoach.app"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "92afedeb-9448-4ea8-a781-17123f098c34"
       }
-    }
+    },
+    "owner": "desent1777"
   }
 }

@@ -283,27 +283,50 @@ export default function SimulateConversation() {
         const isUser = item.role === 'user';
 
         return (
-            <View className={`px-5 py-2 ${isUser ? 'items-end' : 'items-start'}`}>
-                <View className={`max-w-[80%] rounded-2xl px-4 py-3 ${isUser
-                    ? 'bg-purple-600'
-                    : 'bg-white/10 border border-white/10'
-                    }`}>
-                    {!isUser && (
-                        <Text className="text-gray-400 text-xs mb-1">
-                            {profile?.ex_name}
+            <View style={{
+                flexDirection: 'row',
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                width: '100%',
+            }}>
+                {!isUser && (
+                    <View style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        backgroundColor: '#a855f7',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 12,
+                        flexShrink: 0,
+                    }}>
+                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>
+                            {profile?.ex_name?.charAt(0) || 'M'}
                         </Text>
-                    )}
-                    <Text className={`${isUser ? 'text-white' : 'text-gray-200'} leading-6`}>
+                    </View>
+                )}
+                <View style={{
+                    flex: 1,
+                    paddingRight: isUser ? 0 : 40,
+                    paddingLeft: isUser ? 40 : 0,
+                }}>
+                    <Text style={{
+                        fontSize: 15,
+                        lineHeight: 24,
+                        color: isUser ? '#d1d5db' : '#e5e7eb',
+                        textAlign: isUser ? 'right' : 'left',
+                    }}>
                         {item.content}
                     </Text>
-                    {!isUser && item.confidence && item.confidence < 0.8 && (
-                        <View className="flex-row items-center mt-2">
-                            <AlertCircle size={12} color="#f59e0b" />
-                            <Text className="text-yellow-500 text-xs ml-1">
-                                Confianza: {Math.round(item.confidence * 100)}%
-                            </Text>
-                        </View>
-                    )}
+                    <Text style={{
+                        fontSize: 10,
+                        color: 'rgba(255,255,255,0.4)',
+                        marginTop: 4,
+                        textAlign: isUser ? 'right' : 'left',
+                    }}>
+                        {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {!isUser && item.confidence && ` • ${Math.round(item.confidence * 100)}%`}
+                    </Text>
                 </View>
             </View>
         );
@@ -311,17 +334,17 @@ export default function SimulateConversation() {
 
     if (loading) {
         return (
-            <View className="flex-1 bg-[#0a0a0a] items-center justify-center">
+            <View style={{ flex: 1, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center' }}>
                 <ActivityIndicator size="large" color="#a855f7" />
             </View>
         );
     }
 
     return (
-        <View className="flex-1 bg-[#0a0a0a]">
+        <View style={{ flex: 1, backgroundColor: '#0a0a0a', width: '100%' }}>
             <LinearGradient
                 colors={['#1a1a2e', '#16213e', '#0a0a0a']}
-                className="flex-1"
+                style={{ flex: 1, width: '100%' }}
             >
                 {/* Header */}
                 <View className="px-6 py-4 border-b border-white/10 flex-row items-center justify-between">
@@ -344,7 +367,7 @@ export default function SimulateConversation() {
                 <KeyboardAvoidingView
                     behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                     keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-                    className="flex-1"
+                    style={{ flex: 1 }}
                 >
                     {/* Messages */}
                     <FlatList
@@ -352,7 +375,8 @@ export default function SimulateConversation() {
                         data={messages}
                         keyExtractor={(item) => item.id}
                         renderItem={renderMessage}
-                        contentContainerStyle={{ paddingVertical: 15, paddingBottom: 25 }}
+                        style={{ flex: 1, width: '100%' }}
+                        contentContainerStyle={{ paddingVertical: 15, paddingBottom: 25, width: '100%' }}
                         showsVerticalScrollIndicator={false}
                     />
 

@@ -1,19 +1,86 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Sparkles, ChevronRight } from 'lucide-react-native';
+import { Sparkles, ChevronRight, X, Crown } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface UpgradeBannerProps {
-    variant?: 'minimal' | 'full';
+    variant?: 'minimal' | 'full' | 'header' | 'limit-warning';
+    remainingMessages?: number;
+    onDismiss?: () => void;
 }
 
-export default function UpgradeBanner({ variant = 'minimal' }: UpgradeBannerProps) {
+export default function UpgradeBanner({
+    variant = 'minimal',
+    remainingMessages,
+    onDismiss
+}: UpgradeBannerProps) {
     const router = useRouter();
 
     const handleUpgrade = () => {
         router.push('/premium' as any);
     };
+
+    // Header badge style - like ChatGPT "Upgrade to Plus"
+    if (variant === 'header') {
+        return (
+            <TouchableOpacity onPress={handleUpgrade} style={styles.headerBadge} activeOpacity={0.7}>
+                <LinearGradient
+                    colors={['#6366f1', '#8b5cf6']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.headerGradient}
+                >
+                    <Sparkles size={12} color="#fff" />
+                    <Text style={styles.headerText}>Mejorar plan</Text>
+                    <X size={12} color="rgba(255,255,255,0.6)" />
+                </LinearGradient>
+            </TouchableOpacity>
+        );
+    }
+
+    // Limit warning - when user runs low on messages
+    if (variant === 'limit-warning') {
+        // Calculate next reset time (midnight local time)
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(0, 0, 0, 0);
+        const resetTime = tomorrow.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+
+        return (
+            <View style={styles.limitWarning}>
+                <LinearGradient
+                    colors={['rgba(245, 158, 11, 0.15)', 'rgba(249, 115, 22, 0.15)']}
+                    style={styles.limitGradient}
+                >
+                    <View style={styles.limitContent}>
+                        <Crown size={18} color="#f59e0b" />
+                        <View style={styles.limitTextContainer}>
+                            <Text style={styles.limitTitle}>
+                                {remainingMessages === 0
+                                    ? 'Se acabaron tus créditos'
+                                    : `Te quedan ${remainingMessages} mensajes`}
+                            </Text>
+                            <Text style={styles.limitSubtitle}>
+                                {remainingMessages === 0
+                                    ? `Disponibles de nuevo a las ${resetTime}`
+                                    : 'Obtén más con Premium'}
+                            </Text>
+                        </View>
+                    </View>
+                    <TouchableOpacity onPress={handleUpgrade} style={styles.limitButton}>
+                        <Text style={styles.limitButtonText}>Mejorar</Text>
+                    </TouchableOpacity>
+                    {onDismiss && (
+                        <TouchableOpacity onPress={onDismiss} style={styles.limitDismiss}>
+                            <X size={16} color="#6b7280" />
+                        </TouchableOpacity>
+                    )}
+                </LinearGradient>
+            </View>
+        );
+    }
 
     if (variant === 'full') {
         return (
@@ -53,6 +120,73 @@ export default function UpgradeBanner({ variant = 'minimal' }: UpgradeBannerProp
 }
 
 const styles = StyleSheet.create({
+    // Header badge - ChatGPT style
+    headerBadge: {
+        borderRadius: 16,
+        overflow: 'hidden',
+    },
+    headerGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        gap: 6,
+        borderRadius: 16,
+    },
+    headerText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    // Limit warning
+    limitWarning: {
+        marginHorizontal: 16,
+        marginVertical: 8,
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
+    limitGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(245, 158, 11, 0.3)',
+        borderRadius: 12,
+        gap: 8,
+    },
+    limitContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        gap: 10,
+    },
+    limitTextContainer: {
+        flex: 1,
+    },
+    limitTitle: {
+        color: '#f59e0b',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    limitSubtitle: {
+        color: '#9ca3af',
+        fontSize: 12,
+        marginTop: 2,
+    },
+    limitButton: {
+        backgroundColor: '#f59e0b',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 8,
+    },
+    limitButtonText: {
+        color: '#000',
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    limitDismiss: {
+        padding: 4,
+    },
     // Minimal (ChatGPT style pill)
     minimalBanner: {
         flexDirection: 'row',

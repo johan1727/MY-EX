@@ -73,7 +73,7 @@ export default function SettingsScreen() {
                 {/* App Info */}
                 <View style={styles.appInfo}>
                     <Text style={styles.appName}>Ex Simulator v1.0.0</Text>
-                    <Text style={styles.appCopyright}>© 2024 Johan. Todos los derechos reservados.</Text>
+                    <Text style={styles.appCopyright}>© 2024 REMI. Todos los derechos reservados.</Text>
                 </View>
             </ScrollView>
         </View>

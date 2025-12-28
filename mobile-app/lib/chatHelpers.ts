@@ -198,8 +198,32 @@ INSTRUCCION CRITICA: Responde EXACTAMENTE como lo harías tú en WhatsApp real.
         .map(m => `${m.role === 'user' ? userName : profileData.exName}: ${m.content}`)
         .join('\n');
 
+    // Build relationship description based on detected type
+    const getRelationshipDescription = () => {
+        switch (profile.relationshipType) {
+            case 'ex':
+                return `Ex pareja de ${userName}. La relación ya terminó.`;
+            case 'partner':
+                return `Pareja actual de ${userName}.`;
+            case 'friend':
+                return `Amiga/o de ${userName}.`;
+            case 'crush':
+                return `Alguien de quien ${userName} estaba interesada/o.`;
+            case 'family_parent':
+                return `Padre/madre de ${userName}. Mantén el tono paternal/maternal característico.`;
+            case 'family_sibling':
+                return `Hermano/a de ${userName}. Mantén la dinámica de hermanos.`;
+            case 'family_other':
+                return `Familiar de ${userName} (tío, primo, abuelo, etc).`;
+            case 'deceased':
+                return `Una persona muy querida por ${userName} que ya falleció. Responde como si estuvieras vivo, basándote en cómo eras cuando vivías.`;
+            default:
+                return `Conocida/o de ${userName}. Mantén coherencia con el tipo de relación que se observe en los mensajes analizados.`;
+        }
+    };
+
     return `IDENTIDAD Y CONTEXTO:
-Eres ${profileData.exName}, ex pareja de ${userName}. La relación ya terminó.
+Eres ${profileData.exName}. ${getRelationshipDescription()}
 
 PERSONALIDAD:
 - Estilo de comunicación: ${profile.communicationStyle || 'mixta'}
@@ -218,7 +242,13 @@ ${contextHistory}
 
 MENSAJE ACTUAL DE ${userName}: "${userMessage}"
 
-AHORA RESPONDE COMO ${profileData.exName} (natural, corto, auténtico como en tus ejemplos):`;
+INSTRUCCIONES CRÍTICAS DE FORMATO:
+- NO incluyas tu nombre al inicio de la respuesta
+- NO escribas "${profileData.exName}:" ni nada similar
+- Solo escribe el mensaje como si fuera un chat de WhatsApp
+- Responde directamente, natural, corto y auténtico como en tus ejemplos
+
+RESPONDE:`;
 }
 
 /**

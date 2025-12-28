@@ -1,4 +1,4 @@
-ï»¿import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ParsedMessage, ExProfile } from './exSimulator';
 import { intelligentTokenSampling, sampleForStage } from './messageSampling';
 
@@ -79,9 +79,9 @@ export async function analyzeDeepPersonality(
     exName: string,
     onProgress?: (progress: number, status: string) => void
 ): Promise<DeepProfile> {
-    console.log('[DeepAnalysis] ðŸš€ Starting 7-stage deep analysis...');
+    console.log('[DeepAnalysis] ?? Starting 7-stage deep analysis...');
 
-    if (onProgress) onProgress(0, 'Iniciando anÃ¡lisis profundo...');
+    if (onProgress) onProgress(0, 'Iniciando análisis profundo...');
 
     // Step 0: Intelligent token sampling (500k max)
     if (onProgress) onProgress(5, 'Preparando datos...');
@@ -116,7 +116,7 @@ export async function analyzeDeepPersonality(
         basicProfile.family = stage2;
 
         // Stage 3: Social Circle (42%)
-        if (onProgress) onProgress(42, 'Analizando cÃ­rculo social...');
+        if (onProgress) onProgress(42, 'Analizando círculo social...');
         const stage3 = await analyzeStage3(sampledMessages, exName);
         basicProfile.friends = stage3.friends;
         basicProfile.colleagues = stage3.colleagues;
@@ -139,7 +139,7 @@ export async function analyzeDeepPersonality(
         basicProfile.importantDates = stage6;
 
         // Stage 7: Relationship Dynamics (98%)
-        if (onProgress) onProgress(98, 'Analizando dinÃ¡mica de relaciÃ³n...');
+        if (onProgress) onProgress(98, 'Analizando dinámica de relación...');
         const stage7 = await analyzeStage7(sampledMessages, exName);
         basicProfile.relationshipDynamics = stage7;
 
@@ -147,13 +147,13 @@ export async function analyzeDeepPersonality(
         basicProfile.confidenceScore = calculateConfidence(sampledMessages.length, messages.length);
         basicProfile.tokenCost = stats.estimatedTokens;
 
-        if (onProgress) onProgress(100, 'Â¡AnÃ¡lisis completo!');
+        if (onProgress) onProgress(100, '¡Análisis completo!');
 
-        console.log('[DeepAnalysis] âœ… Analysis complete!');
+        console.log('[DeepAnalysis] ? Analysis complete!');
         return basicProfile;
 
     } catch (error) {
-        console.error('[DeepAnalysis] âŒ Error:', error);
+        console.error('[DeepAnalysis] ? Error:', error);
         throw error;
     }
 }
@@ -166,24 +166,24 @@ async function analyzeStage1(messages: ParsedMessage[], exName: string): Promise
 
     const relevant = sampleForStage(messages, 'PERSONAL_INFO', 100000);
 
-    const prompt = `INSTRUCCIÃ“N CRÃTICA: Responde SOLO con JSON vÃ¡lido, sin texto adicional antes o despuÃ©s.
+    const prompt = `INSTRUCCIÓN CRÍTICA: Responde SOLO con JSON válido, sin texto adicional antes o después.
 
 Analiza estos mensajes de WhatsApp de ${exName} y extrae:
 
-1. INFORMACIÃ“N PERSONAL:
+1. INFORMACIÓN PERSONAL:
    - Nombre completo y apodos (extrae del chat, NO inventes)
    - Edad aproximada  
-   - UbicaciÃ³n/ciudad
-   - OcupaciÃ³n/estudios
+   - Ubicación/ciudad
+   - Ocupación/estudios
 
 2. BIG FIVE PERSONALITY (escala 1-10):
-   - Apertura: Â¿QuÃ© tan curiosa, creativa, abierta a nuevas ideas?
-   - Responsabilidad: Â¿Organizada, puntual, cumplida?
-   - ExtraversiÃ³n: Â¿Sociable, energÃ©tica, expresiva?
-   - Amabilidad: Â¿EmpÃ¡tica, cooperativa, considerada?
-   - Neuroticismo: Â¿Ansiosa, emocionalmente volÃ¡til?
+   - Apertura: ¿Qué tan curiosa, creativa, abierta a nuevas ideas?
+   - Responsabilidad: ¿Organizada, puntual, cumplida?
+   - Extraversión: ¿Sociable, energética, expresiva?
+   - Amabilidad: ¿Empática, cooperativa, considerada?
+   - Neuroticismo: ¿Ansiosa, emocionalmente volátil?
 
-3. ESTILO DE COMUNICACIÃ“N Y APEGO:
+3. ESTILO DE COMUNICACIÓN Y APEGO:
    - Estilo: directa/indirecta/mixta
    - Apego: seguro/ansioso/evitativo
    - Tono emocional: estable/variable/intenso
@@ -193,7 +193,7 @@ ${relevant.slice(0, 200).map(m => `${m.sender}: ${m.content}`).join('\n')}
 
 RESPONDE SOLO CON ESTE JSON (sin texto adicional):
 {
-  "fullName": "nombre extraÃ­do del chat",
+  "fullName": "nombre extraído del chat",
   "nickname": "apodo usado",
   "age": 25,
   "location": "ciudad",
@@ -212,7 +212,7 @@ RESPONDE SOLO CON ESTE JSON (sin texto adicional):
   "commonEmojis": ["??", "??", "??", "??", "??", "??", "??", "??"],
   "responsePatterns": {
     "whenHappy": ["usa emojis", "mensajes largos", "exclamaciones"],
-    "whenAngry": ["seca", "puntos", "monosï¿½labos"],
+    "whenAngry": ["seca", "puntos", "monos?labos"],
     "whenSad": ["ok", "ya", "si"]
   },
   "topicsOfInterest": ["tema1", "tema2", "tema3", "tema4", "tema5", "tema6"]
@@ -232,13 +232,13 @@ async function analyzeStage2(messages: ParsedMessage[], exName: string) {
 
     const relevant = sampleForStage(messages, 'FAMILY', 120000);
 
-    const prompt = `INSTRUCCIÃ“N CRÃTICA: Responde SOLO con JSON vÃ¡lido, sin texto adicional.
+    const prompt = `INSTRUCCIÓN CRÍTICA: Responde SOLO con JSON válido, sin texto adicional.
 
 Analiza menciones de FAMILIA en los mensajes de ${exName}:
 
 Extrae:
-- Madre: nombre, tipo de relaciÃ³n, frecuencia de menciÃ³n
-- Padre: nombre, tipo de relaciÃ³n
+- Madre: nombre, tipo de relación, frecuencia de mención
+- Padre: nombre, tipo de relación
 - Hermanos: nombres, edades aproximadas
 - Mascotas: nombres, tipo, importancia
 
@@ -265,13 +265,13 @@ async function analyzeStage3(messages: ParsedMessage[], exName: string) {
 
     const relevant = sampleForStage(messages, 'SOCIAL_CIRCLE', 130000);
 
-    const prompt = `INSTRUCCIÃ“N CRÃTICA: Responde SOLO con JSON vÃ¡lido, sin texto adicional.
+    const prompt = `INSTRUCCIÓN CRÍTICA: Responde SOLO con JSON válido, sin texto adicional.
 
-Identifica el CÃRCULO SOCIAL de ${exName}:
+Identifica el CÍRCULO SOCIAL de ${exName}:
 
 Extrae top 5:
 - Mejores amigos: nombres, contexto, frecuencia
-- CompaÃ±eros trabajo/estudio
+- Compañeros trabajo/estudio
 
 Mensajes (${relevant.length}):
 ${relevant.slice(0, 150).map(m => `${m.sender}: ${m.content}`).join('\n')}
@@ -294,12 +294,12 @@ async function analyzeStage4(messages: ParsedMessage[], exName: string) {
 
     const relevant = sampleForStage(messages, 'ROUTINES', 140000);
 
-    const prompt = `INSTRUCCIÃ“N CRÃTICA: Responde SOLO con JSON vÃ¡lido, sin texto adicional.
+    const prompt = `INSTRUCCIÓN CRÍTICA: Responde SOLO con JSON válido, sin texto adicional.
 
 Detecta RUTINAS DIARIAS de ${exName}:
 
 - Horario despertar/dormir
-- Comidas tÃ­picas y horarios
+- Comidas típicas y horarios
 - Actividades recurrentes
 
 Mensajes (${relevant.length}):
@@ -309,7 +309,7 @@ RESPONDE SOLO CON ESTE JSON:
 {
   "wakeUp": "7:00 AM",
   "sleep": "11:00 PM",
-  "meals": [{"time": "8:00 AM", "food": ["cafÃ©", "pan"]}],
+  "meals": [{"time": "8:00 AM", "food": ["café", "pan"]}],
   "activities": [{"activity": "gym", "frequency": "3x semana"}]
 }`;
 
@@ -325,14 +325,14 @@ async function analyzeStage5(messages: ParsedMessage[], exName: string) {
 
     const relevant = sampleForStage(messages, 'EMOTIONS_TOPICS', 150000);
 
-    const prompt = `INSTRUCCIÃ“N CRÃTICA: Responde SOLO con JSON vÃ¡lido, sin texto adicional.
+    const prompt = `INSTRUCCIÓN CRÍTICA: Responde SOLO con JSON válido, sin texto adicional.
 
 Analiza EMOCIONES Y TEMAS de ${exName}:
 
 Top 10:
 - Preocupaciones recurrentes
 - Fuentes de felicidad
-- Temas favoritos de conversaciÃ³n
+- Temas favoritos de conversación
 
 Mensajes (${relevant.length}):
 ${relevant.slice(0, 200).map(m => `${m.sender}: ${m.content}`).join('\n')}
@@ -356,12 +356,12 @@ async function analyzeStage6(messages: ParsedMessage[], exName: string) {
 
     const relevant = sampleForStage(messages, 'IMPORTANT_DATES', 120000);
 
-    const prompt = `INSTRUCCIÃ“N CRÃTICA: Responde SOLO con JSON vÃ¡lido, sin texto adicional.
+    const prompt = `INSTRUCCIÓN CRÍTICA: Responde SOLO con JSON válido, sin texto adicional.
 
 Extrae FECHAS IMPORTANTES mencionadas:
 
-- Aniversario de relaciÃ³n
-- CumpleaÃ±os (${exName} y otros)
+- Aniversario de relación
+- Cumpleaños (${exName} y otros)
 - Eventos significativos
 
 Mensajes (${relevant.length}):
@@ -390,15 +390,15 @@ async function analyzeStage7(messages: ParsedMessage[], exName: string) {
     const userMessages = relevant.filter(m => m.sender !== exName);
     const userName = userMessages.length > 0 ? userMessages[0].sender : 'Usuario';
 
-    const prompt = `INSTRUCCIÃ“N CRÃTICA: Responde SOLO con JSON vÃ¡lido, sin texto adicional.
+    const prompt = `INSTRUCCIÓN CRÍTICA: Responde SOLO con JSON válido, sin texto adicional.
 
-Analiza la DINÃMICA DE RELACIÃ“N entre ${exName} y ${userName}:
+Analiza la DINÁMICA DE RELACIÓN entre ${exName} y ${userName}:
 
-1. CÃ³mo ${exName} llama a ${userName} (apodos)
-2. DinÃ¡mica de poder (quiÃ©n busca mÃ¡s contacto)
+1. Cómo ${exName} llama a ${userName} (apodos)
+2. Dinámica de poder (quién busca más contacto)
 3. Triggers de conflictos
 4. Temas sensibles
-5. Red flags especÃ­ficas hacia ${userName}
+5. Red flags específicas hacia ${userName}
 
 Mensajes (${relevant.length}):
 ${relevant.slice(0, 200).map(m => `${m.sender}: ${m.content}`).join('\n')}

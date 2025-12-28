@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
-import { ChevronDown, ChevronRight, MessageSquare, Send, Camera, BookOpen, Sparkles, ArrowLeft } from 'lucide-react-native';
+import { ChevronDown, ChevronRight, MessageSquare, BookOpen, Sparkles, ArrowLeft, Share2 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface ExportGuideProps {
@@ -16,18 +16,17 @@ export default function ExportGuide({ onClose, onBack }: ExportGuideProps) {
     };
 
     const whatsappSteps = [
-        { title: 'Abre el chat', desc: 'Ve a la conversación en WhatsApp.' },
-        { title: 'Menú', desc: 'Toca los 3 puntos (⋮) arriba a la derecha.' },
-        { title: 'Exportar', desc: 'Selecciona "Más" → "Exportar chat".' },
-        { title: 'Sin Archivos', desc: 'IMPORTANTE: Elige "Sin archivos".' },
-        { title: 'Guardar', desc: 'Guarda el .txt y súbelo aquí.' }
+        { title: 'Abre el chat', desc: 'Ve a la conversación en WhatsApp que quieres analizar.' },
+        { title: 'Menú de opciones', desc: 'Toca los 3 puntos (⋮) en la esquina superior derecha.' },
+        { title: 'Exportar chat', desc: 'Selecciona "Más" → "Exportar chat".' },
+        { title: '🔴 Sin archivos', desc: 'MUY IMPORTANTE: Elige "Sin archivos multimedia".' },
+        { title: 'Compartir a REMI', desc: 'Busca "REMI" en la lista de apps para compartir.' },
+        { title: '💡 ¿No ves REMI?', desc: 'Desliza a la derecha o toca "Más" (...) para ver todas las apps disponibles.' },
     ];
 
-    const telegramSteps = [
-        { title: 'Abre el chat', desc: 'Ve a la conversación en Telegram.' },
-        { title: 'Opciones', desc: 'Toca los 3 puntos (⋮) arriba a la derecha.' },
-        { title: 'Exportar historial', desc: 'Selecciona la opción de exportar.' },
-        { title: 'Formato JSON', desc: 'Selecciona "JSON" como formato.' },
+    const alternativeSteps = [
+        { title: 'Opción alternativa', desc: 'Si REMI no aparece, guarda el archivo .txt en tu dispositivo.' },
+        { title: 'Subir manualmente', desc: 'Luego abre REMI y sube el archivo desde aquí.' },
     ];
 
     return (
@@ -49,9 +48,20 @@ export default function ExportGuide({ onClose, onBack }: ExportGuideProps) {
                         <BookOpen size={20} color="white" />
                     </LinearGradient>
                     <View>
-                        <Text style={styles.headerTitle}>Guía</Text>
-                        <Text style={styles.headerSubtitle}>Simulación</Text>
+                        <Text style={styles.headerTitle}>Cómo Exportar</Text>
+                        <Text style={styles.headerSubtitle}>Tu chat de WhatsApp</Text>
                     </View>
+                </View>
+
+                {/* Feature: Share directly to REMI */}
+                <View style={styles.featureCard}>
+                    <View style={styles.featureHeader}>
+                        <Share2 size={24} color="#22c55e" />
+                        <Text style={styles.featureTitle}>¡Nuevo! Comparte directo a REMI</Text>
+                    </View>
+                    <Text style={styles.featureDesc}>
+                        Al exportar tu chat, busca "REMI" en la lista de apps para compartir. ¡Es la forma más fácil!
+                    </Text>
                 </View>
 
                 {/* WhatsApp Section */}
@@ -63,7 +73,7 @@ export default function ExportGuide({ onClose, onBack }: ExportGuideProps) {
                             </View>
                             <View>
                                 <Text style={styles.sectionTitle}>WhatsApp</Text>
-                                <Text style={[styles.sectionBadge, { color: 'rgba(34,197,94,0.8)' }]}>Recomendado</Text>
+                                <Text style={[styles.sectionBadge, { color: 'rgba(34,197,94,0.8)' }]}>Paso a paso</Text>
                             </View>
                         </View>
                         {expandedSection === 'whatsapp' ? (
@@ -88,82 +98,16 @@ export default function ExportGuide({ onClose, onBack }: ExportGuideProps) {
                                     </View>
                                 </View>
                             ))}
-                        </View>
-                    )}
-                </View>
 
-                {/* Telegram Section */}
-                <View style={styles.sectionCard}>
-                    <TouchableOpacity onPress={() => toggleSection('telegram')} style={styles.sectionHeader}>
-                        <View style={styles.sectionHeaderLeft}>
-                            <View style={[styles.sectionIcon, styles.sectionIconTelegram]}>
-                                <Send size={24} color="#3b82f6" />
-                            </View>
-                            <View>
-                                <Text style={styles.sectionTitle}>Telegram</Text>
-                                <Text style={styles.sectionBadge}>Formato JSON</Text>
-                            </View>
-                        </View>
-                        {expandedSection === 'telegram' ? (
-                            <ChevronDown size={24} color="#4b5563" />
-                        ) : (
-                            <ChevronRight size={24} color="#4b5563" />
-                        )}
-                    </TouchableOpacity>
-
-                    {expandedSection === 'telegram' && (
-                        <View style={styles.sectionContent}>
-                            <View style={styles.divider} />
-                            {telegramSteps.map((step, idx) => (
-                                <View key={idx} style={styles.stepRow}>
-                                    {idx !== telegramSteps.length - 1 && <View style={styles.stepLine} />}
-                                    <View style={[styles.stepNumber, styles.stepNumberTelegram]}>
-                                        <Text style={[styles.stepNumberText, { color: '#60a5fa' }]}>{idx + 1}</Text>
+                            {/* Alternative method */}
+                            <View style={styles.alternativeContainer}>
+                                <Text style={styles.alternativeTitle}>¿REMI no aparece en la lista?</Text>
+                                {alternativeSteps.map((step, idx) => (
+                                    <View key={idx} style={styles.alternativeStep}>
+                                        <Text style={styles.alternativeBullet}>•</Text>
+                                        <Text style={styles.alternativeText}>{step.desc}</Text>
                                     </View>
-                                    <View style={styles.stepContent}>
-                                        <Text style={styles.stepTitle}>{step.title}</Text>
-                                        <Text style={styles.stepDesc}>{step.desc}</Text>
-                                    </View>
-                                </View>
-                            ))}
-                        </View>
-                    )}
-                </View>
-
-                {/* Screenshots Section */}
-                <View style={styles.sectionCard}>
-                    <TouchableOpacity onPress={() => toggleSection('screenshots')} style={styles.sectionHeader}>
-                        <View style={styles.sectionHeaderLeft}>
-                            <View style={[styles.sectionIcon, styles.sectionIconScreenshots]}>
-                                <Camera size={24} color="#a855f7" />
-                            </View>
-                            <View>
-                                <Text style={styles.sectionTitle}>Screenshots</Text>
-                                <Text style={[styles.sectionBadge, { color: 'rgba(168,85,247,0.8)' }]}>Experimental</Text>
-                            </View>
-                        </View>
-                        {expandedSection === 'screenshots' ? (
-                            <ChevronDown size={24} color="#4b5563" />
-                        ) : (
-                            <ChevronRight size={24} color="#4b5563" />
-                        )}
-                    </TouchableOpacity>
-
-                    {expandedSection === 'screenshots' && (
-                        <View style={styles.sectionContent}>
-                            <View style={styles.divider} />
-                            <View style={styles.screenshotNote}>
-                                <Text style={styles.screenshotNoteText}>
-                                    Esta opción usa OCR para leer tus capturas. Es útil si no puedes exportar el archivo, pero es menos precisa.
-                                </Text>
-                            </View>
-                            <View style={styles.bulletRow}>
-                                <Text style={styles.bullet}>•</Text>
-                                <Text style={styles.bulletText}>Toma capturas claras y legibles.</Text>
-                            </View>
-                            <View style={styles.bulletRow}>
-                                <Text style={styles.bullet}>•</Text>
-                                <Text style={styles.bulletText}>Sube hasta 20 imágenes.</Text>
+                                ))}
                             </View>
                         </View>
                     )}
@@ -186,6 +130,10 @@ export default function ExportGuide({ onClose, onBack }: ExportGuideProps) {
                     <View style={styles.tipRow}>
                         <Text style={styles.tipCheck}>✓</Text>
                         <Text style={styles.tipText}>No edites el archivo de texto manualmente.</Text>
+                    </View>
+                    <View style={styles.tipRow}>
+                        <Text style={styles.tipCheck}>✓</Text>
+                        <Text style={styles.tipText}>Exporta <Text style={styles.tipBold}>SIN archivos multimedia</Text>.</Text>
                     </View>
                 </LinearGradient>
 
@@ -245,6 +193,30 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         letterSpacing: 1,
     },
+    featureCard: {
+        backgroundColor: 'rgba(34,197,94,0.1)',
+        borderRadius: 20,
+        padding: 20,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(34,197,94,0.3)',
+    },
+    featureHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    featureTitle: {
+        color: '#22c55e',
+        fontWeight: '700',
+        fontSize: 16,
+        marginLeft: 12,
+    },
+    featureDesc: {
+        color: '#86efac',
+        fontSize: 14,
+        lineHeight: 20,
+    },
     sectionCard: {
         marginBottom: 16,
         overflow: 'hidden',
@@ -272,14 +244,6 @@ const styles = StyleSheet.create({
     sectionIconWhatsApp: {
         backgroundColor: 'rgba(34,197,94,0.1)',
         borderColor: 'rgba(34,197,94,0.2)',
-    },
-    sectionIconTelegram: {
-        backgroundColor: 'rgba(59,130,246,0.1)',
-        borderColor: 'rgba(59,130,246,0.2)',
-    },
-    sectionIconScreenshots: {
-        backgroundColor: 'rgba(168,85,247,0.1)',
-        borderColor: 'rgba(168,85,247,0.2)',
     },
     sectionTitle: {
         color: '#fff',
@@ -328,10 +292,6 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(34,197,94,0.2)',
         borderColor: 'rgba(34,197,94,0.5)',
     },
-    stepNumberTelegram: {
-        backgroundColor: 'rgba(59,130,246,0.2)',
-        borderColor: 'rgba(59,130,246,0.5)',
-    },
     stepNumberText: {
         fontSize: 12,
         fontWeight: '700',
@@ -350,29 +310,32 @@ const styles = StyleSheet.create({
         fontSize: 14,
         lineHeight: 20,
     },
-    screenshotNote: {
-        backgroundColor: 'rgba(168,85,247,0.1)',
+    alternativeContainer: {
+        backgroundColor: 'rgba(59,130,246,0.1)',
         padding: 16,
-        borderRadius: 12,
+        borderRadius: 16,
+        marginTop: 8,
         borderWidth: 1,
-        borderColor: 'rgba(168,85,247,0.2)',
-        marginBottom: 16,
+        borderColor: 'rgba(59,130,246,0.2)',
     },
-    screenshotNoteText: {
-        color: '#c4b5fd',
+    alternativeTitle: {
+        color: '#60a5fa',
+        fontWeight: '700',
         fontSize: 14,
-    },
-    bulletRow: {
-        flexDirection: 'row',
         marginBottom: 8,
     },
-    bullet: {
-        color: '#fff',
-        fontWeight: '700',
+    alternativeStep: {
+        flexDirection: 'row',
+        marginBottom: 4,
+    },
+    alternativeBullet: {
+        color: '#60a5fa',
         marginRight: 8,
     },
-    bulletText: {
-        color: '#d1d5db',
+    alternativeText: {
+        color: '#93c5fd',
+        fontSize: 13,
+        flex: 1,
     },
     tipsCard: {
         borderRadius: 24,

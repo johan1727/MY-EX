@@ -1,22 +1,49 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Upload, FileText, Image as ImageIcon, CheckCircle, ArrowLeft, Brain, MessageSquare } from 'lucide-react-native';
+import { Upload, FileText, CheckCircle, ArrowLeft, Brain, MessageSquare } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import * as ImagePicker from 'expo-image-picker';
-import { parseWhatsAppExport, parseTelegramExport, analyzePersonality, ParsedMessage, extractChatFromImages } from '../../../lib/exSimulator';
+import * as FileSystem from 'expo-file-system';
+import JSZip from 'jszip';
+import { parseWhatsAppExport, analyzePersonality, ParsedMessage } from '../../../lib/exSimulator';
 import { intelligentTokenSampling } from '../../../lib/messageSampling';
 import { generateMasterPrompt } from '../../../lib/masterPromptGenerator';
 import ExportGuide from '../../../components/ExportGuide';
 import { storage } from '../../../lib/storage';
+import { saveProfile } from '../../../lib/profileSync';
+import { supabase } from '../../../lib/supabase';
+
+// Helper to extract text from ZIP file (WhatsApp exports as ZIP with media)
+async function extractTextFromZip(zipData: string): Promise<string | null> {
+    try {
+        // Convert base64 to array buffer
+        const zip = new JSZip();
+        await zip.loadAsync(zipData, { base64: true });
+
+        // Find the .txt file in the ZIP
+        const txtFiles = Object.keys(zip.files).filter(name => name.endsWith('.txt'));
+        if (txtFiles.length === 0) {
+            console.log('[ZIP] No .txt files found in ZIP');
+            return null;
+        }
+
+        // Read the first .txt file
+        const txtContent = await zip.file(txtFiles[0])?.async('string');
+        console.log('[ZIP] Extracted text from:', txtFiles[0], 'length:', txtContent?.length);
+        return txtContent || null;
+    } catch (error) {
+        console.error('[ZIP] Error extracting:', error);
+        return null;
+    }
+}
 
 type ImportStep = 'guide' | 'upload' | 'loading' | 'preview' | 'analyzing' | 'complete' | 'error';
 
 export default function ImportChat() {
     const router = useRouter();
     const [step, setStep] = useState<ImportStep>('guide');
-    const [importType, setImportType] = useState<'whatsapp' | 'telegram' | 'text' | 'screenshots'>('whatsapp');
+    const [importType, setImportType] = useState<'whatsapp' | 'text'>('whatsapp');
     const [rawText, setRawText] = useState('');
     const [parsedMessages, setParsedMessages] = useState<ParsedMessage[]>([]);
     const [exName, setExName] = useState('');
@@ -26,6 +53,7 @@ export default function ImportChat() {
     const [truncatedInfo, setTruncatedInfo] = useState<{ original: number; used: number } | null>(null);
     const [progress, setProgress] = useState(0);
     const [debugLog, setDebugLog] = useState<string[]>([]);
+    const [showRegistrationReminder, setShowRegistrationReminder] = useState(false);
 
     // Debug helper to log steps visually
     const addDebug = (msg: string) => {
@@ -33,11 +61,132 @@ export default function ImportChat() {
         setDebugLog(prev => [...prev.slice(-10), `${new Date().toLocaleTimeString()}: ${msg}`]);
     };
 
+    // Check for shared file on mount
+    useEffect(() => {
+        const checkSharedFile = async () => {
+            try {
+                addDebug('🔍 Buscando archivos compartidos...');
+                const sharedFileUri = await storage.getItem('sharedFileUri');
+                const sharedText = await storage.getItem('sharedText');
+
+                if (sharedFileUri) {
+                    console.log('[Import] Found shared file:', sharedFileUri);
+                    addDebug('📂 Archivo encontrado: ' + sharedFileUri.substring(0, 50) + '...');
+
+                    // Set loading immediately
+                    setStep('loading');
+
+                    // Clear the stored value
+                    await storage.removeItem('sharedFileUri');
+                    await storage.removeItem('sharedFileName');
+
+                    try {
+                        addDebug('📖 Leyendo archivo...');
+                        let text = '';
+
+                        // For content:// URIs, we need to copy to cache first
+                        const cacheUri = FileSystem.cacheDirectory + 'shared_chat_' + Date.now();
+
+                        if (sharedFileUri.startsWith('content://')) {
+                            addDebug('📋 Copiando desde content:// a cache...');
+                            await FileSystem.copyAsync({ from: sharedFileUri, to: cacheUri });
+                        } else {
+                            await FileSystem.copyAsync({ from: sharedFileUri, to: cacheUri });
+                        }
+
+                        // Read as base64 first to detect file type
+                        addDebug('🔍 Detectando tipo de archivo...');
+                        const base64Data = await FileSystem.readAsStringAsync(cacheUri, { encoding: FileSystem.EncodingType.Base64 });
+
+                        // Check if it's a ZIP file (starts with "PK" = 0x504B in base64 = "UEs")
+                        const isZip = base64Data.startsWith('UEs') || base64Data.startsWith('UEsD');
+
+                        if (isZip) {
+                            addDebug('📦 Archivo ZIP detectado, extrayendo...');
+                            const extractedText = await extractTextFromZip(base64Data);
+                            if (extractedText) {
+                                text = extractedText;
+                                addDebug(`✅ Texto extraído del ZIP: ${text.length} caracteres`);
+                            } else {
+                                setStep('error');
+                                setErrorMessage('No se encontró archivo de chat (.txt) dentro del ZIP. Intenta exportar sin medios.');
+                                addDebug('❌ No se encontró .txt en el ZIP');
+                                return;
+                            }
+                        } else {
+                            // Regular text file - read as string
+                            addDebug('📄 Archivo de texto detectado');
+                            text = await FileSystem.readAsStringAsync(cacheUri);
+                        }
+
+                        addDebug(`📄 Texto final: ${text.length} caracteres`);
+
+                        if (text && text.length > 50) {
+                            setRawText(text);
+                            addDebug('🔍 Parseando mensajes de WhatsApp...');
+                            const messages = parseWhatsAppExport(text);
+                            addDebug(`📨 Mensajes encontrados: ${messages.length}`);
+
+                            if (messages.length > 0) {
+                                const { messages: finalMessages } = intelligentTokenSampling(messages);
+                                setParsedMessages(finalMessages);
+                                setParsedCount(finalMessages.length);
+                                setStep('preview');
+                                addDebug(`✅ ${finalMessages.length} mensajes listos para análisis`);
+                            } else {
+                                setStep('error');
+                                setErrorMessage('No se encontraron mensajes de WhatsApp. Asegúrate de exportar el chat como texto (.txt).');
+                                addDebug('❌ No se encontraron mensajes');
+                            }
+                        } else {
+                            setStep('error');
+                            setErrorMessage('El archivo está vacío o es muy corto (' + (text?.length || 0) + ' caracteres).');
+                            addDebug('❌ Archivo muy corto');
+                        }
+                    } catch (fileError: any) {
+                        console.error('[Import] File read error:', fileError);
+                        setStep('error');
+                        setErrorMessage('Error al leer el archivo: ' + (fileError?.message || 'Error desconocido'));
+                        addDebug('❌ Error: ' + fileError?.message);
+                    }
+                } else if (sharedText) {
+                    console.log('[Import] Found shared text, length:', sharedText.length);
+                    setStep('loading');
+                    addDebug('📝 Texto compartido encontrado: ' + sharedText.length + ' caracteres');
+                    await storage.removeItem('sharedText');
+
+                    setRawText(sharedText);
+                    const messages = parseWhatsAppExport(sharedText);
+                    if (messages.length > 0) {
+                        const { messages: finalMessages } = intelligentTokenSampling(messages);
+                        setParsedMessages(finalMessages);
+                        setParsedCount(finalMessages.length);
+                        setStep('preview');
+                        addDebug(`✅ ${finalMessages.length} mensajes cargados`);
+                    } else {
+                        setStep('error');
+                        setErrorMessage('No se encontraron mensajes en el texto compartido.');
+                        addDebug('❌ No se encontraron mensajes');
+                    }
+                } else {
+                    addDebug('ℹ️ No hay archivos compartidos');
+                }
+            } catch (error: any) {
+                console.error('[Import] Error processing shared file:', error);
+                setStep('error');
+                setErrorMessage('Error procesando archivo: ' + (error?.message || 'Error desconocido'));
+                addDebug('❌ Error general: ' + error?.message);
+            }
+        };
+
+        checkSharedFile();
+    }, []);
+
 
     const handleFileUpload = async () => {
         try {
             const result = await DocumentPicker.getDocumentAsync({
-                type: importType === 'telegram' ? 'application/json' : 'text/plain',
+                type: 'text/plain',
                 copyToCacheDirectory: true
             });
             if (result.canceled) return;
@@ -74,9 +223,7 @@ export default function ImportChat() {
             addDebug('🔍 Parseando mensajes...');
             await new Promise(resolve => setTimeout(resolve, 50)); // Force UI update
 
-            let messages: ParsedMessage[] = [];
-            if (importType === 'whatsapp') messages = parseWhatsAppExport(text);
-            else if (importType === 'telegram') messages = parseTelegramExport(JSON.parse(text));
+            let messages: ParsedMessage[] = parseWhatsAppExport(text);
 
             addDebug(`📨 Encontrados: ${messages.length} mensajes`);
 
@@ -96,24 +243,6 @@ export default function ImportChat() {
         }
     };
 
-    const handleImageUpload = async () => {
-        try {
-            const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsMultipleSelection: true,
-                quality: 0.8,
-                base64: true,
-            });
-            if (result.canceled) return;
-            setAnalyzing(true);
-            const base64Images = result.assets.map(asset => asset.base64).filter(Boolean) as string[];
-            if (base64Images.length === 0) { Alert.alert('Error', 'Error procesando imágenes'); setAnalyzing(false); return; }
-            Alert.alert('Procesando', 'Analizando capturas...');
-            const messages = await extractChatFromImages(base64Images);
-            setParsedMessages(messages);
-            setStep('preview');
-        } catch (error) { Alert.alert('Error', 'Falló la carga de imágenes'); } finally { setAnalyzing(false); }
-    };
 
     const handleTextPaste = async () => {
         if (!rawText.trim()) { Alert.alert('Error', 'Pega el texto'); return; }
@@ -159,7 +288,31 @@ export default function ImportChat() {
                 throw new Error('No hay mensajes para analizar. Sube un archivo primero.');
             }
 
-            addDebug(`Mensajes a analizar: ${parsedMessages.length}`);
+            // NEW: Validate minimum messages from target person
+            const MINIMUM_EX_MESSAGES = 30;
+            const exMessages = parsedMessages.filter(m =>
+                m.sender.toLowerCase().includes(exName.toLowerCase()) ||
+                exName.toLowerCase().includes(m.sender.toLowerCase())
+            );
+
+            if (exMessages.length < MINIMUM_EX_MESSAGES) {
+                Alert.alert(
+                    '📊 Pocos mensajes',
+                    `Para un análisis preciso necesitamos al menos ${MINIMUM_EX_MESSAGES} mensajes de "${exName}".\n\nEncontramos solo ${exMessages.length} mensajes.\n\n💡 Tip: Asegúrate de que el nombre coincida exactamente con el chat o sube una conversación más larga.`,
+                    [
+                        {
+                            text: 'Cancelar', style: 'cancel', onPress: () => {
+                                setAnalyzing(false);
+                                setStep('upload');
+                            }
+                        },
+                        { text: 'Continuar igual', onPress: () => { } }
+                    ]
+                );
+                // Don't return - let them continue if they want
+            }
+
+            addDebug(`Mensajes a analizar: ${parsedMessages.length} (${exMessages.length} de ${exName})`);
             await forceProgressUpdate(5);
 
             // Stage 1: Analyze personality (5-60%) with timeout
@@ -207,9 +360,18 @@ export default function ImportChat() {
                     exNameLower.includes(nameLower);
             }) || exName;
 
+            // Find the user's name (the OTHER participant, not the ex)
+            const allParticipants = Array.from(senderCounts.keys());
+            const detectedUserName = allParticipants.find(name =>
+                name.toLowerCase().trim() !== exSenderName.toLowerCase().trim()
+            ) || 'Usuario';
+
+            console.log('[handleAnalyze] 👤 Detected user name:', detectedUserName);
+
             const profileData: any = {
                 id: `local_${Date.now()}`,
                 exName,
+                userName: detectedUserName, // NEW: Save user's name for personalization
                 profile,
                 messageCount: parsedMessages.length,
                 createdAt: new Date().toISOString(),
@@ -244,39 +406,68 @@ export default function ImportChat() {
             await forceProgressUpdate(96);
             setParsedMessages([]);
 
+            // Get current user ID for cloud sync - defined here so it's in scope for reminder check
+            const { data: { user } } = await supabase.auth.getUser();
+            const userId = user?.id;
+            console.log('[handleAnalyze] User ID for sync:', userId || 'guest');
+
             try {
                 console.log('[handleAnalyze] Profile data keys:', Object.keys(profileData));
                 console.log('[handleAnalyze] Profile has masterPrompt:', !!profileData.masterPrompt);
 
-                await storage.setItem('exSimulator_currentProfile', JSON.stringify(profileData));
-                console.log('[handleAnalyze] ✅ Current profile saved');
+                // Save using profile sync service (local + cloud)
+                await saveProfile(profileData, userId);
+                console.log('[handleAnalyze] ✅ Profile saved (local + cloud)');
 
-                const existingProfiles = await storage.getItem('exSimulator_profiles');
-                const profiles = JSON.parse(existingProfiles || '[]');
-                profiles.push(profileData);
-                await storage.setItem('exSimulator_profiles', JSON.stringify(profiles));
-                console.log('[handleAnalyze] ✅ Profile added to list, total profiles:', profiles.length);
             } catch (saveError: any) {
                 console.error('[handleAnalyze] ❌ Save error:', saveError);
-                // Try to save at least the basic profile
+                // Try to save at least the basic profile locally
                 try {
-                    const minimalProfile = { name: profileData.name, id: profileData.id };
-                    await storage.setItem('exSimulator_currentProfile', JSON.stringify(minimalProfile));
-                    console.log('[handleAnalyze] ⚠️ Saved minimal profile due to error');
+                    await storage.setItem('exSimulator_currentProfile', JSON.stringify(profileData));
+                    const existingProfiles = await storage.getItem('exSimulator_allProfiles');
+                    const profiles = JSON.parse(existingProfiles || '[]');
+                    profiles.push(profileData);
+                    await storage.setItem('exSimulator_allProfiles', JSON.stringify(profiles));
+                    console.log('[handleAnalyze] ⚠️ Saved locally only due to cloud error');
                 } catch (e) {
-                    console.error('[handleAnalyze] ❌❌ Even minimal save failed:', e);
+                    console.error('[handleAnalyze] ❌❌ Even local save failed:', e);
                 }
             }
 
             setProgress(100);
             console.log('[handleAnalyze] 🎉 ANALYSIS COMPLETE! Setting step to complete...');
             setStep('complete');
-            console.log('[handleAnalyze] Redirecting to home in 1.5s...');
-            setTimeout(() => router.replace('/(tabs)' as any), 1500);
+            console.log('[handleAnalyze] Checking if should show registration reminder...');
+
+            // Show registration reminder for guest users
+            if (!userId) {
+                console.log('[handleAnalyze] Guest user - showing registration reminder');
+                setShowRegistrationReminder(true);
+                // Don't auto-redirect for guests - let them see the reminder
+            } else {
+                console.log('[handleAnalyze] Logged in user - redirecting to home...');
+                setTimeout(() => router.replace('/(tabs)' as any), 1500);
+            }
 
         } catch (error: any) {
             console.error('[handleAnalyze] Analysis failed:', error);
-            Alert.alert('Error en el análisis', error.message || 'Ocurrió un error inesperado. Intenta de nuevo.');
+
+            // Friendly error messages
+            let errorMsg = error.message || 'Ocurrió un error inesperado.';
+            let title = '❌ Error en el análisis';
+
+            if (errorMsg.includes('No se pudo identificar') || errorMsg.includes('Participantes detectados')) {
+                title = '👤 Nombre no encontrado';
+                errorMsg = `${errorMsg}\n\n💡 Tip: Usa el nombre EXACTO como aparece en el chat exportado.`;
+            } else if (errorMsg.includes('JSON') || errorMsg.includes('parse')) {
+                title = '🔄 Error de procesamiento';
+                errorMsg = 'Hubo un problema procesando el archivo. Intenta de nuevo.';
+            } else if (errorMsg.includes('timeout') || errorMsg.includes('TIMEOUT')) {
+                title = '⏱️ Tiempo agotado';
+                errorMsg = 'El análisis tardó demasiado. Intenta con un archivo más pequeño.';
+            }
+
+            Alert.alert(title, errorMsg);
             setStep('preview');
         } finally {
             setAnalyzing(false);
@@ -355,7 +546,15 @@ export default function ImportChat() {
 
                 <Text style={styles.engineLabel}>REMI AI ENGINE 2.0</Text>
 
-                {/* Debug panel removido - análisis ya funciona correctamente */}
+                {/* Debug panel para ver estado del procesamiento */}
+                {debugLog.length > 0 && (
+                    <View style={{ marginTop: 20, padding: 15, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, maxWidth: '90%' }}>
+                        <Text style={{ color: '#a855f7', fontWeight: 'bold', marginBottom: 8 }}>📋 Estado:</Text>
+                        {debugLog.slice(-5).map((log, i) => (
+                            <Text key={i} style={{ color: '#888', fontSize: 11, marginBottom: 2 }}>{log}</Text>
+                        ))}
+                    </View>
+                )}
 
             </View>
         );
@@ -369,7 +568,31 @@ export default function ImportChat() {
                     <CheckCircle size={48} color="black" />
                 </View>
                 <Text style={styles.completeTitle}>¡Análisis Listo!</Text>
-                <Text style={styles.completeSubtitle}>Generando simulación...</Text>
+                <Text style={styles.completeSubtitle}>
+                    {showRegistrationReminder
+                        ? 'Tu perfil se guardó localmente'
+                        : 'Generando simulación...'}
+                </Text>
+
+                {showRegistrationReminder && (
+                    <View style={{ marginTop: 24, alignItems: 'center' }}>
+                        <Text style={{ color: '#fbbf24', fontSize: 14, textAlign: 'center', marginBottom: 16 }}>
+                            💡 Crea una cuenta para guardar tu perfil en la nube y no perderlo
+                        </Text>
+                        <TouchableOpacity
+                            onPress={() => router.push('/auth' as any)}
+                            style={{ backgroundColor: '#8b5cf6', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, marginBottom: 12 }}
+                        >
+                            <Text style={{ color: 'white', fontWeight: 'bold' }}>Crear cuenta gratis</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => router.replace('/(tabs)' as any)}
+                            style={{ padding: 8 }}
+                        >
+                            <Text style={{ color: '#9ca3af' }}>Continuar sin cuenta →</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
             </View>
         );
     }
@@ -394,24 +617,13 @@ export default function ImportChat() {
                         <View style={styles.sourceRow}>
                             <TouchableOpacity
                                 onPress={() => setImportType('whatsapp')}
-                                style={[styles.sourceCard, importType === 'whatsapp' && styles.sourceCardActive]}
+                                style={[styles.sourceCard, styles.sourceCardFull, importType === 'whatsapp' && styles.sourceCardActive]}
                             >
                                 <View style={[styles.sourceIcon, importType === 'whatsapp' && styles.sourceIconWhatsApp]}>
                                     <MessageSquare size={24} color={importType === 'whatsapp' ? '#22c55e' : 'white'} />
                                 </View>
                                 <Text style={styles.sourceTitle}>WhatsApp</Text>
-                                <Text style={styles.sourceSubtitle}>Recomendado</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                onPress={() => setImportType('screenshots')}
-                                style={[styles.sourceCard, importType === 'screenshots' && styles.sourceCardScreenshots]}
-                            >
-                                <View style={[styles.sourceIcon, importType === 'screenshots' && styles.sourceIconScreenshots]}>
-                                    <ImageIcon size={24} color={importType === 'screenshots' ? '#a855f7' : 'white'} />
-                                </View>
-                                <Text style={styles.sourceTitle}>Capturas</Text>
-                                <Text style={styles.sourceSubtitle}>OCR IA</Text>
+                                <Text style={styles.sourceSubtitle}>Archivo .txt exportado</Text>
                             </TouchableOpacity>
                         </View>
 
@@ -447,17 +659,15 @@ export default function ImportChat() {
                             </View>
                         ) : (
                             <TouchableOpacity
-                                onPress={importType === 'screenshots' ? handleImageUpload : handleFileUpload}
+                                onPress={handleFileUpload}
                                 style={styles.uploadArea}
                             >
                                 <View style={styles.uploadIcon}>
                                     <Upload size={24} color="white" />
                                 </View>
-                                <Text style={styles.uploadTitle}>Subir Archivo</Text>
+                                <Text style={styles.uploadTitle}>Subir Archivo .txt</Text>
                                 <Text style={styles.uploadSubtitle}>
-                                    {importType === 'whatsapp'
-                                        ? 'Soporta historiales completos (10k - 200k+ msgs). Analizamos todo automáticamente.'
-                                        : 'Selecciona múltiples capturas de pantalla'}
+                                    Soporta historiales completos (10k - 200k+ msgs). Analizamos todo automáticamente.
                                 </Text>
                             </TouchableOpacity>
                         )}
@@ -470,6 +680,9 @@ export default function ImportChat() {
 
                         <View style={styles.nameCard}>
                             <Text style={styles.nameLabel}>¿Cómo se llama la persona?</Text>
+                            <Text style={styles.nameHint}>
+                                ⚠️ Escribe el nombre EXACTO como aparece en el chat exportado (el nombre del contacto). Si no coincide, el análisis no funcionará.
+                            </Text>
                             <TextInput
                                 style={styles.nameInput}
                                 placeholder="Ej: Alex"
@@ -582,6 +795,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.1)',
+    },
+    sourceCardFull: {
+        width: '100%',
     },
     sourceCardActive: {
         borderColor: 'rgba(34,197,94,0.5)',
@@ -737,8 +953,15 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontWeight: '700',
         fontSize: 18,
+        marginBottom: 8,
+        marginLeft: 4,
+    },
+    nameHint: {
+        color: '#f59e0b',
+        fontSize: 12,
         marginBottom: 12,
         marginLeft: 4,
+        lineHeight: 18,
     },
     nameInput: {
         backgroundColor: 'rgba(0,0,0,0.5)',

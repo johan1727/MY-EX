@@ -140,26 +140,22 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     };
 
     const initRevenueCat = async () => {
-        // ============================================
-        // TEMP: Deshabilitar RevenueCat temporalmente
-        // Esto evita el error "Wrong API Key" hasta configurar productos en Google Play
-        // TODO: Reactivar cuando tengas productos configurados en Google Play Console
-        // ============================================
-        console.log('[Subscription] ⚠️ RevenueCat deshabilitado temporalmente');
-        console.log('[Subscription] ✅ Tier phoenix (acceso completo) activado');
-        setTier('phoenix');
-        setIsLoading(false);
-        return;
-        // ============================================
-
         // RevenueCat initialization
         // Make sure to set EXPO_PUBLIC_REVENUECAT_ANDROID_KEY in .env
 
         try {
-            // Usamos la key de prueba si no hay una en el entorno
+            // Get API key from environment variables
             const apiKey = Platform.OS === 'android'
-                ? process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || 'test_BRFygdGVZSuHBmcaRQqZe11'
-                : process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || 'test_BRFygdGVZSuHBmcaRQqZe11';
+                ? process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || ''
+                : process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '';
+
+            // If no API key, default to survivor tier
+            if (!apiKey) {
+                console.log('[Subscription] No RevenueCat API key found, defaulting to survivor');
+                setTier('survivor');
+                setIsLoading(false);
+                return;
+            }
 
             await Purchases.configure({ apiKey });
 

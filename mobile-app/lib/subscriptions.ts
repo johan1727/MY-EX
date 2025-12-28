@@ -41,21 +41,21 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Survivor',
         color: '#9ca3af',
         features: [
-            'Límite de tokens básico',
-            'Memoria de conversación a corto plazo',
-            'Acceso al simulador estándar'
+            'Explora REMI gratis',
+            '30 mensajes cada 8 horas',
+            'Una prueba del simulador'
         ],
         limits: {
-            dailyTokens: 2000,
-            messageDecoder: 1,
+            dailyTokens: 6000,
+            messageDecoder: 3,
             moodJournal: true,
             analytics: 'none',
             panicButton: 'basic',
             notifications: 0,
             vault: false,
             exportDiary: false,
-            simulatorAnalyses: 1, // FREE: 1 try
-            simulatorChatMessages: 10 // Limited messages to hook
+            simulatorAnalyses: 1,
+            simulatorChatMessages: 30
         }
     },
     [SubscriptionTier.STARTER]: {
@@ -65,22 +65,22 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Starter',
         color: '#10b981',
         features: [
-            'Respuestas mejoradas',
-            'Memoria de conversación básica',
-            'Acceso al decodificador (2/semana)',
-            'Análisis semanal'
+            'Chatea con REMI sobre tu proceso',
+            '450 mensajes cada 8 horas',
+            'Simula conversaciones con tu ex',
+            'Decodificador de mensajes semanal'
         ],
         limits: {
-            dailyTokens: 5000,
-            messageDecoder: 2,
+            dailyTokens: 75000, // x5
+            messageDecoder: 30, // x5
             moodJournal: true,
             analytics: 'weekly',
             panicButton: 'basic',
-            notifications: 2,
+            notifications: 30, // x5
             vault: false,
             exportDiary: false,
-            simulatorAnalyses: 3, // 3 analyses/month
-            simulatorChatMessages: -1 // Unlimited chat
+            simulatorAnalyses: 45, // x5
+            simulatorChatMessages: -1
         }
     },
     [SubscriptionTier.EXPLORER]: {
@@ -90,22 +90,22 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Explorer',
         color: '#06b6d4',
         features: [
-            'Respuestas rápidas',
-            'Memoria extendida',
+            '750 mensajes cada 8 horas',
+            'Crea múltiples perfiles de ex',
             'Decodificador ilimitado',
-            'Bóveda de secretos',
-            'Exportar diario'
+            'Bóveda de secretos privada',
+            'Exporta tu diario emocional'
         ],
         limits: {
-            dailyTokens: 8000,
-            messageDecoder: 5,
+            dailyTokens: 120000, // x5
+            messageDecoder: 75, // x5
             moodJournal: true,
             analytics: 'weekly',
             panicButton: 'advanced',
-            notifications: 5,
+            notifications: 75, // x5
             vault: true,
             exportDiary: true,
-            simulatorAnalyses: 10,
+            simulatorAnalyses: 150, // x5
             simulatorChatMessages: -1
         }
     },
@@ -116,18 +116,18 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Warrior',
         color: '#3b82f6',
         features: [
-            'Respuestas rápidas y empáticas',
-            'Memoria de conversación extendida',
-            'Análisis diario de progreso',
-            'Acceso prioritario al simulador'
+            '1,500 mensajes cada 8 horas',
+            'Uso extendido sin interrupciones',
+            'Respuestas más largas y detalladas',
+            'Análisis diario de tu progreso'
         ],
         limits: {
-            dailyTokens: 10000,
+            dailyTokens: 150000, // x5
             messageDecoder: -1,
             moodJournal: true,
             analytics: 'weekly',
             panicButton: 'advanced',
-            notifications: 5,
+            notifications: 75,
             vault: true,
             exportDiary: true,
             simulatorAnalyses: -1,
@@ -141,19 +141,19 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Premium',
         color: '#8b5cf6',
         features: [
-            'Todo lo de Warrior incluido',
-            'Detección de patrones de comportamiento',
+            '4,500 mensajes cada 8 horas',
+            'Contexto profundo en cada chat',
+            'Detección inteligente de red flags',
             'Simulaciones de escenarios complejos',
-            'Prioridad de respuesta alta',
-            'Historial de chat con mayor contexto'
+            'Acceso beta a nuevas funciones'
         ],
         limits: {
-            dailyTokens: 50000,
-            messageDecoder: 5,
+            dailyTokens: 750000, // x5
+            messageDecoder: -1,
             moodJournal: true,
             analytics: 'daily',
             panicButton: 'advanced',
-            notifications: 10,
+            notifications: 150, // x5
             vault: true,
             exportDiary: true,
             prioritySupport: true,
@@ -168,11 +168,11 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Phoenix',
         color: '#ec4899',
         features: [
-            'Todo lo de Premium incluido',
-            'Interacción por voz y audio',
+            '✨ Sin límites de mensajes',
+            'Coaching personalizado con IA avanzada',
             'Análisis de capturas de pantalla',
-            'Predicciones de comportamiento avanzadas',
-            'Coaching 1:1 via chat prioritario'
+            'Predicciones de comportamiento',
+            'Soporte VIP prioritario 24/7'
         ],
         limits: {
             dailyTokens: -1,
@@ -186,7 +186,7 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
             coachingSessions: true,
             prioritySupport: true,
             earlyAccess: true,
-            simulatorAnalyses: -1, // Unlimited
+            simulatorAnalyses: -1,
             simulatorChatMessages: -1
         }
     }

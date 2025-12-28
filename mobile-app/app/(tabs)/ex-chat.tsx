@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import Sidebar from '../../components/Sidebar';
 import ActionSheet from '../../components/ActionSheet';
+import LoginPromptModal from '../../components/LoginPromptModal';
 import { storage } from '../../lib/storage';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { fragmentMessage, calculateInitialDelay, buildEnhancedPrompt } from '../../lib/chatHelpers';
@@ -56,15 +57,28 @@ export default function ExChatScreen() {
 
     const [conversations, setConversations] = useState<any[]>([]);
 
+    // Login prompt state
+    const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [hasShownLoginPrompt, setHasShownLoginPrompt] = useState(false);
+
     useEffect(() => {
         loadConvos();
+        // Check if user is logged in
+        checkAuthStatus();
     }, []);
+
+    const checkAuthStatus = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        setIsLoggedIn(!!user);
+    };
 
     // Use focus effect to reload profile when simple switching back to this tab
     useFocusEffect(
         React.useCallback(() => {
             checkProfile();
             loadConvos();
+            checkAuthStatus();
         }, [])
     );
 
@@ -337,6 +351,16 @@ export default function ExChatScreen() {
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
 
         handleAIResponse(updatedMessages, textToSend, userMessage.id, imageBuffer);
+
+        // Show login prompt after first message if not logged in
+        const userMessagesCount = updatedMessages.filter(m => m.role === 'user').length;
+        if (!isLoggedIn && !hasShownLoginPrompt && userMessagesCount === 1) {
+            // Show the prompt after a short delay to let the user see the response
+            setTimeout(() => {
+                setShowLoginPrompt(true);
+                setHasShownLoginPrompt(true);
+            }, 3000);
+        }
     };
 
     // --- RENDER ---
@@ -360,7 +384,7 @@ export default function ExChatScreen() {
                     </View>
 
                     <Text className="text-white text-4xl font-black text-center mb-4 tracking-tighter">
-                        Simulador de Ex
+                        Simulador
                     </Text>
 
                     <Text className="text-gray-400 text-center text-base mb-12 font-medium leading-relaxed max-w-xs">
@@ -579,6 +603,20 @@ export default function ExChatScreen() {
                     // Add other redirects
                     setActionSheetVisible(false);
                 }}
+            />
+
+            <LoginPromptModal
+                visible={showLoginPrompt}
+                onClose={() => setShowLoginPrompt(false)}
+                onLogin={() => {
+                    setShowLoginPrompt(false);
+                    router.push('/auth');
+                }}
+                onSignUp={() => {
+                    setShowLoginPrompt(false);
+                    router.push('/auth');
+                }}
+                onContinueGuest={() => setShowLoginPrompt(false)}
             />
         </View>
     );

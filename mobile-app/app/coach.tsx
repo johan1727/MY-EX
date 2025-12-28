@@ -8,14 +8,17 @@ import {
     TextInput,
     KeyboardAvoidingView,
     Platform,
+    Alert,
+    Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Send, Heart, Sparkles } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { ArrowLeft, Send, Heart, Sparkles, Crown, Image as ImageIcon, X } from 'lucide-react-native';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { storage } from '../lib/storage';
+import { useSubscription } from '@/lib/SubscriptionContext';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -23,7 +26,11 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 interface Message {
     role: 'user' | 'assistant';
     content: string;
+    image?: string;
 }
+
+// Free tier limit for Coach
+const FREE_COACH_MESSAGE_LIMIT = 15;
 
 export default function CoachScreen() {
     const router = useRouter();
@@ -31,20 +38,45 @@ export default function CoachScreen() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputText, setInputText] = useState('');
     const [isTyping, setIsTyping] = useState(false);
+    const [dailyMessageCount, setDailyMessageCount] = useState(0);
+    const [showLimitWarning, setShowLimitWarning] = useState(false);
+    const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-    // Load saved messages on mount
+    const { tier } = useSubscription();
+    const isPremium = tier !== 'survivor';
+
+    // Get today's date key for storage
+    const getTodayKey = () => new Date().toISOString().split('T')[0];
+
+    // Load saved messages and daily count on mount
     useEffect(() => {
-        const loadMessages = async () => {
+        const loadData = async () => {
             try {
+                // Load messages
                 const saved = await storage.getItem('coach_messages');
                 if (saved) {
                     setMessages(JSON.parse(saved));
                 }
+
+                // Load daily count
+                const countData = await storage.getItem('coach_daily_count');
+                if (countData) {
+                    const data = JSON.parse(countData);
+                    if (data.date === getTodayKey()) {
+                        setDailyMessageCount(data.count);
+                        if (data.count >= FREE_COACH_MESSAGE_LIMIT - 2) {
+                            setShowLimitWarning(true);
+                        }
+                    } else {
+                        // New day, reset
+                        await storage.setItem('coach_daily_count', JSON.stringify({ date: getTodayKey(), count: 0 }));
+                    }
+                }
             } catch (e) {
-                console.error('Error loading coach messages:', e);
+                console.error('Error loading coach data:', e);
             }
         };
-        loadMessages();
+        loadData();
     }, []);
 
     // Save messages when they change
@@ -55,24 +87,71 @@ export default function CoachScreen() {
         }
     }, [messages]);
 
-    const sendMessage = async () => {
-        if (!inputText.trim() || isTyping) return;
+    const saveDailyCount = async (count: number) => {
+        await storage.setItem('coach_daily_count', JSON.stringify({ date: getTodayKey(), count }));
+    };
 
-        const userMessage: Message = { role: 'user', content: inputText.trim() };
+    // Image picker function
+    const pickImage = async () => {
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                quality: 0.5,
+                base64: true,
+            });
+
+            if (!result.canceled && result.assets[0].base64) {
+                setSelectedImage(result.assets[0].base64);
+            }
+        } catch (error) {
+            console.error('Error picking image:', error);
+            Alert.alert('Error', 'No se pudo seleccionar la imagen');
+        }
+    };
+
+    const sendMessage = async () => {
+        if ((!inputText.trim() && !selectedImage) || isTyping) return;
+
+        // Check free tier limit
+        if (!isPremium && dailyMessageCount >= FREE_COACH_MESSAGE_LIMIT) {
+            setShowLimitWarning(true);
+            return;
+        }
+
+        const userMessage: Message = {
+            role: 'user',
+            content: inputText.trim() || '(imagen enviada)',
+            image: selectedImage ? `data:image/jpeg;base64,${selectedImage}` : undefined,
+        };
         const updatedMessages = [...messages, userMessage];
         setMessages(updatedMessages);
+
         const currentInput = inputText;
+        const imageToSend = selectedImage;
+
         setInputText('');
+        setSelectedImage(null);
         setIsTyping(true);
+
+        // Increment count for free tier
+        if (!isPremium) {
+            const newCount = dailyMessageCount + 1;
+            setDailyMessageCount(newCount);
+            saveDailyCount(newCount);
+            if (newCount >= FREE_COACH_MESSAGE_LIMIT - 2) {
+                setShowLimitWarning(true);
+            }
+        }
 
         try {
             const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
             const context = updatedMessages.slice(-6).map(m =>
-                `${m.role === 'user' ? 'Usuario' : 'Coach'}: ${m.content}`
+                `${m.role === 'user' ? 'Usuario' : 'Coach'}: ${m.content}${m.image ? ' [imagen]' : ''}`
             ).join('\n');
 
-            const systemPrompt = `Eres un coach de bienestar emocional especializado en relaciones. Tu rol es:
+            let systemPrompt = `Eres un coach de bienestar emocional especializado en relaciones. Tu rol es:
 - Escuchar con empatía y sin juzgar
 - Ayudar al usuario a procesar sus emociones sobre rupturas
 - Dar consejos prácticos pero amables
@@ -85,11 +164,28 @@ Responde de forma cálida, breve (2-3 oraciones máximo), y en español.
 CONTEXTO:
 ${context}
 
-MENSAJE: "${currentInput}"
+MENSAJE: "${currentInput || '(El usuario envió una imagen)'}"
+${imageToSend ? '\nNOTA: El usuario te está enviando una imagen. Describe brevemente tu observación y responde de forma empática.' : ''}
 
 RESPONDE:`;
 
-            const result = await model.generateContent(systemPrompt);
+            let result;
+            if (imageToSend) {
+                // Multimodal request with image
+                const promptParts = [
+                    { text: systemPrompt },
+                    {
+                        inlineData: {
+                            mimeType: "image/jpeg",
+                            data: imageToSend
+                        }
+                    }
+                ];
+                result = await model.generateContent(promptParts as any);
+            } else {
+                result = await model.generateContent(systemPrompt);
+            }
+
             const response = await result.response;
             const assistantMessage: Message = {
                 role: 'assistant',
@@ -103,19 +199,19 @@ RESPONDE:`;
         }
     };
 
+    const remainingMessages = Math.max(0, FREE_COACH_MESSAGE_LIMIT - dailyMessageCount);
+
     return (
         <View style={styles.container}>
             <StatusBar style="light" />
 
+            {/* Header */}
             <SafeAreaView edges={['top']} style={styles.headerSafe}>
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <ArrowLeft size={24} color="#fff" />
+                        <ArrowLeft size={22} color="#9ca3af" />
                     </TouchableOpacity>
-                    <View style={styles.headerCenter}>
-                        <Text style={styles.headerTitle}>Coach de Bienestar</Text>
-                        {isTyping && <Text style={styles.typingIndicator}>escribiendo...</Text>}
-                    </View>
+                    <Text style={styles.headerTitle}>Coach IA</Text>
                     <View style={styles.headerSpacer} />
                 </View>
             </SafeAreaView>
@@ -132,13 +228,10 @@ RESPONDE:`;
                 >
                     {messages.length === 0 && (
                         <View style={styles.emptyChat}>
-                            <LinearGradient
-                                colors={['#ec4899', '#a855f7']}
-                                style={styles.emptyChatIcon}
-                            >
-                                <Heart size={32} color="#fff" />
-                            </LinearGradient>
-                            <Text style={styles.emptyChatTitle}>Tu Coach de Bienestar</Text>
+                            <View style={styles.emptyChatIcon}>
+                                <Heart size={28} color="#ec4899" />
+                            </View>
+                            <Text style={styles.emptyChatTitle}>Coach de Bienestar</Text>
                             <Text style={styles.emptyChatSubtitle}>
                                 Estoy aquí para escucharte y ayudarte a procesar tus emociones.
                             </Text>
@@ -165,28 +258,96 @@ RESPONDE:`;
                         <View
                             key={index}
                             style={[
-                                styles.messageBubble,
-                                msg.role === 'user' ? styles.userBubble : styles.assistantBubble,
+                                styles.messageRow,
+                                msg.role === 'user' ? styles.userRow : styles.assistantRow,
                             ]}
                         >
-                            <Text style={[
-                                styles.messageText,
-                                msg.role === 'user' ? styles.userText : styles.assistantText,
+                            {msg.role === 'assistant' && (
+                                <View style={styles.avatarSmall}>
+                                    <Sparkles size={14} color="#ec4899" />
+                                </View>
+                            )}
+                            <View style={[
+                                styles.messageBubble,
+                                msg.role === 'user' ? styles.userBubble : styles.assistantBubble,
                             ]}>
-                                {msg.content}
-                            </Text>
+                                {/* Display image if present */}
+                                {msg.image && (
+                                    <Image
+                                        source={{ uri: msg.image }}
+                                        style={styles.messageImage}
+                                        resizeMode="cover"
+                                    />
+                                )}
+                                {msg.content && msg.content !== '(imagen enviada)' ? (
+                                    <Text style={[
+                                        styles.messageText,
+                                        msg.role === 'user' ? styles.userText : styles.assistantText,
+                                    ]}>
+                                        {msg.content}
+                                    </Text>
+                                ) : null}
+                            </View>
                         </View>
                     ))}
 
                     {isTyping && (
-                        <View style={[styles.messageBubble, styles.assistantBubble]}>
-                            <Text style={styles.typingDots}>●●●</Text>
+                        <View style={[styles.messageRow, styles.assistantRow]}>
+                            <View style={styles.avatarSmall}>
+                                <Sparkles size={14} color="#ec4899" />
+                            </View>
+                            <View style={[styles.messageBubble, styles.assistantBubble]}>
+                                <Text style={styles.typingDots}>...</Text>
+                            </View>
                         </View>
                     )}
                 </ScrollView>
 
+                {/* Limit Warning Banner */}
+                {showLimitWarning && !isPremium && (
+                    <View style={styles.limitBanner}>
+                        <View style={styles.limitBannerContent}>
+                            <Crown size={18} color="#f59e0b" />
+                            <Text style={styles.limitBannerText}>
+                                {remainingMessages > 0
+                                    ? `Te quedan ${remainingMessages} mensajes hoy`
+                                    : 'Has alcanzado el límite diario'}
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            style={styles.limitBannerBtn}
+                            onPress={() => router.push('/premium')}
+                        >
+                            <Text style={styles.limitBannerBtnText}>Mejorar</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {/* Input Area */}
                 <SafeAreaView edges={['bottom']} style={styles.inputSafe}>
+                    {/* Image Preview */}
+                    {selectedImage && (
+                        <View style={styles.imagePreviewContainer}>
+                            <Image
+                                source={{ uri: `data:image/jpeg;base64,${selectedImage}` }}
+                                style={styles.imagePreview}
+                            />
+                            <TouchableOpacity
+                                style={styles.removeImageButton}
+                                onPress={() => setSelectedImage(null)}
+                            >
+                                <X size={12} color="#fff" />
+                            </TouchableOpacity>
+                        </View>
+                    )}
                     <View style={styles.inputContainer}>
+                        {/* Image picker button */}
+                        <TouchableOpacity
+                            style={styles.imageButton}
+                            onPress={pickImage}
+                        >
+                            <ImageIcon size={22} color="#9ca3af" />
+                        </TouchableOpacity>
                         <TextInput
                             style={styles.input}
                             value={inputText}
@@ -195,13 +356,14 @@ RESPONDE:`;
                             placeholderTextColor="#6b7280"
                             multiline
                             maxLength={1000}
+                            editable={isPremium || remainingMessages > 0}
                         />
                         <TouchableOpacity
-                            style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+                            style={[styles.sendButton, ((!inputText.trim() && !selectedImage) || (!isPremium && remainingMessages === 0)) && styles.sendButtonDisabled]}
                             onPress={sendMessage}
-                            disabled={!inputText.trim() || isTyping}
+                            disabled={(!inputText.trim() && !selectedImage) || isTyping || (!isPremium && remainingMessages === 0)}
                         >
-                            <Send size={20} color={inputText.trim() ? '#fff' : '#6b7280'} />
+                            <Send size={18} color={(inputText.trim() || selectedImage) && (isPremium || remainingMessages > 0) ? '#000' : '#6b7280'} />
                         </TouchableOpacity>
                     </View>
                 </SafeAreaView>
@@ -213,36 +375,25 @@ RESPONDE:`;
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0a0a0a',
+        backgroundColor: '#171717',
     },
     headerSafe: {
-        backgroundColor: '#0a0a0a',
+        backgroundColor: '#171717',
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.1)',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
     },
     backButton: {
         padding: 8,
-        borderRadius: 8,
-    },
-    headerCenter: {
-        alignItems: 'center',
     },
     headerTitle: {
-        fontSize: 18,
-        fontWeight: '600',
+        fontSize: 16,
+        fontWeight: '500',
         color: '#fff',
-    },
-    typingIndicator: {
-        fontSize: 12,
-        color: '#ec4899',
-        marginTop: 2,
     },
     headerSpacer: {
         width: 40,
@@ -259,66 +410,83 @@ const styles = StyleSheet.create({
     },
     emptyChat: {
         alignItems: 'center',
-        paddingTop: 40,
+        paddingTop: 60,
     },
     emptyChatIcon: {
-        width: 72,
-        height: 72,
-        borderRadius: 36,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: 'rgba(236, 72, 153, 0.15)',
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: 16,
     },
     emptyChatTitle: {
-        fontSize: 22,
-        fontWeight: '700',
+        fontSize: 18,
+        fontWeight: '600',
         color: '#fff',
         marginBottom: 8,
     },
     emptyChatSubtitle: {
-        fontSize: 15,
-        color: '#9ca3af',
+        fontSize: 14,
+        color: '#6b7280',
         textAlign: 'center',
-        paddingHorizontal: 20,
+        paddingHorizontal: 40,
         marginBottom: 32,
+        lineHeight: 20,
     },
     suggestionsContainer: {
         width: '100%',
         gap: 8,
     },
     suggestion: {
-        backgroundColor: 'rgba(236, 72, 153, 0.1)',
+        backgroundColor: 'transparent',
         paddingVertical: 12,
         paddingHorizontal: 16,
-        borderRadius: 12,
+        borderRadius: 10,
         borderWidth: 1,
-        borderColor: 'rgba(236, 72, 153, 0.3)',
+        borderColor: 'rgba(255,255,255,0.15)',
     },
     suggestionText: {
-        color: '#ec4899',
-        fontSize: 15,
+        color: '#9ca3af',
+        fontSize: 14,
         textAlign: 'center',
     },
+    messageRow: {
+        flexDirection: 'row',
+        marginBottom: 12,
+        maxWidth: '85%',
+    },
+    userRow: {
+        alignSelf: 'flex-end',
+    },
+    assistantRow: {
+        alignSelf: 'flex-start',
+    },
+    avatarSmall: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: 'rgba(236, 72, 153, 0.15)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 8,
+        marginTop: 2,
+    },
     messageBubble: {
-        maxWidth: '80%',
         paddingVertical: 10,
         paddingHorizontal: 14,
-        borderRadius: 18,
-        marginVertical: 4,
+        borderRadius: 16,
     },
     userBubble: {
-        alignSelf: 'flex-end',
-        backgroundColor: '#ec4899',
-        borderBottomRightRadius: 4,
+        backgroundColor: '#3b82f6',
     },
     assistantBubble: {
-        alignSelf: 'flex-start',
-        backgroundColor: '#1f1f1f',
-        borderBottomLeftRadius: 4,
+        backgroundColor: '#2a2a2a',
     },
     messageText: {
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: 15,
+        lineHeight: 21,
     },
     userText: {
         color: '#fff',
@@ -328,40 +496,98 @@ const styles = StyleSheet.create({
     },
     typingDots: {
         color: '#6b7280',
-        fontSize: 18,
-        letterSpacing: 2,
+        fontSize: 16,
+    },
+    limitBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: 'rgba(245, 158, 11, 0.15)',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(245, 158, 11, 0.3)',
+    },
+    limitBannerContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    limitBannerText: {
+        color: '#f59e0b',
+        fontSize: 13,
+    },
+    limitBannerBtn: {
+        backgroundColor: '#f59e0b',
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 6,
+    },
+    limitBannerBtnText: {
+        color: '#000',
+        fontSize: 12,
+        fontWeight: '600',
     },
     inputSafe: {
-        backgroundColor: '#0a0a0a',
+        backgroundColor: '#171717',
     },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'flex-end',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.1)',
-        gap: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        gap: 8,
     },
     input: {
         flex: 1,
-        backgroundColor: '#1f1f1f',
-        borderRadius: 20,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        fontSize: 16,
+        backgroundColor: '#2a2a2a',
+        borderRadius: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        fontSize: 15,
         color: '#fff',
-        maxHeight: 120,
+        maxHeight: 100,
     },
     sendButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#ec4899',
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#fff',
         alignItems: 'center',
         justifyContent: 'center',
     },
     sendButtonDisabled: {
-        backgroundColor: '#1f1f1f',
+        backgroundColor: '#2a2a2a',
+    },
+    // Image related styles
+    imagePreviewContainer: {
+        paddingHorizontal: 16,
+        paddingTop: 8,
+    },
+    imagePreview: {
+        width: 80,
+        height: 80,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    removeImageButton: {
+        position: 'absolute',
+        top: 4,
+        left: 76,
+        backgroundColor: '#ef4444',
+        borderRadius: 10,
+        padding: 4,
+    },
+    imageButton: {
+        padding: 8,
+        marginRight: 4,
+    },
+    messageImage: {
+        width: '100%',
+        maxWidth: 180,
+        height: 150,
+        borderRadius: 10,
+        marginBottom: 4,
     },
 });

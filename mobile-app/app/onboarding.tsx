@@ -1,219 +1,301 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Alert, Animated } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { StatusBar } from 'expo-status-bar';
-import { Heart, ArrowRight, Calendar, User, Sparkles, X, Brain } from 'lucide-react-native';
-import { supabase } from '../lib/supabase';
+import React, { useState, useRef } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    Dimensions,
+    TouchableOpacity,
+    FlatList,
+    Animated,
+} from 'react-native';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Heart, Brain, MessageCircle, Sparkles, ArrowRight, Check } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const { width, height } = Dimensions.get('window');
+
+interface OnboardingSlide {
+    id: string;
+    icon: any;
+    title: string;
+    subtitle: string;
+    description: string;
+    gradient: [string, string];
+}
+
+const slides: OnboardingSlide[] = [
+    {
+        id: '1',
+        icon: Heart,
+        title: 'Bienvenido a REMI',
+        subtitle: 'Tu coach de sanación emocional',
+        description: 'REMI es tu compañera de IA diseñada para ayudarte a sanar después de una ruptura amorosa.',
+        gradient: ['#ec4899', '#a855f7'],
+    },
+    {
+        id: '2',
+        icon: Brain,
+        title: 'Simulador',
+        subtitle: 'Entiende sus patrones',
+        description: 'Importa un chat de WhatsApp y nuestra IA analizará la personalidad de tu ex para que puedas practicar conversaciones.',
+        gradient: ['#a855f7', '#6366f1'],
+    },
+    {
+        id: '3',
+        icon: MessageCircle,
+        title: 'Coach Personal',
+        subtitle: 'Conversaciones que sanan',
+        description: 'Habla con REMI sobre tus sentimientos. Te escucha, te entiende y te guía en tu proceso de sanación.',
+        gradient: ['#6366f1', '#3b82f6'],
+    },
+];
 
 export default function OnboardingScreen() {
     const router = useRouter();
-    const [step, setStep] = useState(1);
-    const totalSteps = 3;
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const flatListRef = useRef<FlatList>(null);
+    const scrollX = useRef(new Animated.Value(0)).current;
 
-    const [userName, setUserName] = useState('');
-    const [exName, setExName] = useState('');
-    const [breakupDate, setBreakupDate] = useState('');
-    const [goal, setGoal] = useState<'move_on' | 'get_back' | 'learn'>('move_on');
-    const [loading, setLoading] = useState(false);
-
-    const fadeAnim = useState(new Animated.Value(0))[0];
-
-    useEffect(() => {
-        Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-        }).start();
-    }, [step]);
-
-    const goals = [
-        { id: 'move_on', label: 'Superar y avanzar', icon: '🚀', color: '#10b981' },
-        { id: 'get_back', label: 'Recuperar la relación', icon: '💕', color: '#f43f5e' },
-        { id: 'learn', label: 'Entender qué pasó', icon: '🌱', color: '#3b82f6' },
-    ];
-
-    const handleSkip = () => {
-        Alert.alert(
-            'Saltar configuración',
-            'Puedes completar tu perfil más tarde.',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                { text: 'Saltar', onPress: () => router.replace('/(tabs)') }
-            ]
-        );
-    };
-
-    const handleComplete = async () => {
-        setLoading(true);
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error('Not authenticated');
-
-            await supabase.from('users').upsert({
-                id: user.id,
-                email: user.email,
-                user_name: userName || 'Usuario',
-                ex_name: exName || 'Mi ex',
-                breakup_date: breakupDate || new Date().toISOString().split('T')[0],
-                goal: goal,
-                no_contact_since: breakupDate || new Date().toISOString().split('T')[0],
-                onboarding_completed: true,
-            });
-
-            router.replace('/(tabs)');
-        } catch (error: any) {
-            Alert.alert('Error', error.message);
-        } finally {
-            setLoading(false);
+    const handleNext = () => {
+        if (currentIndex < slides.length - 1) {
+            flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
+            setCurrentIndex(currentIndex + 1);
         }
     };
 
-    const canProceed = () => {
-        if (step === 1) return userName.trim().length > 0;
-        return true;
+    const handleSkip = async () => {
+        await AsyncStorage.setItem('hasSeenOnboarding', 'true');
+        router.replace('/auth');
     };
 
+    const handleStart = async () => {
+        await AsyncStorage.setItem('hasSeenOnboarding', 'true');
+        router.replace('/auth');
+    };
+
+    const renderSlide = ({ item, index }: { item: OnboardingSlide; index: number }) => {
+        const IconComponent = item.icon;
+
+        return (
+            <View style={[styles.slide, { width }]}>
+                <LinearGradient
+                    colors={item.gradient}
+                    style={styles.iconContainer}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                >
+                    <IconComponent size={64} color="#fff" />
+                </LinearGradient>
+
+                <Text style={styles.title}>{item.title}</Text>
+                <Text style={styles.subtitle}>{item.subtitle}</Text>
+                <Text style={styles.description}>{item.description}</Text>
+            </View>
+        );
+    };
+
+    const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+        if (viewableItems.length > 0) {
+            setCurrentIndex(viewableItems[0].index);
+        }
+    }).current;
+
     return (
-        <View className="flex-1 bg-black">
+        <View style={styles.container}>
             <StatusBar style="light" />
 
-            <SafeAreaView className="flex-1">
-                {/* Header */}
-                <View className="flex-row items-center justify-between px-6 pt-4">
-                    <TouchableOpacity onPress={() => step > 1 && setStep(step - 1)}>
-                        <Text className={`text-gray-500 font-bold uppercase tracking-widest text-xs ${step === 1 ? 'opacity-0' : ''}`}>
-                            ATRÁS
-                        </Text>
-                    </TouchableOpacity>
+            <SafeAreaView style={styles.safeArea}>
+                {/* Skip button */}
+                <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+                    <Text style={styles.skipText}>Saltar</Text>
+                </TouchableOpacity>
 
-                    <TouchableOpacity onPress={handleSkip}>
-                        <Text className="text-gray-500 font-bold uppercase tracking-widest text-xs">SALTAR</Text>
-                    </TouchableOpacity>
+                {/* Slides */}
+                <FlatList
+                    ref={flatListRef}
+                    data={slides}
+                    renderItem={renderSlide}
+                    keyExtractor={(item) => item.id}
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onScroll={Animated.event(
+                        [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                        { useNativeDriver: false }
+                    )}
+                    onViewableItemsChanged={onViewableItemsChanged}
+                    viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
+                    style={styles.flatList}
+                />
+
+                {/* Pagination */}
+                <View style={styles.pagination}>
+                    {slides.map((_, index) => {
+                        const inputRange = [
+                            (index - 1) * width,
+                            index * width,
+                            (index + 1) * width,
+                        ];
+
+                        const dotWidth = scrollX.interpolate({
+                            inputRange,
+                            outputRange: [8, 24, 8],
+                            extrapolate: 'clamp',
+                        });
+
+                        const opacity = scrollX.interpolate({
+                            inputRange,
+                            outputRange: [0.4, 1, 0.4],
+                            extrapolate: 'clamp',
+                        });
+
+                        return (
+                            <Animated.View
+                                key={index}
+                                style={[
+                                    styles.dot,
+                                    { width: dotWidth, opacity },
+                                ]}
+                            />
+                        );
+                    })}
                 </View>
 
-                {/* Progress */}
-                <View className="flex-row justify-center mt-8 mb-12">
-                    {[1, 2, 3].map((s) => (
-                        <View
-                            key={s}
-                            className={`h-1.5 rounded-full mx-1 ${s <= step ? 'bg-white w-8' : 'bg-[#1c1c1e] w-4'}`}
-                        />
-                    ))}
-                </View>
-
-                <ScrollView className="flex-1 px-8" showsVerticalScrollIndicator={false}>
-                    <Animated.View style={{ opacity: fadeAnim }}>
-                        {step === 1 && (
-                            <View>
-                                <View className="w-16 h-16 rounded-full bg-[#1c1c1e] items-center justify-center mb-6">
-                                    <Brain size={32} color="white" />
-                                </View>
-                                <Text className="text-white text-4xl font-black tracking-tighter mb-4">
-                                    Hola.
-                                </Text>
-                                <Text className="text-gray-400 text-lg mb-8 font-medium">
-                                    Soy REMI, tu asistente de recuperación. ¿Cómo te llamas?
-                                </Text>
-
-                                <TextInput
-                                    className="text-white text-3xl font-bold border-b-2 border-[#333] pb-2 placeholder:text-[#333]"
-                                    placeholder="Tu Nombre"
-                                    placeholderTextColor="#333"
-                                    value={userName}
-                                    onChangeText={setUserName}
-                                    autoFocus
-                                    style={{ outlineStyle: 'none' } as any}
-                                />
-                            </View>
-                        )}
-
-                        {step === 2 && (
-                            <View>
-                                <Text className="text-white text-4xl font-black tracking-tighter mb-4">
-                                    Contexto.
-                                </Text>
-                                <Text className="text-gray-400 text-lg mb-8 font-medium">
-                                    Para calibrar la simulación, necesito algunos detalles.
-                                </Text>
-
-                                <View className="mb-6">
-                                    <Text className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-2">NOMBRE DE TU EX</Text>
-                                    <TextInput
-                                        className="bg-[#1c1c1e] rounded-xl px-4 py-4 text-white text-lg font-bold"
-                                        placeholder="Opcional"
-                                        placeholderTextColor="#666"
-                                        value={exName}
-                                        onChangeText={setExName}
-                                        style={{ outlineStyle: 'none' } as any}
-                                    />
-                                </View>
-
-                                <View className="mb-6">
-                                    <Text className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-2">TIEMPO DE RUPTURA</Text>
-                                    <TextInput
-                                        className="bg-[#1c1c1e] rounded-xl px-4 py-4 text-white text-lg font-bold"
-                                        placeholder="Ej: 2 semanas"
-                                        placeholderTextColor="#666"
-                                        value={breakupDate}
-                                        onChangeText={setBreakupDate}
-                                        style={{ outlineStyle: 'none' } as any}
-                                    />
-                                </View>
-                            </View>
-                        )}
-
-                        {step === 3 && (
-                            <View>
-                                <Text className="text-white text-4xl font-black tracking-tighter mb-4">
-                                    Objetivo.
-                                </Text>
-                                <Text className="text-gray-400 text-lg mb-8 font-medium">
-                                    ¿Qué buscas lograr con REMI?
-                                </Text>
-
-                                {goals.map((g) => (
-                                    <TouchableOpacity
-                                        key={g.id}
-                                        onPress={() => setGoal(g.id as any)}
-                                        className={`mb-3 p-6 rounded-[24px] border border-white/5 flex-row items-center ${goal === g.id ? 'bg-white' : 'bg-[#1c1c1e]'}`}
-                                    >
-                                        <Text className="text-2xl mr-4">{g.icon}</Text>
-                                        <Text className={`text-lg font-bold flex-1 ${goal === g.id ? 'text-black' : 'text-white'}`}>
-                                            {g.label}
-                                        </Text>
-                                        {goal === g.id && (
-                                            <View className="w-6 h-6 rounded-full bg-black items-center justify-center">
-                                                <View className="w-2 h-2 rounded-full bg-white" />
-                                            </View>
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        )}
-                    </Animated.View>
-                </ScrollView>
-
-                {/* Footer Button */}
-                <View className="px-6 pb-8">
-                    <TouchableOpacity
-                        onPress={() => {
-                            if (step < totalSteps) {
-                                fadeAnim.setValue(0);
-                                setStep(step + 1);
-                            } else {
-                                handleComplete();
-                            }
-                        }}
-                        disabled={!canProceed()}
-                        className={`py-5 rounded-full items-center ${canProceed() ? 'bg-white' : 'bg-[#1c1c1e]'}`}
-                    >
-                        <Text className={`font-black text-base uppercase tracking-widest ${canProceed() ? 'text-black' : 'text-[#666]'}`}>
-                            {step < totalSteps ? 'Continuar' : (loading ? 'Iniciando...' : 'Comenzar')}
-                        </Text>
-                    </TouchableOpacity>
+                {/* Buttons */}
+                <View style={styles.footer}>
+                    {currentIndex === slides.length - 1 ? (
+                        <TouchableOpacity style={styles.startButton} onPress={handleStart}>
+                            <LinearGradient
+                                colors={['#a855f7', '#6366f1']}
+                                style={styles.startButtonGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                            >
+                                <Text style={styles.startButtonText}>Comenzar</Text>
+                                <Sparkles size={20} color="#fff" />
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+                            <Text style={styles.nextButtonText}>Siguiente</Text>
+                            <ArrowRight size={20} color="#fff" />
+                        </TouchableOpacity>
+                    )}
                 </View>
             </SafeAreaView>
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#0a0a0a',
+    },
+    safeArea: {
+        flex: 1,
+    },
+    skipButton: {
+        position: 'absolute',
+        top: 16,
+        right: 20,
+        zIndex: 10,
+        padding: 8,
+    },
+    skipText: {
+        color: '#6b7280',
+        fontSize: 16,
+    },
+    flatList: {
+        flex: 1,
+    },
+    slide: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 40,
+    },
+    iconContainer: {
+        width: 140,
+        height: 140,
+        borderRadius: 70,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 40,
+        shadowColor: '#a855f7',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+    },
+    title: {
+        fontSize: 28,
+        fontWeight: '800',
+        color: '#fff',
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    subtitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#a855f7',
+        textAlign: 'center',
+        marginBottom: 16,
+    },
+    description: {
+        fontSize: 16,
+        color: '#9ca3af',
+        textAlign: 'center',
+        lineHeight: 24,
+    },
+    pagination: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 30,
+    },
+    dot: {
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#a855f7',
+        marginHorizontal: 4,
+    },
+    footer: {
+        paddingHorizontal: 20,
+        paddingBottom: 20,
+    },
+    nextButton: {
+        backgroundColor: '#1a1a1a',
+        borderRadius: 16,
+        paddingVertical: 18,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    nextButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#fff',
+    },
+    startButton: {
+        borderRadius: 16,
+        overflow: 'hidden',
+    },
+    startButtonGradient: {
+        paddingVertical: 18,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    startButtonText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#fff',
+    },
+});

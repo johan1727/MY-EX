@@ -213,7 +213,7 @@ function detectPhases(profileData: any): PersonalityPhase[] {
             },
             examples: [
                 'ok',
-                'ya Johan',
+                'ya amor',
                 'déjame en paz',
                 'no quiero hablar de eso'
             ],

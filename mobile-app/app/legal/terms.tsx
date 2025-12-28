@@ -8,7 +8,7 @@ export default function TermsOfService() {
     const router = useRouter();
 
     const openExternalTerms = () => {
-        Linking.openURL('https://soyremi.com/terms');
+        Linking.openURL('https://johan1727.github.io/my-ex-coach/legal/terms-of-service.html');
     };
 
     return (
@@ -67,10 +67,6 @@ export default function TermsOfService() {
                     <Text style={styles.bulletPoint}>• No compartir contenido ilegal</Text>
                     <Text style={styles.bulletPoint}>• Ser mayor de 18 años</Text>
                 </View>
-
-                <TouchableOpacity onPress={openExternalTerms} style={styles.externalButton}>
-                    <Text style={styles.externalButtonText}>Ver Términos Completos</Text>
-                </TouchableOpacity>
 
                 <Text style={styles.footer}>
                     Al usar SOYREMI, aceptas estos Términos de Servicio.

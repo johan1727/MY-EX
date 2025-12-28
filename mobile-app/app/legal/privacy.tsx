@@ -8,7 +8,7 @@ export default function PrivacyPolicy() {
     const router = useRouter();
 
     const openExternalPolicy = () => {
-        Linking.openURL('https://soyremi.com/privacy');
+        Linking.openURL('https://johan1727.github.io/my-ex-coach/legal/privacy-policy.html');
     };
 
     return (
@@ -72,10 +72,6 @@ export default function PrivacyPolicy() {
                         </Text>
                     </View>
                 </View>
-
-                <TouchableOpacity onPress={openExternalPolicy} style={styles.externalButton}>
-                    <Text style={styles.externalButtonText}>Ver Política Completa</Text>
-                </TouchableOpacity>
 
                 <Text style={styles.footer}>
                     Cumplimos con GDPR (Europa), CCPA (California) y LFPDPPP (México).

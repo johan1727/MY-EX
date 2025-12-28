@@ -1,13 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Modal, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { fragmentMessage, calculateInitialDelay, buildEnhancedPrompt } from '../../../lib/chatHelpers';
 import { loadMasterPrompt } from '../../../lib/masterPromptSupabase';
 import { storage } from '../../../lib/storage';
+import { supabase } from '../../../lib/supabase';
 import { checkProhibitedContent } from '../../../lib/contentModeration';
-import { ArrowLeft, Send } from 'lucide-react-native';
+import { ArrowLeft, Send, Sparkles } from 'lucide-react-native';
+import { useSubscription } from '../../../lib/SubscriptionContext';
+import UpgradeBanner from '../../../components/UpgradeBanner';
+import {
+    loadConversationFromCloud,
+    saveConversationToCloud,
+    loadFacts,
+    extractAndSaveFacts,
+    buildFactsContext,
+    detectMemoryCommand,
+    saveExplicitFact,
+    MemoryFact
+} from '../../../lib/memoryService';
+import {
+    searchSimilarMessages,
+    storeMessageEmbedding,
+    buildRAGContext,
+    getSummaries,
+    buildSummaryContext,
+    createSessionSummary,
+    applyMemoryDecay,
+    SimilarMessage
+} from '../../../lib/ragService';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 console.log('[ExChat] API Key check:', GEMINI_API_KEY ? `Present (${GEMINI_API_KEY.substring(0, 8)}...)` : 'MISSING');
@@ -24,11 +47,27 @@ export default function ExSimulatorChat() {
     const router = useRouter();
     const scrollViewRef = useRef<ScrollView>(null);
     const [profileData, setProfileData] = useState<any>(null);
+
+    // Check subscription for premium banner
+    const { tier } = useSubscription();
+    const isPremium = tier !== 'survivor';
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputText, setInputText] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const [userName, setUserName] = useState('');
-    const [conversationMemory, setConversationMemory] = useState<string>(''); // Long-term memory
+    const [conversationMemory, setConversationMemory] = useState<string>('');
+    const [memoryFacts, setMemoryFacts] = useState<MemoryFact[]>([]);
+    const [userId, setUserId] = useState<string | null>(null);
+    const [pastSummaries, setPastSummaries] = useState<string>(''); // RAG: past conversation summaries
+
+    // NEW: Limits and modals
+    const [showLoginModal, setShowLoginModal] = useState(false);
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [hasShownLoginPrompt, setHasShownLoginPrompt] = useState(false);
+
+    // FREE USER LIMITS
+    const FREE_MESSAGE_LIMIT = 10;
+    const userMessageCount = messages.filter(m => m.role === 'user').length;
 
     useEffect(() => {
         loadProfile();
@@ -39,6 +78,12 @@ export default function ExSimulatorChat() {
     }, [messages]);
 
     const loadProfile = async () => {
+        // Get user ID for cloud sync
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.id) {
+            setUserId(user.id);
+        }
+
         const stored = await storage.getItem('exSimulator_currentProfile');
         if (stored) {
             const data = JSON.parse(stored);
@@ -52,21 +97,63 @@ export default function ExSimulatorChat() {
                 } catch (err) { }
             }
             setProfileData(data);
-            // Detect user name from messages or use generic
             const detectedUserName = data.userName || 'Usuario';
             setUserName(detectedUserName);
 
-            const conversationKey = `exSimulator_conversation_${data.id}`;
-            const savedConversation = await storage.getItem(conversationKey);
-            if (savedConversation) {
-                const parsed = JSON.parse(savedConversation);
-                setMessages(parsed.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) })));
-            } else {
-                // Start with empty chat - no initial greeting
-                setMessages([]);
+            // Try to load conversation from cloud first
+            let loadedMessages: any[] = [];
+            if (user?.id && data.supabaseId) {
+                try {
+                    const cloudMsgs = await loadConversationFromCloud(user.id, data.supabaseId);
+                    if (cloudMsgs.length > 0) {
+                        loadedMessages = cloudMsgs.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) }));
+                        console.log('[ExChat] Loaded', cloudMsgs.length, 'messages from cloud');
+                    }
+                } catch (err) {
+                    console.log('[ExChat] Cloud load failed, trying local');
+                }
             }
 
-            // Load long-term memory
+            // Fallback to local storage
+            if (loadedMessages.length === 0) {
+                const conversationKey = `exSimulator_conversation_${data.id}`;
+                const savedConversation = await storage.getItem(conversationKey);
+                if (savedConversation) {
+                    const parsed = JSON.parse(savedConversation);
+                    loadedMessages = parsed.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) }));
+                }
+            }
+            setMessages(loadedMessages);
+
+            // Load structured facts from cloud
+            if (user?.id && data.supabaseId) {
+                try {
+                    const facts = await loadFacts(user.id, data.supabaseId);
+                    setMemoryFacts(facts);
+                    console.log('[ExChat] Loaded', facts.length, 'structured facts');
+
+                    // Apply memory decay on app start
+                    applyMemoryDecay().catch(err => console.log('[ExChat] Decay failed'));
+                } catch (err) {
+                    console.log('[ExChat] Facts load failed');
+                }
+            }
+
+            // Load past conversation summaries (RAG)
+            if (user?.id && data.supabaseId) {
+                try {
+                    const summaries = await getSummaries(user.id, data.supabaseId, undefined, 5);
+                    if (summaries.length > 0) {
+                        const summaryContext = buildSummaryContext(summaries);
+                        setPastSummaries(summaryContext);
+                        console.log('[ExChat] Loaded', summaries.length, 'past summaries');
+                    }
+                } catch (err) {
+                    console.log('[ExChat] Summaries load failed');
+                }
+            }
+
+            // Load long-term memory from local
             const memoryKey = `exSimulator_memory_${data.id}`;
             const savedMemory = await storage.getItem(memoryKey);
             if (savedMemory) {
@@ -80,12 +167,43 @@ export default function ExSimulatorChat() {
 
     const saveConversation = async (msgs: Message[]) => {
         if (!profileData) return;
+
+        // Save to local storage (immediate)
         const key = `exSimulator_conversation_${profileData.id}`;
         await storage.setItem(key, JSON.stringify(msgs));
 
-        // Update long-term memory every 20 messages
-        if (msgs.length % 20 === 0 && msgs.length > 0) {
+        // Save to cloud (background, non-blocking)
+        if (userId && profileData.supabaseId) {
+            saveConversationToCloud(userId, profileData.supabaseId, msgs).catch(err =>
+                console.log('[ExChat] Cloud save failed:', err)
+            );
+
+            // Store embeddings for the last 2 messages (user + assistant) for RAG
+            const lastTwoMsgs = msgs.slice(-2);
+            for (const msg of lastTwoMsgs) {
+                storeMessageEmbedding(userId, profileData.supabaseId, msg.content, msg.role).catch(err =>
+                    console.log('[ExChat] Embedding storage failed:', err)
+                );
+            }
+        }
+
+        // Update long-term memory every 10 messages
+        if (msgs.length % 10 === 0 && msgs.length > 0) {
             await generateMemorySummary(msgs);
+        }
+
+        // Extract and save structured facts every 15 messages
+        if (msgs.length % 15 === 0 && msgs.length > 0 && userId && profileData.supabaseId) {
+            extractAndSaveFacts(userId, profileData.supabaseId, msgs, profileData.exName).catch(err =>
+                console.log('[ExChat] Facts extraction failed:', err)
+            );
+        }
+
+        // Create session summary every 30 messages (hierarchical memory)
+        if (msgs.length % 30 === 0 && msgs.length > 0 && userId && profileData.supabaseId) {
+            createSessionSummary(userId, profileData.supabaseId, msgs, profileData.exName).catch(err =>
+                console.log('[ExChat] Session summary failed:', err)
+            );
         }
     };
 
@@ -95,27 +213,31 @@ export default function ExSimulatorChat() {
 
         try {
             const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-            const recentMsgs = msgs.slice(-30).map(m =>
+            // Analyze last 50 messages for better memory (was 30)
+            const recentMsgs = msgs.slice(-50).map(m =>
                 `${m.role === 'user' ? 'Usuario' : profileData.exName}: ${m.content}`
             ).join('\n');
 
-            const memoryPrompt = `Analiza esta conversación y extrae los puntos IMPORTANTES que ${profileData.exName} debería recordar:
+            const memoryPrompt = `Analiza esta conversación y extrae los puntos MÁS IMPORTANTES que ${profileData.exName} debería recordar para futuras conversaciones:
 ${recentMsgs}
 
-Extrae en máximo 5 bullets:
-- Temas que se discutieron
+Extrae en máximo 8 bullets los siguientes tipos de información:
+- Nombres mencionados (personas, lugares, mascotas)
+- Fechas o eventos importantes mencionados
+- Planes futuros o cosas pendientes
 - Promesas o acuerdos hechos
-- Información personal compartida
-- Estado emocional de la conversación
-- Cualquier otro detalle relevante
+- Información personal nueva compartida
+- Momentos emocionales significativos
+- Temas que quedaron inconclusos
+- El tono general de la conversación
 
-Responde SOLO con los bullets, máximo 200 caracteres total:`;
+Formato: bullets concisos pero informativos. Máximo 500 caracteres:`;
 
             const result = await model.generateContent(memoryPrompt);
             const newMemory = result.response.text().trim();
 
-            // Append to existing memory, keeping only last 1000 chars
-            const updatedMemory = (conversationMemory + '\n' + newMemory).slice(-1000).trim();
+            // Append to existing memory, keeping only last 4000 chars (was 1000)
+            const updatedMemory = (conversationMemory + '\n' + newMemory).slice(-4000).trim();
             setConversationMemory(updatedMemory);
 
             const memoryKey = `exSimulator_memory_${profileData.id}`;
@@ -129,6 +251,19 @@ Responde SOLO con los bullets, máximo 200 caracteres total:`;
     const sendMessage = async () => {
         if (!inputText.trim() || isTyping || !profileData) return;
 
+        // NEW: Check if user is logged in and recommend login after first message
+        if (!userId && userMessageCount === 0 && !hasShownLoginPrompt) {
+            setHasShownLoginPrompt(true);
+            setShowLoginModal(true);
+            // Continue anyway - this is just a recommendation
+        }
+
+        // NEW: Check message limits for free users
+        if (!isPremium && userMessageCount >= FREE_MESSAGE_LIMIT) {
+            setShowUpgradeModal(true);
+            return;
+        }
+
         const contentCheck = checkProhibitedContent(inputText);
         if (contentCheck.isProhibited) {
             const errorMessage: Message = {
@@ -138,6 +273,39 @@ Responde SOLO con los bullets, máximo 200 caracteres total:`;
                 seen: false
             };
             setMessages([...messages, errorMessage]);
+            return;
+        }
+
+        // Check for explicit memory commands (ChatGPT-style)
+        const memoryCommand = detectMemoryCommand(inputText);
+        if (memoryCommand.isCommand && memoryCommand.fact && userId && profileData.supabaseId) {
+            // Save the fact and confirm to user
+            const saved = await saveExplicitFact(userId, profileData.supabaseId, memoryCommand.fact);
+
+            const userMessage: Message = {
+                role: 'user',
+                content: inputText,
+                timestamp: new Date(),
+                seen: true
+            };
+
+            const confirmMessage: Message = {
+                role: 'assistant',
+                content: saved
+                    ? `✓ Lo recordaré: "${memoryCommand.fact}"`
+                    : `Entendido, lo tendré en cuenta.`,
+                timestamp: new Date(),
+                seen: false
+            };
+
+            const newMessages = [...messages, userMessage, confirmMessage];
+            setMessages(newMessages);
+            setInputText('');
+            await saveConversation(newMessages);
+
+            // Reload facts to include the new one
+            const updatedFacts = await loadFacts(userId, profileData.supabaseId);
+            setMemoryFacts(updatedFacts);
             return;
         }
 
@@ -169,11 +337,37 @@ ${conversationMemory}
 ═══════════════════════════════════════════════
 ` : '';
 
+            // Build structured facts context
+            const factsContext = buildFactsContext(memoryFacts);
+
+            // RAG: Search for similar past messages (semantic search)
+            let ragContext = '';
+            if (userId && profileData.supabaseId && currentInput.length > 10) {
+                try {
+                    const similarMessages = await searchSimilarMessages(
+                        userId,
+                        profileData.supabaseId,
+                        currentInput,
+                        5,  // limit
+                        0.6 // threshold
+                    );
+                    if (similarMessages.length > 0) {
+                        ragContext = buildRAGContext(similarMessages);
+                        console.log('[ExChat] RAG found', similarMessages.length, 'similar messages');
+                    }
+                } catch (err) {
+                    console.log('[ExChat] RAG search failed:', err);
+                }
+            }
+
             if (profileData.masterPrompt) {
-                const recentContext = messages.slice(-6).map(m =>
+                // Use last 20 messages for context
+                const recentContext = messages.slice(-20).map(m =>
                     `${m.role === 'user' ? userName : profileData.exName}: ${m.content}`
                 ).join('\n');
-                systemPrompt = `${profileData.masterPrompt}\n${memoryContext}\nCONTEXTO RECIENTE:\n${recentContext}\n\nMENSAJE ACTUAL: "${currentInput}"\n\nRESPONDE (sin poner tu nombre antes):`;
+
+                // Full context: Master prompt + Facts + Past summaries + RAG + Memory + Recent
+                systemPrompt = `${profileData.masterPrompt}\n${factsContext}\n${pastSummaries}\n${ragContext}\n${memoryContext}\nCONTEXTO RECIENTE:\n${recentContext}\n\nMENSAJE ACTUAL: "${currentInput}"\n\nRESPONDE (sin poner tu nombre antes):`;
             } else {
                 systemPrompt = buildEnhancedPrompt(profileData, userName, currentInput, messages);
             }
@@ -185,9 +379,40 @@ ${conversationMemory}
             setMessages([...updatedMessages]);
             setIsTyping(true);
 
-            const result = await model.generateContent(systemPrompt);
-            const response = await result.response;
-            let fullText = response.text();
+            // NEW: Retry logic for API calls
+            let fullText = '';
+            let lastError: any = null;
+            const MAX_RETRIES = 3;
+
+            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                try {
+                    // Limit context to avoid token overflow
+                    const MAX_PROMPT_LENGTH = 20000; // ~5000 tokens
+                    let limitedPrompt = systemPrompt;
+                    if (systemPrompt.length > MAX_PROMPT_LENGTH) {
+                        // Keep the most recent context, trim old messages
+                        limitedPrompt = systemPrompt.slice(-MAX_PROMPT_LENGTH);
+                        console.log(`[ExChat] Prompt truncated from ${systemPrompt.length} to ${MAX_PROMPT_LENGTH} chars`);
+                    }
+
+                    const result = await model.generateContent(limitedPrompt);
+                    const response = await result.response;
+                    fullText = response.text();
+                    lastError = null;
+                    break; // Success, exit retry loop
+                } catch (err: any) {
+                    lastError = err;
+                    console.log(`[ExChat] Attempt ${attempt}/${MAX_RETRIES} failed:`, err.message);
+                    if (attempt < MAX_RETRIES) {
+                        // Wait before retrying (exponential backoff)
+                        await new Promise(r => setTimeout(r, 1000 * attempt));
+                    }
+                }
+            }
+
+            if (lastError) {
+                throw lastError;
+            }
 
             // Clean AI response - remove name prefixes like "Marian:" or "Marian: Marian:"
             const exNameLower = profileData.exName.toLowerCase();
@@ -215,15 +440,24 @@ ${conversationMemory}
             }
             await saveConversation(currentMessages);
         } catch (error: any) {
-            console.error('[ExChat] Error:', error);
-            let errorText = 'Error de conexión. Intenta de nuevo.';
+            console.error('[ExChat] Error after retries:', error);
+            let errorText = '❌ Error de conexión. ';
+            let canRetry = true;
+
             if (error.message === 'API_KEY_MISSING') {
                 errorText = '⚠️ Falta la clave API de Gemini. Contacta a soporte.';
+                canRetry = false;
             } else if (error.message?.includes('API key')) {
                 errorText = '🔑 Error de autenticación API.';
+                canRetry = false;
             } else if (error.message?.includes('quota')) {
-                errorText = '📊 Límite de uso excedido. Intenta más tarde.';
+                errorText = '📊 Límite de API excedido. Intenta en unos minutos.';
+            } else if (error.message?.includes('context') || error.message?.includes('token')) {
+                errorText = '📝 Conversación muy larga. Se resumirá el contexto automáticamente.';
+            } else {
+                errorText += 'Toca aquí para reintentar.';
             }
+
             const errorMessage: Message = {
                 role: 'assistant',
                 content: errorText,
@@ -231,6 +465,23 @@ ${conversationMemory}
                 seen: false
             };
             setMessages([...updatedMessages, errorMessage]);
+
+            // If can retry, show alert with option
+            if (canRetry && error.message !== 'API_KEY_MISSING') {
+                Alert.alert(
+                    'Error de conexión',
+                    '¿Quieres intentar enviar el mensaje de nuevo?',
+                    [
+                        { text: 'Cancelar', style: 'cancel' },
+                        {
+                            text: 'Reintentar', onPress: () => {
+                                setInputText(inputText || currentInput);
+                                // Will retry on next sendMessage call
+                            }
+                        }
+                    ]
+                );
+            }
         } finally {
             setIsTyping(false);
         }
@@ -263,7 +514,8 @@ ${conversationMemory}
                         </Text>
                     </View>
                 </View>
-                <View style={styles.headerRight} />
+                {/* Premium Upgrade Banner - only for free users */}
+                {!isPremium && <UpgradeBanner variant="minimal" />}
             </View>
 
             {/* Messages */}
@@ -344,7 +596,85 @@ ${conversationMemory}
                         </TouchableOpacity>
                     )}
                 </View>
+                {/* Message counter for free users */}
+                {!isPremium && (
+                    <Text style={styles.messageCounter}>
+                        {FREE_MESSAGE_LIMIT - userMessageCount > 0
+                            ? `${FREE_MESSAGE_LIMIT - userMessageCount} mensajes restantes`
+                            : 'Sin mensajes restantes'}
+                    </Text>
+                )}
             </View>
+
+            {/* LOGIN RECOMMENDATION MODAL */}
+            <Modal
+                visible={showLoginModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowLoginModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalIcon}>
+                            <Sparkles size={40} color="#a855f7" />
+                        </View>
+                        <Text style={styles.modalTitle}>¡Guarda tu conversación!</Text>
+                        <Text style={styles.modalText}>
+                            Crea una cuenta para que tu simulación y análisis se guarden automáticamente.
+                            Sin cuenta, podrías perder tus datos.
+                        </Text>
+                        <TouchableOpacity
+                            style={styles.modalPrimaryBtn}
+                            onPress={() => {
+                                setShowLoginModal(false);
+                                router.push('/auth');
+                            }}
+                        >
+                            <Text style={styles.modalPrimaryText}>Crear cuenta / Iniciar sesión</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.modalSecondaryBtn}
+                            onPress={() => setShowLoginModal(false)}
+                        >
+                            <Text style={styles.modalSecondaryText}>Continuar sin guardar</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* UPGRADE MODAL - When free messages run out */}
+            <Modal
+                visible={showUpgradeModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowUpgradeModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.upgradeEmoji}>🔥</Text>
+                        <Text style={styles.modalTitle}>Has llegado al límite</Text>
+                        <Text style={styles.modalText}>
+                            Has enviado {FREE_MESSAGE_LIMIT} mensajes en esta simulación.
+                            Para continuar chateando sin límites, actualiza a Premium.
+                        </Text>
+                        <TouchableOpacity
+                            style={styles.modalPrimaryBtn}
+                            onPress={() => {
+                                setShowUpgradeModal(false);
+                                router.push('/paywall');
+                            }}
+                        >
+                            <Text style={styles.modalPrimaryText}>Ver planes Premium</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.modalSecondaryBtn}
+                            onPress={() => setShowUpgradeModal(false)}
+                        >
+                            <Text style={styles.modalSecondaryText}>Quizás después</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -524,5 +854,76 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginLeft: 8,
+    },
+    messageCounter: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 11,
+        textAlign: 'center',
+        marginTop: 6,
+    },
+    // Modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    modalContent: {
+        backgroundColor: '#1c1c1e',
+        borderRadius: 20,
+        padding: 28,
+        width: '100%',
+        maxWidth: 340,
+        alignItems: 'center',
+    },
+    modalIcon: {
+        width: 70,
+        height: 70,
+        borderRadius: 35,
+        backgroundColor: 'rgba(168, 85, 247, 0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    upgradeEmoji: {
+        fontSize: 50,
+        marginBottom: 12,
+    },
+    modalTitle: {
+        color: 'white',
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 10,
+        textAlign: 'center',
+    },
+    modalText: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 14,
+        textAlign: 'center',
+        lineHeight: 20,
+        marginBottom: 20,
+    },
+    modalPrimaryBtn: {
+        backgroundColor: '#a855f7',
+        paddingHorizontal: 28,
+        paddingVertical: 14,
+        borderRadius: 12,
+        width: '100%',
+        marginBottom: 10,
+    },
+    modalPrimaryText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    modalSecondaryBtn: {
+        paddingHorizontal: 28,
+        paddingVertical: 12,
+    },
+    modalSecondaryText: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 14,
     },
 });

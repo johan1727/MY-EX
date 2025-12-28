@@ -10,7 +10,9 @@ import {
     KeyboardAvoidingView,
     Platform,
     Alert,
+    Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -23,6 +25,8 @@ import {
     Keyboard,
     Mic,
     Plus,
+    Image as ImageIcon,
+    X,
 } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import { BlurView } from 'expo-blur';
@@ -41,6 +45,8 @@ import { useSubscription } from '@/lib/SubscriptionContext';
 import { supabase } from '@/lib/supabase';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { buildEnhancedPrompt, fragmentMessage, calculateInitialDelay } from '@/lib/chatHelpers';
+import { loadProfiles, deleteProfile } from '@/lib/profileSync';
+import { syncConversation, saveConversationToCloud } from '@/lib/conversationSync';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -56,10 +62,12 @@ interface ExProfile {
 }
 
 interface Message {
+    id?: string;
     role: 'user' | 'assistant';
     content: string;
     timestamp: Date;
     seen?: boolean;
+    image?: string;
 }
 
 export default function MainScreen() {
@@ -83,15 +91,67 @@ export default function MainScreen() {
     const [isSearching, setIsSearching] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredMessages, setFilteredMessages] = useState<Message[]>([]);
+    const [dailyMessageCount, setDailyMessageCount] = useState(0);
+    const [showLimitWarning, setShowLimitWarning] = useState(false);
+    const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
     // Get subscription status to show upgrade banner
     const { tier } = useSubscription();
     const isPremium = tier !== 'survivor'; // survivor is free tier
 
+    // Free tier limits
+    const FREE_MESSAGE_LIMIT = 5;
+
+    // Get today's date key for storage
+    const getTodayKey = () => new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
     useEffect(() => {
         checkUserStatus();
         loadProfile();
+        loadDailyMessageCount();
+
+        // Safety timeout - if still loading after 10s, force completion
+        const safetyTimeout = setTimeout(() => {
+            if (loading) {
+                console.warn('[MainScreen] Safety timeout triggered - forcing load completion');
+                setLoading(false);
+            }
+        }, 10000);
+
+        return () => clearTimeout(safetyTimeout);
     }, []);
+
+    // Load daily message count from storage
+    const loadDailyMessageCount = async () => {
+        try {
+            const stored = await storage.getItem('daily_message_count');
+            if (stored) {
+                const data = JSON.parse(stored);
+                // Check if it's from today
+                if (data.date === getTodayKey()) {
+                    setDailyMessageCount(data.count);
+                    if (data.count >= FREE_MESSAGE_LIMIT - 1) {
+                        setShowLimitWarning(true);
+                    }
+                } else {
+                    // New day, reset count
+                    await storage.setItem('daily_message_count', JSON.stringify({ date: getTodayKey(), count: 0 }));
+                    setDailyMessageCount(0);
+                }
+            }
+        } catch (e) {
+            console.error('Error loading daily message count:', e);
+        }
+    };
+
+    // Save daily message count to storage
+    const saveDailyMessageCount = async (count: number) => {
+        try {
+            await storage.setItem('daily_message_count', JSON.stringify({ date: getTodayKey(), count }));
+        } catch (e) {
+            console.error('Error saving daily message count:', e);
+        }
+    };
 
     useEffect(() => {
         if (messages.length > 0) {
@@ -117,15 +177,18 @@ export default function MainScreen() {
                 const profile = JSON.parse(stored);
                 setCurrentProfile(profile);
 
-                // Load conversation
+                // Get current user for cloud sync
+                const { data: { user } } = await supabase.auth.getUser();
+
+                // Load conversation with cloud sync
                 const convKey = `exSimulator_conversation_${profile.id}`;
                 const savedConv = await storage.getItem(convKey);
+
+                let localMessages: any[] = [];
                 if (savedConv) {
                     const parsed = JSON.parse(savedConv);
-                    // Sanitize messages - fix corrupted {text, delay} objects
-                    const sanitizedMessages = parsed.map((m: any) => {
+                    localMessages = parsed.map((m: any) => {
                         let content = m.content;
-                        // If content is an object with text property, extract the text
                         if (content && typeof content === 'object' && content.text) {
                             content = content.text;
                         }
@@ -135,7 +198,27 @@ export default function MainScreen() {
                             timestamp: new Date(m.timestamp)
                         };
                     });
-                    setMessages(sanitizedMessages);
+                }
+
+                // Sync with cloud if user is logged in
+                if (user && !user.is_anonymous) {
+                    console.log('[MainScreen] Syncing conversation with cloud...');
+                    const { messages: syncedMessages } = await syncConversation(
+                        user.id,
+                        profile.id,
+                        localMessages
+                    );
+                    // Convert timestamps from number to Date
+                    const messagesWithDates = syncedMessages.map(m => ({
+                        ...m,
+                        timestamp: typeof m.timestamp === 'number' ? new Date(m.timestamp) : m.timestamp
+                    }));
+                    setMessages(messagesWithDates as Message[]);
+                    console.log(`[MainScreen] ✅ Loaded ${syncedMessages.length} messages (synced with cloud)`);
+                } else {
+                    // Guest mode - use local only
+                    setMessages(localMessages);
+                    console.log(`[MainScreen] ✅ Loaded ${localMessages.length} messages (local only - guest mode)`);
                 }
 
                 // Load memory
@@ -144,10 +227,18 @@ export default function MainScreen() {
                 if (savedMem) setConversationMemory(savedMem);
             }
 
-            // Load all profiles for side menu
-            const allStored = await storage.getItem('exSimulator_profiles');
-            if (allStored) {
-                setAllProfiles(JSON.parse(allStored));
+            // Load all profiles for side menu (from cloud if logged in)
+            const { data: { user } } = await supabase.auth.getUser();
+            const profiles = await loadProfiles(user?.id);
+            console.log('[DEBUG] Loaded profiles (local+cloud):', profiles.length);
+            console.log('[DEBUG] Profiles:', profiles.map((p: any) => p.exName));
+            setAllProfiles(profiles);
+
+            // If we have profiles from cloud but no current profile, set the first one
+            if (profiles.length > 0 && !stored) {
+                const firstProfile = profiles[0];
+                setCurrentProfile(firstProfile);
+                await storage.setItem('exSimulator_currentProfile', JSON.stringify(firstProfile));
             }
 
             // Check if user has done daily check-in today
@@ -155,6 +246,13 @@ export default function MainScreen() {
             const today = new Date().toDateString();
             if (lastCheckIn !== today) {
                 setCheckInVisible(true);
+            }
+
+            // Show sidebar on first visit to help users discover features
+            const hasSeenSidebar = await storage.getItem('hasSeenSidebar');
+            if (!hasSeenSidebar) {
+                setSidebarVisible(true);
+                await storage.setItem('hasSeenSidebar', 'true');
             }
 
         } catch (error) {
@@ -165,21 +263,42 @@ export default function MainScreen() {
     };
 
     const handleSwitchProfile = async (profileId: string) => {
+        console.log('[handleSwitchProfile] ========= INICIANDO CAMBIO DE PERFIL =========');
+        console.log('[handleSwitchProfile] Target profile ID:', profileId);
         setLoading(true);
         try {
+            // 0. PRIMERO: Guardar conversación actual si existe
+            if (currentProfile && messages.length > 0) {
+                console.log('[handleSwitchProfile] Guardando conversación actual antes de cambiar...');
+                const currentConvKey = `exSimulator_conversation_${currentProfile.id}`;
+                await storage.setItem(currentConvKey, JSON.stringify(messages));
+                console.log('[handleSwitchProfile] ✅ Conversación guardada:', messages.length, 'mensajes');
+            }
+
             // 1. Find the profile
+            console.log('[handleSwitchProfile] Buscando en', allProfiles.length, 'perfiles...');
             const targetProfile = allProfiles.find(p => p.id === profileId);
-            if (!targetProfile) return;
+            if (!targetProfile) {
+                console.error('[handleSwitchProfile] ❌ Perfil NO encontrado:', profileId);
+                console.log('[handleSwitchProfile] IDs disponibles:', allProfiles.map(p => p.id));
+                setLoading(false);
+                return;
+            }
+            console.log('[handleSwitchProfile] ✅ Perfil encontrado:', targetProfile.exName);
 
             // 2. Save current profile ID
             await storage.setItem('exSimulator_currentProfile', JSON.stringify(targetProfile));
             setCurrentProfile(targetProfile);
+            console.log('[handleSwitchProfile] ✅ Perfil actual actualizado en storage');
 
             // 3. Load conversation for this profile
             const convKey = `exSimulator_conversation_${profileId}`;
+            console.log('[handleSwitchProfile] Cargando conversación con key:', convKey);
             const savedConv = await storage.getItem(convKey);
+
             if (savedConv) {
                 const parsed = JSON.parse(savedConv);
+                console.log('[handleSwitchProfile] ✅ Conversación encontrada:', parsed.length, 'mensajes');
                 // Sanitize messages - fix corrupted {text, delay} objects
                 const sanitizedMessages = parsed.map((m: any) => {
                     let content = m.content;
@@ -195,20 +314,32 @@ export default function MainScreen() {
                 });
                 setMessages(sanitizedMessages);
             } else {
+                console.log('[handleSwitchProfile] ⚠️ Sin conversación previa - iniciando vacío');
                 setMessages([]);
             }
 
-            setSidebarVisible(false);
-
-            // 4. Force reload or re-render if needed (state update should suffice)
-            if (Platform.OS === 'web') {
-                window.location.reload();
+            // 4. Load memory for this profile
+            const memKey = `exSimulator_memory_${profileId}`;
+            const savedMem = await storage.getItem(memKey);
+            if (savedMem) {
+                setConversationMemory(savedMem);
+                console.log('[handleSwitchProfile] ✅ Memoria cargada');
             } else {
-                Alert.alert("Perfil cambiado", `Ahora chateas con ${targetProfile.exName}`);
+                setConversationMemory('');
+                console.log('[handleSwitchProfile] ⚠️ Sin memoria previa');
             }
 
+            setSidebarVisible(false);
+            console.log('[handleSwitchProfile] ========= CAMBIO COMPLETADO =========');
+
+            // 5. Show confirmation
+            if (Platform.OS !== 'web') {
+                Alert.alert("Perfil cambiado", `Ahora chateas con ${targetProfile.exName}`);
+            }
+            setLoading(false);
+
         } catch (error) {
-            console.error('Error switching profile:', error);
+            console.error('[handleSwitchProfile] ❌ ERROR:', error);
             setLoading(false);
         };
     };
@@ -266,6 +397,40 @@ export default function MainScreen() {
         }
     };
 
+    const handleDeleteProfileById = async (profileId: string) => {
+        try {
+            const profileToDelete = allProfiles.find(p => p.id === profileId);
+            if (!profileToDelete) return;
+
+            // Remove from all profiles (UI update first)
+            const updatedProfiles = allProfiles.filter(p => p.id !== profileId);
+            setAllProfiles(updatedProfiles);
+
+            // If deleting current profile, switch to another or clear
+            if (currentProfile?.id === profileId) {
+                if (updatedProfiles.length > 0) {
+                    setCurrentProfile(updatedProfiles[0]);
+                    await storage.setItem('exSimulator_currentProfile', JSON.stringify(updatedProfiles[0]));
+                } else {
+                    setCurrentProfile(null);
+                    await storage.removeItem('exSimulator_currentProfile');
+                }
+                setMessages([]);
+            }
+
+            // Delete from both local and cloud using profileSync
+            await deleteProfile(profileId, profileToDelete.supabaseId);
+
+            // Also remove conversation
+            await storage.removeItem(`exSimulator_conversation_${profileId}`);
+
+            console.log('[Index] ✅ Profile deleted:', profileId);
+            haptics.notification(haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+            console.error('Error deleting profile by ID:', error);
+        }
+    };
+
     const handleMoodSelect = async (mood: string, color: string) => {
         const today = new Date().toDateString();
         await storage.setItem('last_check_in_date', today);
@@ -279,22 +444,66 @@ export default function MainScreen() {
         }
     };
 
+    // Image picker function
+    const pickImage = async () => {
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                quality: 0.5,
+                base64: true,
+            });
+
+            if (!result.canceled && result.assets[0].base64) {
+                setSelectedImage(result.assets[0].base64);
+            }
+        } catch (error) {
+            console.error('Error picking image:', error);
+            Alert.alert('Error', 'No se pudo seleccionar la imagen');
+        }
+    };
+
     const sendMessage = async () => {
-        if (!inputText.trim() || !currentProfile) return;
+        if ((!inputText.trim() && !selectedImage) || !currentProfile) return;
+
+        // Check free tier limit
+        if (!isPremium && dailyMessageCount >= FREE_MESSAGE_LIMIT) {
+            setShowLimitWarning(true);
+            return;
+        }
 
         // 1. User message
         const userMsg: Message = {
+            id: Date.now().toString(),
             role: 'user',
             content: inputText.trim(),
             timestamp: new Date(),
             seen: true, // User sees their own message immediately
+            image: selectedImage ? `data:image/jpeg;base64,${selectedImage}` : undefined,
         };
 
         const newMessages = [...messages, userMsg];
         setMessages(newMessages);
+
+        const textToSend = inputText;
+        const imageToSend = selectedImage;
+
         setInputText('');
+        setSelectedImage(null);
         setIsTyping(true);
         haptics.impact(haptics.ImpactFeedbackStyle.Light);
+
+        // Increment message count for free tier and persist
+        if (!isPremium) {
+            const newCount = dailyMessageCount + 1;
+            setDailyMessageCount(newCount);
+            saveDailyMessageCount(newCount);
+
+            // Show warning when approaching limit
+            if (newCount >= FREE_MESSAGE_LIMIT - 1) {
+                setShowLimitWarning(true);
+            }
+        }
 
         // Save conversation synchronously
         const convKey = `exSimulator_conversation_${currentProfile.id}`;
@@ -302,11 +511,33 @@ export default function MainScreen() {
 
         // 2. Prepare context for AI
         const userName = 'Tú'; // The current user
-        const context = buildEnhancedPrompt(currentProfile, userName, userMsg.content, newMessages);
+        let contextPrompt = buildEnhancedPrompt(currentProfile, userName, userMsg.content || '(imagen enviada)', newMessages);
+
+        // Add image context to prompt if image was sent
+        if (imageToSend) {
+            contextPrompt += '\n\nNOTA: El usuario te está enviando una imagen. Describe brevemente tu reacción a la imagen y responde de forma natural PUEDES COMENTAR TAMBIEN ALGO.';
+        }
 
         try {
             const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
-            const result = await model.generateContent(context);
+            let result;
+
+            // Send multimodal if image exists
+            if (imageToSend) {
+                const promptParts = [
+                    { text: contextPrompt },
+                    {
+                        inlineData: {
+                            mimeType: "image/jpeg",
+                            data: imageToSend
+                        }
+                    }
+                ];
+                result = await model.generateContent(promptParts as any);
+            } else {
+                result = await model.generateContent(contextPrompt);
+            }
+
             const response = result.response;
             const text = response.text();
 
@@ -389,7 +620,9 @@ export default function MainScreen() {
 
     const handleNavigate = (path: any) => {
         setSidebarVisible(false);
-        router.push(path);
+        // Add '/' prefix if not present for proper routing
+        const route = path.startsWith('/') ? path : `/${path}`;
+        router.push(route);
     };
 
     if (loading) {
@@ -409,14 +642,24 @@ export default function MainScreen() {
             >
                 <StatusBar style="light" />
 
-                {/* Upgrade Banner for Free Users */}
-                {!isPremium && <UpgradeBanner />}
+                {/* Header with Menu Button */}
+                <SafeAreaView edges={['top']} style={styles.emptyHeaderSafe}>
+                    <View style={styles.emptyHeader}>
+                        <TouchableOpacity
+                            style={styles.menuButton}
+                            onPress={() => setSidebarVisible(true)}
+                        >
+                            <Menu size={24} color="#9CA3AF" />
+                        </TouchableOpacity>
+                        {!isPremium && <UpgradeBanner variant="header" />}
+                    </View>
+                </SafeAreaView>
 
                 <View style={styles.emptyContent}>
                     <View style={styles.iconCircle}>
                         <Brain size={48} color="#fff" />
                     </View>
-                    <Text style={styles.emptyTitle}>Simulador de Ex</Text>
+                    <Text style={styles.emptyTitle}>Simulador</Text>
                     <Text style={styles.emptySubtitle}>
                         Importa un chat de WhatsApp y deja que la IA recree su personalidad.
                     </Text>
@@ -441,10 +684,13 @@ export default function MainScreen() {
                 <Sidebar
                     visible={sidebarVisible}
                     onClose={() => setSidebarVisible(false)}
-                    currentProfileId={currentProfile ? (currentProfile as any).id : undefined}
+                    profile={null}
                     allProfiles={allProfiles}
-                    onSwitchProfile={handleSwitchProfile}
+                    onSelectProfile={handleSwitchProfile}
                     onNavigate={handleNavigate}
+                    onDelete={() => { }}
+                    isPremium={isPremium}
+                    isGuest={isGuest}
                 />
             </LinearGradient>
         );
@@ -458,39 +704,51 @@ export default function MainScreen() {
                 style={styles.background}
             />
 
-            {/* Simple Header with profile */}
-            <View style={styles.simpleHeader}>
-                <TouchableOpacity
-                    style={styles.headerMenuBtn}
-                    onPress={() => setSidebarVisible(true)}
-                >
-                    <Menu size={24} color="#9CA3AF" />
-                </TouchableOpacity>
-                <View style={styles.headerProfile}>
-                    <LinearGradient
-                        colors={['#404040', '#171717']}
-                        style={styles.headerAvatar}
+            {/* Simple Header with profile - wrapped in SafeAreaView */}
+            <SafeAreaView edges={['top']} style={styles.headerSafe}>
+                <View style={styles.simpleHeader}>
+                    <TouchableOpacity
+                        style={styles.headerMenuBtn}
+                        onPress={() => setSidebarVisible(true)}
                     >
-                        <Text style={styles.headerAvatarText}>
-                            {(currentProfile?.exName || 'E').charAt(0).toUpperCase()}
-                        </Text>
-                    </LinearGradient>
-                    <View style={styles.headerInfo}>
-                        <Text style={styles.headerName}>{currentProfile?.exName || 'Ex'}</Text>
+                        <Menu size={24} color="#9CA3AF" />
+                    </TouchableOpacity>
+                    <View style={styles.headerProfile}>
+                        <LinearGradient
+                            colors={['#404040', '#171717']}
+                            style={styles.headerAvatar}
+                        >
+                            <Text style={styles.headerAvatarText}>
+                                {(currentProfile?.exName || 'E').charAt(0).toUpperCase()}
+                            </Text>
+                        </LinearGradient>
+                        <View style={styles.headerInfo}>
+                            <Text style={styles.headerName}>{currentProfile?.exName || 'Ex'}</Text>
+                        </View>
                     </View>
+                    <View style={{ width: 40 }} />
                 </View>
-                <View style={{ width: 40 }} />
-            </View>
+            </SafeAreaView>
+
+            {/* Limit Warning for Free Users */}
+            {showLimitWarning && !isPremium && (
+                <UpgradeBanner
+                    variant="limit-warning"
+                    remainingMessages={Math.max(0, FREE_MESSAGE_LIMIT - dailyMessageCount)}
+                    onDismiss={() => setShowLimitWarning(false)}
+                />
+            )}
 
             {/* Upgrade Banner for Free Users */}
-            {!isPremium && <UpgradeBanner />}
+            {!isPremium && !showLimitWarning && <UpgradeBanner />}
 
-            {/* Daily Check-in Modal */}
+            {/* Daily Check-in Modal - DISABLED for now
             <DailyCheckIn
                 visible={checkInVisible}
                 onClose={() => setCheckInVisible(false)}
                 onSelectMood={handleMoodSelect}
             />
+            */}
 
             {/* Main Content */}
             <KeyboardAvoidingView
@@ -547,7 +805,8 @@ export default function MainScreen() {
                                 style={styles.promptButton}
                                 onPress={() => setInputText('Necesito aclarar algo contigo...')}
                             >
-                                <Text style={styles.promptButtonText}>? Aclarar algo</Text>
+                                <Flag size={14} color="#fff" />
+                                <Text style={styles.promptButtonText}>Aclarar algo</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -586,14 +845,24 @@ export default function MainScreen() {
                                                 : { backgroundColor: CHAT_THEMES[chatTheme].bubbleEx }
                                         ]}
                                     >
-                                        <Text style={[
-                                            styles.messageText,
-                                            msg.role === 'user'
-                                                ? { color: CHAT_THEMES[chatTheme].textUser }
-                                                : { color: CHAT_THEMES[chatTheme].textEx }
-                                        ]}>
-                                            {msg.content}
-                                        </Text>
+                                        {/* Display image if present */}
+                                        {msg.image && (
+                                            <Image
+                                                source={{ uri: msg.image }}
+                                                style={styles.messageImage}
+                                                resizeMode="cover"
+                                            />
+                                        )}
+                                        {msg.content ? (
+                                            <Text style={[
+                                                styles.messageText,
+                                                msg.role === 'user'
+                                                    ? { color: CHAT_THEMES[chatTheme].textUser }
+                                                    : { color: CHAT_THEMES[chatTheme].textEx }
+                                            ]}>
+                                                {msg.content}
+                                            </Text>
+                                        ) : null}
                                         <View style={styles.messageFooter}>
                                             <Text style={[
                                                 styles.timestamp,
@@ -634,12 +903,28 @@ export default function MainScreen() {
                 {/* Bottom Input (only when in chat mode) */}
                 {messages.length > 0 && (
                     <SafeAreaView edges={['bottom']} style={styles.inputSafe}>
+                        {/* Image Preview */}
+                        {selectedImage && (
+                            <View style={styles.imagePreviewContainer}>
+                                <Image
+                                    source={{ uri: `data:image/jpeg;base64,${selectedImage}` }}
+                                    style={styles.imagePreview}
+                                />
+                                <TouchableOpacity
+                                    style={styles.removeImageButton}
+                                    onPress={() => setSelectedImage(null)}
+                                >
+                                    <X size={12} color="#fff" />
+                                </TouchableOpacity>
+                            </View>
+                        )}
                         <View style={styles.inputContainer}>
+                            {/* Image picker button */}
                             <TouchableOpacity
-                                style={styles.attachButton}
-                                onPress={() => router.push('/tools/ex-simulator/import')}
+                                style={styles.imageButton}
+                                onPress={pickImage}
                             >
-                                <Plus size={24} color="#9CA3AF" />
+                                <ImageIcon size={22} color="#9ca3af" />
                             </TouchableOpacity>
 
                             <TextInput
@@ -654,10 +939,10 @@ export default function MainScreen() {
                             <TouchableOpacity
                                 style={[
                                     styles.sendButton,
-                                    !inputText.trim() && { backgroundColor: '#333' }
+                                    (!inputText.trim() && !selectedImage) && { backgroundColor: '#333' }
                                 ]}
                                 onPress={sendMessage}
-                                disabled={isTyping || !inputText.trim()}
+                                disabled={isTyping || (!inputText.trim() && !selectedImage)}
                             >
                                 <Send size={20} color="#fff" />
                             </TouchableOpacity>
@@ -677,6 +962,7 @@ export default function MainScreen() {
                 messageContent={reportMessageContent}
             />
 
+
             <Sidebar
                 visible={sidebarVisible}
                 onClose={() => setSidebarVisible(false)}
@@ -685,7 +971,10 @@ export default function MainScreen() {
                 onSelectProfile={handleSwitchProfile}
                 onNavigate={handleNavigate}
                 onDelete={handleDeleteProfile}
+                onDeleteProfile={handleDeleteProfileById}
                 onEditProfile={handleEditProfile}
+                isPremium={isPremium}
+                isGuest={isGuest}
             />
         </View>
     );
@@ -713,55 +1002,80 @@ const styles = StyleSheet.create({
     emptyContainer: {
         flex: 1,
     },
+    emptyHeaderSafe: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
+    },
+    emptyHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+    },
+    menuButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 8,
+        backgroundColor: 'transparent',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     emptyContent: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         padding: 24,
+        marginTop: -60,
     },
     iconCircle: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: '#333',
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: 'rgba(255,255,255,0.1)',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 20,
     },
     emptyTitle: {
         color: '#fff',
-        fontSize: 24,
-        fontWeight: 'bold',
-        marginBottom: 12,
+        fontSize: 20,
+        fontWeight: '600',
+        marginBottom: 8,
         textAlign: 'center',
     },
     emptySubtitle: {
-        color: '#999',
-        fontSize: 16,
+        color: '#6b7280',
+        fontSize: 14,
         textAlign: 'center',
-        marginBottom: 32,
-        lineHeight: 24,
+        marginBottom: 28,
+        lineHeight: 20,
+        maxWidth: 280,
     },
     importButton: {
         backgroundColor: '#fff',
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 24,
-        paddingVertical: 12,
-        borderRadius: 24,
-        marginBottom: 16,
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 8,
+        marginBottom: 12,
+        gap: 8,
     },
     importButtonText: {
         color: '#000',
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '600',
     },
     historyButton: {
-        padding: 12,
+        padding: 10,
     },
     historyButtonText: {
-        color: '#666',
-        fontSize: 14,
+        color: '#6b7280',
+        fontSize: 13,
     },
     messagesList: {
         flex: 1,
@@ -805,17 +1119,15 @@ const styles = StyleSheet.create({
     },
     avatarLetter: {
         color: '#fff',
-        fontSize: 12,
-        fontWeight: 'bold',
+        fontSize: 11,
+        fontWeight: '600',
     },
     messageBubble: {
-        padding: 12,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
+        padding: 14,
+        borderRadius: 16,
     },
     messageText: {
-        fontSize: 16,
+        fontSize: 15,
         lineHeight: 22,
     },
     messageFooter: {
@@ -832,21 +1144,19 @@ const styles = StyleSheet.create({
         marginLeft: 36,
     },
     typingText: {
-        color: '#666',
+        color: '#6b7280',
         fontSize: 12,
         fontStyle: 'italic',
     },
     inputSafe: {
-        backgroundColor: 'rgba(0,0,0,0.8)',
-        borderTopWidth: 1,
-        borderTopColor: '#333',
+        backgroundColor: '#171717',
     },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 12,
-        paddingTop: 12,
-        paddingBottom: 8,
+        paddingTop: 10,
+        paddingBottom: 10,
     },
     attachButton: {
         padding: 8,
@@ -854,56 +1164,57 @@ const styles = StyleSheet.create({
     },
     input: {
         flex: 1,
-        backgroundColor: '#1a1a1a',
-        borderRadius: 20,
-        paddingHorizontal: 16,
+        backgroundColor: '#2a2a2a',
+        borderRadius: 12,
+        paddingHorizontal: 14,
         paddingVertical: 10,
         color: '#fff',
-        fontSize: 16,
+        fontSize: 15,
         maxHeight: 100,
         marginRight: 8,
     },
     sendButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         backgroundColor: '#fff',
         justifyContent: 'center',
         alignItems: 'center',
     },
     // New styles for centered welcome design
+    headerSafe: {
+        backgroundColor: 'transparent',
+    },
     simpleHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
     },
     headerProfile: {
         flexDirection: 'row',
         alignItems: 'center',
     },
     headerAvatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
         justifyContent: 'center',
         alignItems: 'center',
     },
     headerAvatarText: {
         color: '#fff',
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '600',
     },
     headerInfo: {
-        marginLeft: 12,
+        marginLeft: 10,
     },
     headerName: {
         color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
+        fontSize: 15,
+        fontWeight: '500',
     },
     headerSubtitle: {
         color: '#9CA3AF',
@@ -989,5 +1300,36 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 13,
         fontWeight: '500',
+    },
+    // Image picker styles
+    imagePreviewContainer: {
+        paddingHorizontal: 16,
+        paddingTop: 8,
+    },
+    imagePreview: {
+        width: 80,
+        height: 80,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    removeImageButton: {
+        position: 'absolute',
+        top: 4,
+        left: 76,
+        backgroundColor: '#ef4444',
+        borderRadius: 10,
+        padding: 4,
+    },
+    imageButton: {
+        padding: 8,
+        marginRight: 4,
+    },
+    messageImage: {
+        width: '100%',
+        maxWidth: 180,
+        height: 150,
+        borderRadius: 10,
+        marginBottom: 4,
     },
 });

@@ -22,14 +22,14 @@ export default function ProfileScreen() {
             name: 'Gratuito',
             price: '$0',
             current: true,
-            features: ['1 perfil', '10 mensajes/día', 'Análisis básico']
+            features: ['Prueba las funciones básicas', 'Conversaciones limitadas', 'Un perfil de análisis']
         },
         {
             id: 'monthly',
             name: 'Premium Mensual',
             price: '$9.99/mes',
             current: false,
-            features: ['Perfiles ilimitados', 'Chat ilimitado', 'Memoria IA']
+            features: ['Perfiles ilimitados', 'REMI recuerda tu historia', 'Análisis avanzado']
         },
         {
             id: 'yearly',
@@ -37,7 +37,7 @@ export default function ProfileScreen() {
             price: '$99.99/año',
             current: false,
             badge: 'AHORRA 50%',
-            features: ['Todo de mensual', 'Updates exclusivas', 'Prioridad soporte']
+            features: ['Todo ilimitado', 'Funciones exclusivas', 'Soporte prioritario']
         },
     ];
 
