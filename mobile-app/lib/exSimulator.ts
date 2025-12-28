@@ -393,7 +393,8 @@ export function identifySenders(messages: ParsedMessage[], userName: string, exN
 }
 
 // Internal helper for retrying AI calls with timeout
-async function generateWithRetry(model: any, prompt: string, retries = 2, timeoutMs = 30000): Promise<string> {
+// INCREASED timeout for large file support (was 30s, now 90s)
+async function generateWithRetry(model: any, prompt: string, retries = 2, timeoutMs = 90000): Promise<string> {
     let lastError;
     for (let i = 0; i <= retries; i++) {
         try {
