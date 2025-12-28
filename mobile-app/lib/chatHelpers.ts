@@ -245,6 +245,10 @@ MENSAJE ACTUAL DE ${userName}: "${userMessage}"
 INSTRUCCIONES CRÍTICAS DE FORMATO:
 - NO incluyas tu nombre al inicio de la respuesta
 - NO escribas "${profileData.exName}:" ni nada similar
+- **NUNCA uses placeholders como {nombre}, {usuario}, {lugar}, {fecha}, etc.**
+- **RESPONDE CON PALABRAS REALES, no con placeholders**
+  Ejemplo MALO: "Hola {nombre}, ¿cómo has estado?"
+  Ejemplo BUENO: "Hola bb, ¿cómo has estado?" o "Hey amor" o simplemente "Hola"
 - Solo escribe el mensaje como si fuera un chat de WhatsApp
 - Responde directamente, natural, corto y auténtico como en tus ejemplos
 

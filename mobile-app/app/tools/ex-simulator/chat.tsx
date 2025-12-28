@@ -65,8 +65,8 @@ export default function ExSimulatorChat() {
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [hasShownLoginPrompt, setHasShownLoginPrompt] = useState(false);
 
-    // FREE USER LIMITS
-    const FREE_MESSAGE_LIMIT = 10;
+    // FREE USER LIMITS - SURVIVOR tier (Supabase)
+    const FREE_MESSAGE_LIMIT = 30; // simulator_chat_messages for survivor
     const userMessageCount = messages.filter(m => m.role === 'user').length;
 
     useEffect(() => {

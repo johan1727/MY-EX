@@ -47,6 +47,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { buildEnhancedPrompt, fragmentMessage, calculateInitialDelay } from '@/lib/chatHelpers';
 import { loadProfiles, deleteProfile } from '@/lib/profileSync';
 import { syncConversation, saveConversationToCloud } from '@/lib/conversationSync';
+import { AIDisclaimer } from '@/components/AIDisclaimer';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -102,7 +103,7 @@ export default function MainScreen() {
     const isPremium = tier !== 'survivor'; // survivor is free tier
 
     // Free tier limits
-    const FREE_MESSAGE_LIMIT = 5;
+    const FREE_MESSAGE_LIMIT = 90; // SURVIVOR tier (Supabase)
 
     // Get today's date key for storage
     const getTodayKey = () => new Date().toISOString().split('T')[0]; // YYYY-MM-DD
@@ -168,6 +169,12 @@ export default function MainScreen() {
 
     const loadProfile = async () => {
         try {
+            // Check if AI disclaimer was shown
+            const disclaimerSeen = await storage.getItem('ai_disclaimer_seen');
+            if (!disclaimerSeen) {
+                setShowAIDisclaimer(true);
+            }
+
             // Check if consent was accepted
             const consentAccepted = await storage.getItem('exSimulator_consentAccepted');
             if (!consentAccepted) {
@@ -1005,6 +1012,14 @@ export default function MainScreen() {
                 onEditProfile={handleEditProfile}
                 isPremium={isPremium}
                 isGuest={isGuest}
+            />
+            {/* AI Disclaimer Modal */}
+            <AIDisclaimer
+                visible={showAIDisclaimer}
+                onClose={async () => {
+                    setShowAIDisclaimer(false);
+                    await storage.setItem('ai_disclaimer_seen', 'true');
+                }}
             />
         </View>
     );
