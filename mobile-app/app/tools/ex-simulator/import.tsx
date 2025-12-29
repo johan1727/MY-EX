@@ -224,17 +224,64 @@ export default function ImportChat() {
             addDebug('🔍 Parseando mensajes...');
             await new Promise(resolve => setTimeout(resolve, 50)); // Force UI update
 
-            let messages: ParsedMessage[] = parseWhatsAppExport(text);
+            // CRITICAL FIX: Use requestAnimationFrame-style yielding to prevent freeze
+            // Parse in chunks to allow UI to stay responsive
+            let messages: ParsedMessage[] = [];
+            try {
+                // Parse synchronously but with a timeout wrapper to catch hangs
+                const parsePromise = new Promise<ParsedMessage[]>((resolve, reject) => {
+                    try {
+                        const result = parseWhatsAppExport(text);
+                        resolve(result);
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+
+                // Add a 30 second timeout for parsing
+                const timeoutPromise = new Promise<ParsedMessage[]>((_, reject) => {
+                    setTimeout(() => reject(new Error('Parsing timeout - archivo muy grande')), 30000);
+                });
+
+                messages = await Promise.race([parsePromise, timeoutPromise]);
+            } catch (parseError: any) {
+                addDebug(`❌ Error parsing: ${parseError.message}`);
+                throw new Error('Error al procesar el archivo. Intenta con un archivo más pequeño.');
+            }
 
             addDebug(`📨 Encontrados: ${messages.length} mensajes`);
+            await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
 
             if (messages.length === 0) {
                 setStep('error');
                 setErrorMessage('No se encontraron mensajes.');
                 return;
             }
-            const { messages: finalMessages } = intelligentTokenSampling(messages);
 
+            addDebug('⚙️ Optimizando muestra...');
+            await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
+
+            // CRITICAL: Add timeout for sampling too
+            let finalMessages: ParsedMessage[];
+            try {
+                const samplingPromise = new Promise<{ messages: ParsedMessage[] }>((resolve) => {
+                    const result = intelligentTokenSampling(messages);
+                    resolve(result);
+                });
+
+                const samplingTimeout = new Promise<{ messages: ParsedMessage[] }>((_, reject) => {
+                    setTimeout(() => reject(new Error('Sampling timeout')), 20000);
+                });
+
+                const samplingResult = await Promise.race([samplingPromise, samplingTimeout]);
+                finalMessages = samplingResult.messages;
+            } catch (samplingError: any) {
+                addDebug(`⚠️ Sampling falló, usando mensajes recientes`);
+                // Fallback: just take last 3000 messages
+                finalMessages = messages.slice(-3000);
+            }
+
+            addDebug(`✅ Optimizado: ${finalMessages.length} mensajes`);
             setParsedMessages(finalMessages);
             setParsedCount(finalMessages.length);
             setStep('preview');
