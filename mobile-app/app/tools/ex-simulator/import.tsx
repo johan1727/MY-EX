@@ -195,27 +195,38 @@ export default function ImportChat() {
             addDebug('📂 Archivo seleccionado');
             const file = result.assets[0];
 
+            // SMART FILE READING: Support ANY file size using blob.slice
             const response = await fetch(file.uri);
-            let text = await response.text();
-            addDebug(`📏 Tamaño: ${(text.length / 1024 / 1024).toFixed(1)}MB`);
+            const blob = await response.blob();
+            const fileSizeMB = blob.size / 1024 / 1024;
+            addDebug(`📏 Tamaño: ${fileSizeMB.toFixed(1)}MB`);
+            await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
 
-            // DRASTIC FIX: Use last 2MB max (VERY safe limit for mobile)
-            // This ensures the app doesn't freeze on ANY device
-            const MAX_TEXT_SIZE = 2 * 1024 * 1024; // 2MB - very safe limit
-            if (text.length > MAX_TEXT_SIZE) {
-                const originalSize = text.length;
-                const originalMB = (text.length / 1024 / 1024).toFixed(1);
-                addDebug(`⚠️ Archivo ${originalMB}MB detectado`);
-                // Take only the LAST 5MB (most recent messages - most relevant)
-                text = text.slice(-MAX_TEXT_SIZE);
+            // For 500k tokens, we need ~2 million chars (~10MB text max)
+            const MAX_READ_SIZE = 10 * 1024 * 1024; // 10MB
+            let text: string;
+
+            if (blob.size > MAX_READ_SIZE) {
+                // LARGE FILE: Read only the TAIL (most recent messages)
+                addDebug(`📦 Archivo grande - optimizando...`);
+                await new Promise(resolve => setTimeout(resolve, 50));
+
+                const tailBlob = blob.slice(blob.size - MAX_READ_SIZE);
+                text = await tailBlob.text();
+
                 // Find first complete line
                 const firstNewline = text.indexOf('\n');
-                if (firstNewline > 0) {
+                if (firstNewline > 0 && firstNewline < 1000) {
                     text = text.slice(firstNewline + 1);
                 }
-                setTruncatedInfo({ original: originalSize, used: text.length });
-                addDebug(`✂️ Optimizado: ${(text.length / 1024 / 1024).toFixed(1)}MB (${Math.round(text.length / originalSize * 100)}% más reciente)`);
+
+                setTruncatedInfo({ original: blob.size, used: text.length });
+                addDebug(`✂️ Usando últimos ${(text.length / 1024 / 1024).toFixed(1)}MB (mensajes recientes)`);
+            } else {
+                // NORMAL FILE: Read entire file
+                text = await blob.text();
             }
+            await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
 
             setRawText(text);
 
@@ -258,30 +269,31 @@ export default function ImportChat() {
                 return;
             }
 
-            addDebug('⚙️ Optimizando muestra...');
+            addDebug('⚙️ Optimizando muestra (500k tokens)...');
             await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
 
             // CRITICAL: Add timeout for sampling too
             let finalMessages: ParsedMessage[];
             try {
-                const samplingPromise = new Promise<{ messages: ParsedMessage[] }>((resolve) => {
-                    const result = intelligentTokenSampling(messages);
+                const samplingPromise = new Promise<{ messages: ParsedMessage[]; stats: any }>((resolve) => {
+                    const result = intelligentTokenSampling(messages, 500000); // Explicit 500k tokens
                     resolve(result);
                 });
 
-                const samplingTimeout = new Promise<{ messages: ParsedMessage[] }>((_, reject) => {
-                    setTimeout(() => reject(new Error('Sampling timeout')), 20000);
+                const samplingTimeout = new Promise<{ messages: ParsedMessage[]; stats: any }>((_, reject) => {
+                    setTimeout(() => reject(new Error('Sampling timeout')), 30000); // 30s timeout
                 });
 
                 const samplingResult = await Promise.race([samplingPromise, samplingTimeout]);
                 finalMessages = samplingResult.messages;
+                addDebug(`📊 ~${samplingResult.stats?.estimatedTokens?.toLocaleString() || 'N/A'} tokens`);
             } catch (samplingError: any) {
                 addDebug(`⚠️ Sampling falló, usando mensajes recientes`);
-                // Fallback: just take last 3000 messages
-                finalMessages = messages.slice(-3000);
+                // Fallback: take last 25000 messages (enough for good analysis)
+                finalMessages = messages.slice(-25000);
             }
 
-            addDebug(`✅ Optimizado: ${finalMessages.length} mensajes`);
+            addDebug(`✅ Listo: ${finalMessages.length.toLocaleString()} mensajes`);
             setParsedMessages(finalMessages);
             setParsedCount(finalMessages.length);
             setStep('preview');
