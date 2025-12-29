@@ -116,23 +116,68 @@ export default function ImportChat() {
                         } else {
                             // Regular text file - read as string
                             addDebug('📄 Archivo de texto detectado');
-                            text = await FileSystem.readAsStringAsync(cacheUri);
+
+                            // CRITICAL FIX: Check file size and read only the tail for large files
+                            const fileInfo = await FileSystem.getInfoAsync(cacheUri);
+                            const fileSizeBytes = (fileInfo as any).size || 0;
+                            const fileSizeMB = fileSizeBytes / 1024 / 1024;
+                            addDebug(`📏 Tamaño: ${fileSizeMB.toFixed(1)}MB`);
+                            await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
+
+                            const MAX_READ_SIZE = 10 * 1024 * 1024; // 10MB for 500k tokens
+
+                            if (fileSizeBytes > MAX_READ_SIZE) {
+                                // LARGE FILE: Read file as blob and take only tail
+                                addDebug(`📦 Archivo grande - optimizando...`);
+                                await new Promise(resolve => setTimeout(resolve, 50));
+
+                                const response = await fetch(cacheUri);
+                                const blob = await response.blob();
+                                const tailBlob = blob.slice(blob.size - MAX_READ_SIZE);
+                                text = await tailBlob.text();
+
+                                // Find first complete line
+                                const firstNewline = text.indexOf('\n');
+                                if (firstNewline > 0 && firstNewline < 1000) {
+                                    text = text.slice(firstNewline + 1);
+                                }
+                                addDebug(`✂️ Usando últimos ${(text.length / 1024 / 1024).toFixed(1)}MB`);
+                            } else {
+                                // Normal file - read entire thing
+                                text = await FileSystem.readAsStringAsync(cacheUri);
+                            }
                         }
 
-                        addDebug(`📄 Texto final: ${text.length} caracteres`);
+                        addDebug(`📄 Texto final: ${(text.length / 1024 / 1024).toFixed(2)}MB`);
+                        await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
 
                         if (text && text.length > 50) {
                             setRawText(text);
                             addDebug('🔍 Parseando mensajes de WhatsApp...');
+                            await new Promise(resolve => setTimeout(resolve, 100)); // Force UI update
+
                             const messages = parseWhatsAppExport(text);
-                            addDebug(`📨 Mensajes encontrados: ${messages.length}`);
+                            addDebug(`📨 Mensajes encontrados: ${messages.length.toLocaleString()}`);
+                            await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
 
                             if (messages.length > 0) {
-                                const { messages: finalMessages } = intelligentTokenSampling(messages);
+                                addDebug('⚙️ Optimizando muestra (500k tokens)...');
+                                await new Promise(resolve => setTimeout(resolve, 50));
+
+                                let finalMessages;
+                                try {
+                                    const { messages: sampledMessages, stats } = intelligentTokenSampling(messages, 500000);
+                                    finalMessages = sampledMessages;
+                                    addDebug(`📊 ~${stats?.estimatedTokens?.toLocaleString() || 'N/A'} tokens`);
+                                } catch (samplingError) {
+                                    addDebug('⚠️ Fallback: últimos 25k mensajes');
+                                    finalMessages = messages.slice(-25000);
+                                }
+
                                 setParsedMessages(finalMessages);
                                 setParsedCount(finalMessages.length);
                                 setStep('preview');
-                                addDebug(`✅ ${finalMessages.length} mensajes listos para análisis`);
+                                addDebug(`✅ ${finalMessages.length.toLocaleString()} mensajes listos`);
                             } else {
                                 setStep('error');
                                 setErrorMessage('No se encontraron mensajes de WhatsApp. Asegúrate de exportar el chat como texto (.txt).');
