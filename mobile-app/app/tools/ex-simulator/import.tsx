@@ -199,13 +199,13 @@ export default function ImportChat() {
             let text = await response.text();
             addDebug(`📏 Tamaño: ${(text.length / 1024 / 1024).toFixed(1)}MB`);
 
-            // LIMIT: Use last 15MB max (supports large WhatsApp exports)
-            // intelligentTokenSampling will further optimize this
-            const MAX_TEXT_SIZE = 15 * 1024 * 1024; // 15MB
+            // LIMIT: Use last 5MB max (prevents UI blocking on Android)
+            // Reduced from 15MB for performance - intelligentTokenSampling still optimizes further
+            const MAX_TEXT_SIZE = 5 * 1024 * 1024; // 5MB - safe limit for mobile
             if (text.length > MAX_TEXT_SIZE) {
                 const originalSize = text.length;
-                addDebug(`⚠️ Archivo muy grande, optimizando...`);
-                // Take only the LAST 15MB (most recent messages)
+                addDebug(`⚠️ Archivo muy grande (${(text.length / 1024 / 1024).toFixed(1)}MB), optimizando...`);
+                // Take only the LAST 5MB (most recent messages - most relevant)
                 text = text.slice(-MAX_TEXT_SIZE);
                 // Find first complete line
                 const firstNewline = text.indexOf('\n');
@@ -213,7 +213,7 @@ export default function ImportChat() {
                     text = text.slice(firstNewline + 1);
                 }
                 setTruncatedInfo({ original: originalSize, used: text.length });
-                addDebug(`✂️ Optimizado: ${(text.length / 1024 / 1024).toFixed(1)}MB`);
+                addDebug(`✂️ Optimizado: ${(text.length / 1024 / 1024).toFixed(1)}MB (${Math.round(text.length / originalSize * 100)}% más reciente)`);
             }
 
             setRawText(text);
