@@ -196,8 +196,31 @@ export function intelligentTokenSampling(
 ): SamplingResult {
     console.log(`[TokenSampling] Starting with ${messages.length} messages`);
 
-    // Calculate total tokens
-    const totalTokens = messages.reduce((sum, msg) => sum + estimateTokens(msg), 0);
+    // CRITICAL: Pre-limit to prevent UI freeze with very large arrays (>50k messages)
+    // With 200k messages, iterating takes too long. Pre-sample first.
+    const MAX_MESSAGES_TO_PROCESS = 30000; // Max messages before pre-sampling
+    let workingMessages = messages;
+
+    if (messages.length > MAX_MESSAGES_TO_PROCESS) {
+        console.log(`[TokenSampling] ⚠️ Very large array (${messages.length}), pre-sampling...`);
+        // Take: first 5k + middle 10k (random) + last 15k (most important = recent)
+        const first = messages.slice(0, 5000);
+        const last = messages.slice(-15000);
+        // Take 10k from the middle (spread out)
+        const middleStart = Math.floor(messages.length * 0.2);
+        const middleEnd = Math.floor(messages.length * 0.8);
+        const middleMessages = messages.slice(middleStart, middleEnd);
+        const middleStep = Math.max(1, Math.floor(middleMessages.length / 10000));
+        const middle: ParsedMessage[] = [];
+        for (let i = 0; i < middleMessages.length && middle.length < 10000; i += middleStep) {
+            middle.push(middleMessages[i]);
+        }
+        workingMessages = [...first, ...middle, ...last];
+        console.log(`[TokenSampling] Pre-sampled: ${workingMessages.length} messages (from ${messages.length})`);
+    }
+
+    // Calculate total tokens (now on reduced set)
+    const totalTokens = workingMessages.reduce((sum, msg) => sum + estimateTokens(msg), 0);
     console.log(`[TokenSampling] Estimated total tokens: ${totalTokens}`);
 
     // If within limit, use all messages
@@ -239,23 +262,23 @@ export function intelligentTokenSampling(
     };
 
     // 1. First messages (inicio de relación) - MINIMAL for performance
-    samples.first = messages.slice(0, Math.min(200, messages.length));
+    samples.first = workingMessages.slice(0, Math.min(200, workingMessages.length));
     console.log(`[TokenSampling] First: ${samples.first.length} messages`);
 
     // 2. Recent messages (estado actual) - MINIMAL for performance
-    samples.recent = messages.slice(-Math.min(500, messages.length));
+    samples.recent = workingMessages.slice(-Math.min(500, workingMessages.length));
     console.log(`[TokenSampling] Recent: ${samples.recent.length} messages`);
 
     // 3. Long messages - MINIMAL for performance
-    samples.long = filterLongMessages(messages, 200);
+    samples.long = filterLongMessages(workingMessages, 200);
     console.log(`[TokenSampling] Long: ${samples.long.length} messages`);
 
     // 4. Emotional messages - MINIMAL for performance
-    samples.emotional = filterEmotionalMessages(messages, 300);
+    samples.emotional = filterEmotionalMessages(workingMessages, 300);
     console.log(`[TokenSampling] Emotional: ${samples.emotional.length} messages`);
 
     // 5. Stratified random - REDUCED from 5k to 2k for performance
-    samples.random = stratifiedSample(messages, 2000);
+    samples.random = stratifiedSample(workingMessages, 2000);
     console.log(`[TokenSampling] Middle (random stratified): ${samples.random.length} messages`);
 
     // Merge and deduplicate
