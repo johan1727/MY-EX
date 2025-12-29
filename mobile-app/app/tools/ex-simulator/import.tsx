@@ -94,19 +94,56 @@ export default function ImportChat() {
                             await FileSystem.copyAsync({ from: sharedFileUri, to: cacheUri });
                         }
 
-                        // Read as base64 first to detect file type
-                        addDebug('🔍 Detectando tipo de archivo...');
-                        const base64Data = await FileSystem.readAsStringAsync(cacheUri, { encoding: FileSystem.EncodingType.Base64 });
+                        // CRITICAL FIX: Check file size FIRST before reading anything
+                        const fileInfo = await FileSystem.getInfoAsync(cacheUri);
+                        const fileSizeBytes = (fileInfo as any).size || 0;
+                        const fileSizeMB = fileSizeBytes / 1024 / 1024;
+                        addDebug(`📏 Tamaño: ${fileSizeMB.toFixed(1)}MB`);
+                        await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
 
-                        // Check if it's a ZIP file (starts with "PK" = 0x504B in base64 = "UEs")
-                        const isZip = base64Data.startsWith('UEs') || base64Data.startsWith('UEsD');
+                        // For ZIP detection, we only need the first few bytes
+                        // ZIP files start with "PK" (0x504B)
+                        // Read only first 4 bytes as base64 to detect file type
+                        addDebug('🔍 Detectando tipo de archivo...');
+                        await new Promise(resolve => setTimeout(resolve, 50));
+
+                        // Use fetch + blob.slice to read only first bytes
+                        const headerResponse = await fetch(cacheUri);
+                        const headerBlob = await headerResponse.blob();
+                        const headerSlice = headerBlob.slice(0, 100); // Just first 100 bytes
+                        const headerArrayBuffer = await headerSlice.arrayBuffer();
+                        const headerBytes = new Uint8Array(headerArrayBuffer);
+
+                        // Check for ZIP signature: 0x50 0x4B (PK)
+                        const isZip = headerBytes[0] === 0x50 && headerBytes[1] === 0x4B;
+                        addDebug(isZip ? '📦 ZIP detectado' : '📄 Texto detectado');
+                        await new Promise(resolve => setTimeout(resolve, 50));
 
                         if (isZip) {
-                            addDebug('📦 Archivo ZIP detectado, extrayendo...');
+                            addDebug('📦 Extrayendo contenido del ZIP...');
+                            await new Promise(resolve => setTimeout(resolve, 50));
+
+                            // For ZIP, we need to read the whole file but warn user
+                            if (fileSizeMB > 15) {
+                                addDebug(`⚠️ ZIP muy grande (${fileSizeMB.toFixed(0)}MB), puede tardar...`);
+                            }
+
+                            const base64Data = await FileSystem.readAsStringAsync(cacheUri, { encoding: FileSystem.EncodingType.Base64 });
                             const extractedText = await extractTextFromZip(base64Data);
+
                             if (extractedText) {
                                 text = extractedText;
-                                addDebug(`✅ Texto extraído del ZIP: ${text.length} caracteres`);
+                                // Apply tail limit if text is too large
+                                const MAX_TEXT_SIZE = 10 * 1024 * 1024; // 10MB
+                                if (text.length > MAX_TEXT_SIZE) {
+                                    addDebug(`✂️ Optimizando texto extraído...`);
+                                    text = text.slice(-MAX_TEXT_SIZE);
+                                    const firstNewline = text.indexOf('\n');
+                                    if (firstNewline > 0 && firstNewline < 1000) {
+                                        text = text.slice(firstNewline + 1);
+                                    }
+                                }
+                                addDebug(`✅ Texto extraído: ${(text.length / 1024 / 1024).toFixed(1)}MB`);
                             } else {
                                 setStep('error');
                                 setErrorMessage('No se encontró archivo de chat (.txt) dentro del ZIP. Intenta exportar sin medios.');
@@ -114,16 +151,10 @@ export default function ImportChat() {
                                 return;
                             }
                         } else {
-                            // Regular text file - read as string
-                            addDebug('📄 Archivo de texto detectado');
+                            // Regular text file - use optimized reading
+                            addDebug('📄 Leyendo archivo de texto...');
 
-                            // CRITICAL FIX: Check file size and read only the tail for large files
-                            const fileInfo = await FileSystem.getInfoAsync(cacheUri);
-                            const fileSizeBytes = (fileInfo as any).size || 0;
-                            const fileSizeMB = fileSizeBytes / 1024 / 1024;
-                            addDebug(`📏 Tamaño: ${fileSizeMB.toFixed(1)}MB`);
-                            await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
-
+                            // Use shared fileSizeBytes from above
                             const MAX_READ_SIZE = 10 * 1024 * 1024; // 10MB for 500k tokens
 
                             if (fileSizeBytes > MAX_READ_SIZE) {
