@@ -101,21 +101,17 @@ export default function ImportChat() {
                         addDebug(`📏 Tamaño: ${fileSizeMB.toFixed(1)}MB`);
                         await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
 
-                        // For ZIP detection, we only need the first few bytes
-                        // ZIP files start with "PK" (0x504B)
-                        // Read only first 4 bytes as base64 to detect file type
+                        // Detect file type by reading first bytes as base64
                         addDebug('🔍 Detectando tipo de archivo...');
                         await new Promise(resolve => setTimeout(resolve, 50));
 
-                        // Use fetch + blob.slice to read only first bytes
-                        const headerResponse = await fetch(cacheUri);
-                        const headerBlob = await headerResponse.blob();
-                        const headerSlice = headerBlob.slice(0, 100); // Just first 100 bytes
-                        const headerArrayBuffer = await headerSlice.arrayBuffer();
-                        const headerBytes = new Uint8Array(headerArrayBuffer);
+                        // Read as base64 to detect file type
+                        const base64Data = await FileSystem.readAsStringAsync(cacheUri, { encoding: FileSystem.EncodingType.Base64 });
+                        addDebug(`📦 Datos leídos: ${(base64Data.length / 1024).toFixed(0)}KB`);
+                        await new Promise(resolve => setTimeout(resolve, 50));
 
-                        // Check for ZIP signature: 0x50 0x4B (PK)
-                        const isZip = headerBytes[0] === 0x50 && headerBytes[1] === 0x4B;
+                        // Check for ZIP signature (base64 of "PK" = "UEs")
+                        const isZip = base64Data.startsWith('UEs') || base64Data.startsWith('UEsD');
                         addDebug(isZip ? '📦 ZIP detectado' : '📄 Texto detectado');
                         await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -123,12 +119,6 @@ export default function ImportChat() {
                             addDebug('📦 Extrayendo contenido del ZIP...');
                             await new Promise(resolve => setTimeout(resolve, 50));
 
-                            // For ZIP, we need to read the whole file but warn user
-                            if (fileSizeMB > 15) {
-                                addDebug(`⚠️ ZIP muy grande (${fileSizeMB.toFixed(0)}MB), puede tardar...`);
-                            }
-
-                            const base64Data = await FileSystem.readAsStringAsync(cacheUri, { encoding: FileSystem.EncodingType.Base64 });
                             const extractedText = await extractTextFromZip(base64Data);
 
                             if (extractedText) {
@@ -151,31 +141,27 @@ export default function ImportChat() {
                                 return;
                             }
                         } else {
-                            // Regular text file - use optimized reading
+                            // Regular text file - decode from base64
                             addDebug('📄 Leyendo archivo de texto...');
 
-                            // Use shared fileSizeBytes from above
-                            const MAX_READ_SIZE = 10 * 1024 * 1024; // 10MB for 500k tokens
+                            try {
+                                // Decode base64 to text
+                                text = atob(base64Data);
+                            } catch (decodeError) {
+                                // If atob fails, try reading as UTF-8 directly
+                                addDebug('⚠️ Intentando lectura directa...');
+                                text = await FileSystem.readAsStringAsync(cacheUri, { encoding: FileSystem.EncodingType.UTF8 });
+                            }
 
-                            if (fileSizeBytes > MAX_READ_SIZE) {
-                                // LARGE FILE: Read file as blob and take only tail
-                                addDebug(`📦 Archivo grande - optimizando...`);
-                                await new Promise(resolve => setTimeout(resolve, 50));
-
-                                const response = await fetch(cacheUri);
-                                const blob = await response.blob();
-                                const tailBlob = blob.slice(blob.size - MAX_READ_SIZE);
-                                text = await tailBlob.text();
-
-                                // Find first complete line
+                            // Apply tail limit if text is too large
+                            const MAX_TEXT_SIZE = 10 * 1024 * 1024; // 10MB
+                            if (text.length > MAX_TEXT_SIZE) {
+                                addDebug(`✂️ Optimizando (${fileSizeMB.toFixed(1)}MB → 10MB)...`);
+                                text = text.slice(-MAX_TEXT_SIZE);
                                 const firstNewline = text.indexOf('\n');
                                 if (firstNewline > 0 && firstNewline < 1000) {
                                     text = text.slice(firstNewline + 1);
                                 }
-                                addDebug(`✂️ Usando últimos ${(text.length / 1024 / 1024).toFixed(1)}MB`);
-                            } else {
-                                // Normal file - read entire thing
-                                text = await FileSystem.readAsStringAsync(cacheUri);
                             }
                         }
 
