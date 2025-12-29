@@ -83,9 +83,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.soyremi.app'
+    namespace 'com.soyremi.remi'
     defaultConfig {
-        applicationId 'com.soyremi.app'
+        applicationId 'com.soyremi.remi'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 3

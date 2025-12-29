@@ -1,4 +1,4 @@
-package com.soyremi.app
+package com.soyremi.remi
 
 import android.os.Build
 import android.os.Bundle

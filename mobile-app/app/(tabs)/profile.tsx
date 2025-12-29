@@ -296,7 +296,7 @@ export default function ProfileScreen() {
                             if (Platform.OS === 'ios') {
                                 Linking.openURL('itms-apps://itunes.apple.com/app/viewContentsUserReviews?id=YOUR_APP_ID');
                             } else {
-                                Linking.openURL('market://details?id=com.soyremi.app');
+                                Linking.openURL('market://details?id=com.soyremi.remi');
                             }
                         }} />
                         <SettingItem label="Compartir" icon={Share2} onPress={async () => {

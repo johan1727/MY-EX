@@ -35,7 +35,7 @@
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="my-ex-coach"/>
-        <data android:scheme="com.soyremi.app"/>
+        <data android:scheme="com.soyremi.remi"/>
       </intent-filter>
       <intent-filter android:autoVerify="true" data-generated="true">
         <action android:name="android.intent.action.VIEW"/>

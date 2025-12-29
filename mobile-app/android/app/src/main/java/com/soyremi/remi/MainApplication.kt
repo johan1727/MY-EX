@@ -1,4 +1,4 @@
-package com.soyremi.app
+package com.soyremi.remi
 
 import android.app.Application
 import android.content.res.Configuration
