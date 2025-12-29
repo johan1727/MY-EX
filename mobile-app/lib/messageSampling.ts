@@ -238,24 +238,24 @@ export function intelligentTokenSampling(
         random: []
     };
 
-    // 1. First messages (inicio de relación - crítico) - REDUCED for performance
-    samples.first = messages.slice(0, Math.min(500, messages.length));
+    // 1. First messages (inicio de relación) - MINIMAL for performance
+    samples.first = messages.slice(0, Math.min(200, messages.length));
     console.log(`[TokenSampling] First: ${samples.first.length} messages`);
 
-    // 2. Recent messages (estado actual - crítico) - REDUCED for performance
-    samples.recent = messages.slice(-Math.min(1000, messages.length));
+    // 2. Recent messages (estado actual) - MINIMAL for performance
+    samples.recent = messages.slice(-Math.min(500, messages.length));
     console.log(`[TokenSampling] Recent: ${samples.recent.length} messages`);
 
-    // 3. Long messages (más contexto) - REDUCED for performance
-    samples.long = filterLongMessages(messages, 500);
+    // 3. Long messages - MINIMAL for performance
+    samples.long = filterLongMessages(messages, 200);
     console.log(`[TokenSampling] Long: ${samples.long.length} messages`);
 
-    // 4. Emotional messages (palabras clave) - REDUCED for performance
-    samples.emotional = filterEmotionalMessages(messages, 1000);
+    // 4. Emotional messages - MINIMAL for performance
+    samples.emotional = filterEmotionalMessages(messages, 300);
     console.log(`[TokenSampling] Emotional: ${samples.emotional.length} messages`);
 
-    // 5. Stratified random from MIDDLE - REDUCED from 20k to 5k for performance
-    samples.random = stratifiedSample(messages, 5000);
+    // 5. Stratified random - REDUCED from 5k to 2k for performance
+    samples.random = stratifiedSample(messages, 2000);
     console.log(`[TokenSampling] Middle (random stratified): ${samples.random.length} messages`);
 
     // Merge and deduplicate

@@ -199,12 +199,13 @@ export default function ImportChat() {
             let text = await response.text();
             addDebug(`📏 Tamaño: ${(text.length / 1024 / 1024).toFixed(1)}MB`);
 
-            // LIMIT: Use last 5MB max (prevents UI blocking on Android)
-            // Reduced from 15MB for performance - intelligentTokenSampling still optimizes further
-            const MAX_TEXT_SIZE = 5 * 1024 * 1024; // 5MB - safe limit for mobile
+            // DRASTIC FIX: Use last 2MB max (VERY safe limit for mobile)
+            // This ensures the app doesn't freeze on ANY device
+            const MAX_TEXT_SIZE = 2 * 1024 * 1024; // 2MB - very safe limit
             if (text.length > MAX_TEXT_SIZE) {
                 const originalSize = text.length;
-                addDebug(`⚠️ Archivo muy grande (${(text.length / 1024 / 1024).toFixed(1)}MB), optimizando...`);
+                const originalMB = (text.length / 1024 / 1024).toFixed(1);
+                addDebug(`⚠️ Archivo ${originalMB}MB detectado`);
                 // Take only the LAST 5MB (most recent messages - most relevant)
                 text = text.slice(-MAX_TEXT_SIZE);
                 // Find first complete line
@@ -364,17 +365,21 @@ export default function ImportChat() {
                 // Don't return - let them continue if they want
             }
 
-            addDebug(`Mensajes a analizar: ${parsedMessages.length} (${exMessages.length} de ${exName})`);
+            addDebug(`✅ Mensajes a analizar: ${parsedMessages.length}`);
+            addDebug(`📨 De ${exName}: ${exMessages.length} mensajes`);
             await forceProgressUpdate(5);
+            addDebug('🧠 Preparando IA...');
+            await forceProgressUpdate(8);
 
             // Stage 1: Analyze personality (5-60%) with timeout
             let profile;
             try {
-                addDebug('Iniciando analyzePersonality...');
+                addDebug('🚀 Enviando a Gemini AI...');
+                await forceProgressUpdate(10);
 
-                // Timeout promise - 3 minutes max
+                // REDUCED timeout - 2 minutes max
                 const timeoutPromise = new Promise<never>((_, reject) => {
-                    setTimeout(() => reject(new Error('TIMEOUT: El análisis tardó más de 3 minutos. Intenta con un archivo más pequeño.')), 180000);
+                    setTimeout(() => reject(new Error('TIMEOUT: El análisis tardó más de 2 minutos. Intenta con menos mensajes.')), 120000);
                 });
 
                 // Race between analysis and timeout
