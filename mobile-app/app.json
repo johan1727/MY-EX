@@ -100,40 +100,7 @@
         "origin": false
       },
       "eas": {
-        "build": {
-          "experimental": {
-            "ios": {
-              "appExtensions": [
-                {
-                  "targetName": "ShareExtension",
-                  "bundleIdentifier": "com.myexcoach.app.share-extension",
-                  "entitlements": {
-                    "com.apple.security.application-groups": [
-                      "group.com.myexcoach.app"
-                    ]
-                  }
-                },
-                {
-                  "targetName": "ShareExtension",
-                  "bundleIdentifier": "com.myexcoach.app.share-extension"
-                },
-                {
-                  "targetName": "ShareExtension",
-                  "bundleIdentifier": "com.myexcoach.app.share-extension",
-                  "entitlements": {
-                    "com.apple.security.application-groups": [
-                      "group.com.myexcoach.app"
-                    ]
-                  }
-                },
-                {
-                  "targetName": "ShareExtension",
-                  "bundleIdentifier": "com.myexcoach.app.share-extension"
-                }
-              ]
-            }
-          }
-        },
+        "build": {},
         "projectId": "f2805993-b4c9-4dae-a0f8-a7494ffa235c"
       }
     },
