@@ -32,6 +32,14 @@ import {
     SimilarMessage
 } from '../../../lib/ragService';
 
+// NEW: Emotional simulation engine imports
+import {
+    getOrCreateSession,
+    processUserMessage as processEmotionalMessage,
+    saveSession
+} from '../../../lib/simulationEngine';
+import { SimulationSession } from '../../../lib/simulationState';
+
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 console.log('[ExChat] API Key check:', GEMINI_API_KEY ? `Present (${GEMINI_API_KEY.substring(0, 8)}...)` : 'MISSING');
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -59,6 +67,10 @@ export default function ExSimulatorChat() {
     const [memoryFacts, setMemoryFacts] = useState<MemoryFact[]>([]);
     const [userId, setUserId] = useState<string | null>(null);
     const [pastSummaries, setPastSummaries] = useState<string>(''); // RAG: past conversation summaries
+
+    // NEW: Emotional simulation state
+    const [emotionalSession, setEmotionalSession] = useState<SimulationSession | null>(null);
+    const [typingDelay, setTypingDelay] = useState<number>(2000);
 
     // NEW: Limits and modals
     const [showLoginModal, setShowLoginModal] = useState(false);
@@ -159,6 +171,17 @@ export default function ExSimulatorChat() {
             if (savedMemory) {
                 setConversationMemory(savedMemory);
                 console.log('[ExChat] Loaded memory:', savedMemory.substring(0, 100));
+            }
+
+            // NEW: Initialize emotional simulation session
+            if (user?.id && data.supabaseId) {
+                try {
+                    const session = await getOrCreateSession(data.supabaseId, user.id);
+                    setEmotionalSession(session);
+                    console.log('[ExChat] Emotional session loaded:', session.currentEmotion.primary);
+                } catch (err) {
+                    console.log('[ExChat] Emotional session load failed, using defaults');
+                }
             }
         } else {
             router.back();
@@ -372,8 +395,31 @@ ${conversationMemory}
                 systemPrompt = buildEnhancedPrompt(profileData, userName, currentInput, messages);
             }
 
-            const initialDelay = calculateInitialDelay(currentInput, profileData.profile.attachmentStyle, profileData.profile.emotionalTone);
-            await new Promise(resolve => setTimeout(resolve, initialDelay));
+            // NEW: Calculate emotional delay if session available
+            let emotionalDelay = 2000; // Default 2s
+            if (emotionalSession && profileData) {
+                try {
+                    // Process message through emotional engine to get delay
+                    const emotionalResult = await processEmotionalMessage(
+                        currentInput,
+                        profileData,
+                        emotionalSession,
+                        messages.map(m => ({ role: m.role, content: m.content }))
+                    );
+                    emotionalDelay = emotionalResult.delayMs;
+                    setEmotionalSession(emotionalResult.session);
+                    setTypingDelay(emotionalDelay);
+                    console.log('[ExChat] Emotional response:', emotionalResult.session.currentEmotion.primary, 'delay:', emotionalDelay);
+                } catch (err) {
+                    console.log('[ExChat] Emotional processing failed, using default delay');
+                    emotionalDelay = calculateInitialDelay(currentInput, profileData.profile?.attachmentStyle, profileData.profile?.emotionalTone);
+                }
+            } else {
+                emotionalDelay = calculateInitialDelay(currentInput, profileData.profile?.attachmentStyle, profileData.profile?.emotionalTone);
+            }
+
+            // Use the calculated delay (2-6 seconds)
+            await new Promise(resolve => setTimeout(resolve, emotionalDelay));
 
             updatedMessages[updatedMessages.length - 1].seen = true;
             setMessages([...updatedMessages]);

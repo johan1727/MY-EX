@@ -117,6 +117,8 @@ export async function getCurrentSubscriptionTier(): Promise<SubscriptionTier> {
             return SubscriptionTier.PHOENIX;
         } else if (customerInfo.entitlements.active['warrior']) {
             return SubscriptionTier.WARRIOR;
+        } else if (customerInfo.entitlements.active['explorer']) {
+            return SubscriptionTier.EXPLORER;
         }
 
         return SubscriptionTier.SURVIVOR;
@@ -145,6 +147,9 @@ async function syncSubscriptionToSupabase(customerInfo: CustomerInfo) {
         } else if (customerInfo.entitlements.active['warrior']) {
             tier = SubscriptionTier.WARRIOR;
             expiresAt = customerInfo.entitlements.active['warrior'].expirationDate || null;
+        } else if (customerInfo.entitlements.active['explorer']) {
+            tier = SubscriptionTier.EXPLORER;
+            expiresAt = customerInfo.entitlements.active['explorer'].expirationDate || null;
         } else {
             // Check if subscription expired or was cancelled
             const allEntitlements = Object.values(customerInfo.entitlements.all);

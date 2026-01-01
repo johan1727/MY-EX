@@ -21,7 +21,7 @@ if (Platform.OS !== 'web') {
 }
 
 // Definición de tipos
-export type SubscriptionTier = 'survivor' | 'warrior' | 'phoenix';
+export type SubscriptionTier = 'survivor' | 'explorer' | 'warrior' | 'phoenix';
 
 interface SubscriptionContextType {
     tier: SubscriptionTier;
@@ -45,8 +45,16 @@ const TIER_LIMITS = {
         export_data: false,
         ex_simulator: false,
     },
+    explorer: {
+        daily_messages: 750,
+        weekly_decodings: 75,
+        vault_access: true,
+        mood_journal: true,
+        export_data: true,
+        ex_simulator: true,
+    },
     warrior: {
-        daily_messages: -1, // Ilimitado
+        daily_messages: 1500,
         weekly_decodings: -1,
         vault_access: true,
         mood_journal: true,
@@ -211,6 +219,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             setTier('phoenix');
         } else if (info.entitlements.active['warrior']) {
             setTier('warrior');
+        } else if (info.entitlements.active['explorer']) {
+            setTier('explorer');
         } else {
             // Only revert to survivor if we are NOT on web (where we rely on Supabase)
             // or if we want to enforce RevenueCat's source of truth.

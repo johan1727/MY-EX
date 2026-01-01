@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ParsedMessage, ExProfile } from './exSimulator';
 import { intelligentTokenSampling, sampleForStage } from './messageSampling';
 
-const GEMINI_API_KEY = 'AIzaSyArs8uYXZvwFAwZ7IwGHaE7KK9x6O5iA9c'; // TODO: Move to env
+const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 /**

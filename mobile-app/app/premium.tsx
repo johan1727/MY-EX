@@ -1,57 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
+    ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Crown, Check, Sparkles, Brain, MessageCircle, Zap, Star, Flame } from 'lucide-react-native';
+import { ArrowLeft, Crown, Check, Sparkles, Star, Flame } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { getOfferings, purchasePackage } from '../lib/revenuecat';
+import { PurchasesPackage } from 'react-native-purchases';
+import { supabase } from '../lib/supabase';
 
 interface Plan {
     id: string;
     name: string;
     icon: any;
-    monthlyPrice: number;
-    yearlyPrice: number;
-    yearlyDiscount: number;
     color: string;
     features: string[];
     popular?: boolean;
     best?: boolean;
-    hasTrial?: boolean;
+    monthlyPackage?: PurchasesPackage;
+    yearlyPackage?: PurchasesPackage;
 }
 
 export default function PremiumScreen() {
     const router = useRouter();
-    const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('yearly');
+    const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
+    const [loading, setLoading] = useState(true);
+    const [purchasing, setPurchasing] = useState(false);
+    const [packages, setPackages] = useState<PurchasesPackage[]>([]);
 
-    const plans: Plan[] = [
-        {
-            id: 'starter',
-            name: 'Starter',
-            icon: Zap,
-            monthlyPrice: 4.99,
-            yearlyPrice: 29.99,
-            yearlyDiscount: 50,
-            color: '#22c55e',
-            features: [
-                'Chatea con REMI sobre tu proceso',
-                'Simula conversaciones con tu ex',
-                'Análisis básico de personalidad',
-            ],
-        },
+    // Static plan definitions - will be matched with RevenueCat packages
+    const planDefinitions: Omit<Plan, 'monthlyPackage' | 'yearlyPackage'>[] = [
         {
             id: 'explorer',
             name: 'Explorer',
             icon: Star,
-            monthlyPrice: 7.99,
-            yearlyPrice: 47.99,
-            yearlyDiscount: 50,
             color: '#3b82f6',
             features: [
                 'Límites más amplios de uso',
@@ -64,9 +54,6 @@ export default function PremiumScreen() {
             id: 'warrior',
             name: 'Warrior',
             icon: Flame,
-            monthlyPrice: 12.99,
-            yearlyPrice: 77.99,
-            yearlyDiscount: 50,
             color: '#f59e0b',
             features: [
                 'Uso extendido sin interrupciones',
@@ -75,30 +62,11 @@ export default function PremiumScreen() {
                 'Respuestas prioritarias',
             ],
             popular: true,
-            hasTrial: true,
-        },
-        {
-            id: 'premium',
-            name: 'Premium',
-            icon: Crown,
-            monthlyPrice: 19.99,
-            yearlyPrice: 119.99,
-            yearlyDiscount: 50,
-            color: '#a855f7',
-            features: [
-                'Límites muy extendidos',
-                'Contexto profundo en cada chat',
-                'Detección inteligente de red flags',
-                'Acceso anticipado a nuevas funciones',
-            ],
         },
         {
             id: 'phoenix',
             name: 'Phoenix',
             icon: Sparkles,
-            monthlyPrice: 29.99,
-            yearlyPrice: 179.99,
-            yearlyDiscount: 50,
             color: '#ec4899',
             features: [
                 '✨ Los límites más altos',
@@ -110,11 +78,108 @@ export default function PremiumScreen() {
         },
     ];
 
-    const handleSelectPlan = (plan: Plan) => {
-        const price = billingPeriod === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice;
-        console.log(`Selected ${plan.name} - $${price}/${billingPeriod === 'yearly' ? 'año' : 'mes'}`);
-        // TODO: Connect to RevenueCat
+    useEffect(() => {
+        loadOfferings();
+    }, []);
+
+    const loadOfferings = async () => {
+        try {
+            setLoading(true);
+            const offerings = await getOfferings();
+            if (offerings?.current?.availablePackages) {
+                setPackages(offerings.current.availablePackages);
+                console.log('📦 Loaded packages:', offerings.current.availablePackages.map(p => p.identifier));
+            }
+        } catch (error) {
+            console.error('Error loading offerings:', error);
+            Alert.alert('Error', 'No se pudieron cargar los planes. Intenta de nuevo.');
+        } finally {
+            setLoading(false);
+        }
     };
+
+    const getPackageForPlan = (planId: string, period: 'monthly' | 'yearly'): PurchasesPackage | undefined => {
+        // Match package identifiers like 'explorer_monthly', 'explorer_yearly', etc.
+        const suffix = period === 'monthly' ? 'monthly' : 'yearly';
+        return packages.find(pkg =>
+            pkg.identifier.toLowerCase().includes(planId.toLowerCase()) &&
+            pkg.identifier.toLowerCase().includes(suffix)
+        );
+    };
+
+    const getPackagePrice = (planId: string, period: 'monthly' | 'yearly'): string => {
+        const pkg = getPackageForPlan(planId, period);
+        if (pkg) {
+            return pkg.product.priceString;
+        }
+        return '---';
+    };
+
+    const handleSelectPlan = async (planId: string) => {
+        // CRITICAL: Verify user is logged in before allowing purchase
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user || user.is_anonymous) {
+            Alert.alert(
+                '🔐 Cuenta requerida',
+                'Para suscribirte a un plan premium, necesitas tener una cuenta. Tu suscripción se guardará en tu cuenta para que puedas acceder desde cualquier dispositivo.',
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                        text: 'Iniciar sesión',
+                        onPress: () => router.push('/auth')
+                    }
+                ]
+            );
+            return;
+        }
+
+        const pkg = getPackageForPlan(planId, billingPeriod);
+
+        if (!pkg) {
+            Alert.alert(
+                'Plan no disponible',
+                'Este plan no está disponible actualmente. Por favor intenta con otro plan.',
+                [{ text: 'OK' }]
+            );
+            return;
+        }
+
+        try {
+            setPurchasing(true);
+            console.log('🛒 Purchasing:', pkg.identifier, 'for user:', user.id);
+
+            const result = await purchasePackage(pkg);
+
+            if (result.success) {
+                Alert.alert(
+                    '🎉 ¡Compra exitosa!',
+                    'Tu suscripción ha sido activada. ¡Disfruta de todas las funciones premium!',
+                    [{ text: 'OK', onPress: () => router.back() }]
+                );
+            } else if (result.error !== 'cancelled') {
+                Alert.alert(
+                    'Error en la compra',
+                    result.error || 'Hubo un problema con la compra. Intenta de nuevo.',
+                    [{ text: 'OK' }]
+                );
+            }
+        } catch (error) {
+            console.error('Purchase error:', error);
+            Alert.alert('Error', 'Hubo un problema con la compra. Intenta de nuevo.');
+        } finally {
+            setPurchasing(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <View style={[styles.container, styles.loadingContainer]}>
+                <ActivityIndicator size="large" color="#f59e0b" />
+                <Text style={styles.loadingText}>Cargando planes...</Text>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -166,9 +231,10 @@ export default function PremiumScreen() {
 
                 {/* Plans */}
                 <View style={styles.plansContainer}>
-                    {plans.map((plan) => {
-                        const price = billingPeriod === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice;
+                    {planDefinitions.map((plan) => {
+                        const price = getPackagePrice(plan.id, billingPeriod);
                         const IconComponent = plan.icon;
+                        const hasPackage = getPackageForPlan(plan.id, billingPeriod) !== undefined;
 
                         return (
                             <TouchableOpacity
@@ -177,8 +243,10 @@ export default function PremiumScreen() {
                                     styles.planCard,
                                     plan.popular && styles.planCardPopular,
                                     plan.best && styles.planCardBest,
+                                    !hasPackage && styles.planCardDisabled,
                                 ]}
-                                onPress={() => handleSelectPlan(plan)}
+                                onPress={() => handleSelectPlan(plan.id)}
+                                disabled={purchasing || !hasPackage}
                             >
                                 {plan.popular && (
                                     <View style={styles.popularBadge}>
@@ -200,18 +268,12 @@ export default function PremiumScreen() {
 
                                 <View style={styles.planPricing}>
                                     <Text style={[styles.planPrice, { color: plan.color }]}>
-                                        ${price.toFixed(2)}
+                                        {price}
                                     </Text>
                                     <Text style={styles.planPeriod}>
                                         /{billingPeriod === 'yearly' ? 'año' : 'mes'}
                                     </Text>
                                 </View>
-
-                                {billingPeriod === 'yearly' && (
-                                    <Text style={styles.saveText}>
-                                        Ahorra {plan.yearlyDiscount}% vs mensual
-                                    </Text>
-                                )}
 
                                 <View style={styles.planFeatures}>
                                     {plan.features.map((feature, i) => (
@@ -222,41 +284,22 @@ export default function PremiumScreen() {
                                     ))}
                                 </View>
 
-                                <View style={[styles.selectBtn, { backgroundColor: plan.color }]}>
-                                    <Text style={styles.selectBtnText}>Elegir {plan.name}</Text>
+                                <View style={[styles.selectBtn, { backgroundColor: hasPackage ? plan.color : '#444' }]}>
+                                    {purchasing ? (
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    ) : (
+                                        <Text style={styles.selectBtnText}>
+                                            {hasPackage ? `Elegir ${plan.name}` : 'No disponible'}
+                                        </Text>
+                                    )}
                                 </View>
                             </TouchableOpacity>
                         );
                     })}
                 </View>
 
-                {/* Free Trial - 7 Days Warrior */}
-                <View style={styles.freeTier}>
-                    <View style={styles.trialBadge}>
-                        <Text style={styles.trialBadgeText}>🎁 PRUEBA GRATIS</Text>
-                    </View>
-                    <Text style={styles.freeTierTitle}>7 días gratis con Warrior</Text>
-                    <Text style={styles.freeTierDesc}>
-                        Obtén acceso completo a todas las funciones de Warrior durante 7 días. Sin compromiso, cancela cuando quieras.
-                    </Text>
-                    <View style={styles.trialFeatures}>
-                        <Text style={styles.trialFeature}>✓ Uso extendido sin interrupciones</Text>
-                        <Text style={styles.trialFeature}>✓ Respuestas detalladas y empáticas</Text>
-                        <Text style={styles.trialFeature}>✓ Decodificador de mensajes incluido</Text>
-                        <Text style={styles.trialFeature}>✓ Respuestas prioritarias</Text>
-                    </View>
-                    <TouchableOpacity style={styles.trialButton}>
-                        <LinearGradient
-                            colors={['#f59e0b', '#d97706']}
-                            style={styles.trialButtonGradient}
-                        >
-                            <Text style={styles.trialButtonText}>Comenzar Prueba Gratis</Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
-                </View>
-
                 <Text style={styles.disclaimer}>
-                    Se renovará automáticamente. Cancela cuando quieras.
+                    Se renovará automáticamente. Cancela cuando quieras desde Google Play.
                 </Text>
             </ScrollView>
         </View>
@@ -267,6 +310,15 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#0a0a0a',
+    },
+    loadingContainer: {
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        color: '#fff',
+        marginTop: 16,
+        fontSize: 16,
     },
     headerSafe: {
         backgroundColor: '#0a0a0a',
@@ -369,6 +421,9 @@ const styles = StyleSheet.create({
     planCardBest: {
         borderColor: '#ec4899',
     },
+    planCardDisabled: {
+        opacity: 0.5,
+    },
     popularBadge: {
         position: 'absolute',
         top: -10,
@@ -404,7 +459,7 @@ const styles = StyleSheet.create({
     planPricing: {
         flexDirection: 'row',
         alignItems: 'baseline',
-        marginBottom: 4,
+        marginBottom: 16,
     },
     planPrice: {
         fontSize: 28,
@@ -414,11 +469,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#6b7280',
         marginLeft: 4,
-    },
-    saveText: {
-        fontSize: 12,
-        color: '#22c55e',
-        marginBottom: 16,
     },
     planFeatures: {
         marginBottom: 16,
@@ -439,61 +489,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     selectBtnText: {
-        fontSize: 15,
-        fontWeight: '700',
-        color: '#fff',
-    },
-    freeTier: {
-        backgroundColor: 'rgba(168, 85, 247, 0.15)',
-        borderRadius: 16,
-        padding: 20,
-        marginTop: 20,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(168, 85, 247, 0.3)',
-    },
-    freeTierTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#a855f7',
-        marginBottom: 8,
-    },
-    freeTierDesc: {
-        fontSize: 14,
-        color: '#d1d5db',
-        textAlign: 'center',
-        marginBottom: 16,
-    },
-    trialBadge: {
-        backgroundColor: '#f59e0b',
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 12,
-        marginBottom: 12,
-    },
-    trialBadgeText: {
-        fontSize: 11,
-        fontWeight: '700',
-        color: '#000',
-    },
-    trialFeatures: {
-        marginBottom: 16,
-    },
-    trialFeature: {
-        fontSize: 13,
-        color: '#d1d5db',
-        marginBottom: 4,
-    },
-    trialButton: {
-        width: '100%',
-        borderRadius: 12,
-        overflow: 'hidden',
-    },
-    trialButtonGradient: {
-        paddingVertical: 14,
-        alignItems: 'center',
-    },
-    trialButtonText: {
         fontSize: 15,
         fontWeight: '700',
         color: '#fff',

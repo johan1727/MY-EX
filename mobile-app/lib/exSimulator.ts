@@ -248,6 +248,7 @@ export interface ExProfile {
     // === LEGACY (keeping for compatibility) ===
     attachmentStyle?: 'seguro' | 'ansioso' | 'evitativo' | 'desorganizado';
     messageSamples?: MessageSamples;
+    masterPrompt?: string; // Optional master prompt for advanced simulation
 }
 
 
@@ -392,6 +393,87 @@ export function identifySenders(messages: ParsedMessage[], userName: string, exN
     }));
 }
 
+/**
+ * DETECCIÓN INTELIGENTE DE PARTICIPANTES
+ * 
+ * Cuando el usuario escribe un apodo (ej: "mi amor") pero en el chat aparece
+ * un nombre diferente (ej: "Marian"), esta función usa IA para determinar
+ * cuál participante del chat corresponde a quien el usuario quiere simular.
+ */
+async function detectExSenderWithAI(
+    participants: string[],
+    userInputName: string,
+    sampleMessages: ParsedMessage[]
+): Promise<{ exSender: string; userSender: string; confidence: number }> {
+    console.log('[detectExSenderWithAI] Participants:', participants);
+    console.log('[detectExSenderWithAI] User input name:', userInputName);
+
+    // Si solo hay 2 participantes, es fácil
+    if (participants.length === 2) {
+        // Crear muestra de contexto
+        const contextSample = sampleMessages.slice(0, 30).map(m =>
+            `${m.sender}: ${m.content.substring(0, 100)}`
+        ).join('\n');
+
+        const model = genAI.getGenerativeModel({
+            model: 'gemini-2.0-flash-exp',
+            generationConfig: { temperature: 0.1, maxOutputTokens: 200 }
+        });
+
+        const prompt = `Hay una conversación entre estas 2 personas: ${participants.join(' y ')}.
+
+El usuario quiere simular a la persona que él/ella llama "${userInputName}" (puede ser un apodo, alias o nombre cariñoso).
+
+Muestra de mensajes:
+${contextSample}
+
+¿Cuál de los 2 participantes (${participants.join(' o ')}) es más probable que sea "${userInputName}"?
+
+Responde SOLO con JSON:
+{"exSender": "nombre exacto del participante a simular", "userSender": "nombre del otro participante", "confidence": 0.0-1.0}`;
+
+        try {
+            const result = await model.generateContent(prompt);
+            const response = result.response.text();
+            const jsonMatch = response.match(/\{[\s\S]*\}/);
+
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                console.log('[detectExSenderWithAI] AI result:', parsed);
+
+                // Validar que el nombre exista en los participantes
+                const validEx = participants.find(p =>
+                    p.toLowerCase().trim() === parsed.exSender?.toLowerCase().trim()
+                );
+                const validUser = participants.find(p =>
+                    p.toLowerCase().trim() === parsed.userSender?.toLowerCase().trim()
+                );
+
+                if (validEx && validUser) {
+                    return {
+                        exSender: validEx,
+                        userSender: validUser,
+                        confidence: parsed.confidence || 0.8
+                    };
+                }
+            }
+        } catch (e) {
+            console.warn('[detectExSenderWithAI] AI detection failed:', e);
+        }
+    }
+
+    // Fallback: asumir que el primer participante diferente al input es el ex
+    // Esto mantiene compatibilidad con el código anterior
+    const fallbackEx = participants[0];
+    const fallbackUser = participants.find(p => p !== fallbackEx) || 'Usuario';
+
+    return {
+        exSender: fallbackEx,
+        userSender: fallbackUser,
+        confidence: 0.5
+    };
+}
+
 // Internal helper for retrying AI calls with timeout
 // INCREASED timeout for large file support (was 30s, now 90s)
 async function generateWithRetry(model: any, prompt: string, retries = 2, timeoutMs = 90000): Promise<string> {
@@ -449,14 +531,43 @@ export async function analyzePersonality(
         senderCounts.set(name, (senderCounts.get(name) || 0) + 1);
     });
 
+    // Step 1: Try simple text matching first (fastest)
     const exNameLower = exName.toLowerCase().trim();
-    const exSenderName = Array.from(senderCounts.keys()).find(name => {
+    let exSenderName = Array.from(senderCounts.keys()).find(name => {
         const nameLower = name.toLowerCase().trim();
         return nameLower === exNameLower || nameLower.includes(exNameLower) || exNameLower.includes(nameLower);
     });
 
+    // Step 2: If simple matching fails, use AI to detect the correct participant
+    const allParticipants = Array.from(senderCounts.keys());
+    let userSenderName = 'Usuario';
+
     if (!exSenderName) {
-        throw new Error(`No se pudo identificar a "${exName}" en el chat.`);
+        console.log('[analyzePersonality] Simple matching failed, using AI detection...');
+        onProgress?.(8, 'Detectando participantes con IA...');
+
+        try {
+            const aiDetection = await detectExSenderWithAI(
+                allParticipants,
+                exName,
+                sampledMessages.slice(0, 50) // Solo primeros 50 mensajes para contexto
+            );
+
+            exSenderName = aiDetection.exSender;
+            userSenderName = aiDetection.userSender;
+
+            console.log(`[analyzePersonality] AI detected: ex="${exSenderName}", user="${userSenderName}", confidence=${aiDetection.confidence}`);
+
+            if (aiDetection.confidence < 0.6) {
+                console.warn('[analyzePersonality] Low confidence detection, may be inaccurate');
+            }
+        } catch (e) {
+            console.error('[analyzePersonality] AI detection failed:', e);
+            throw new Error(`No se pudo identificar a "${exName}" en el chat. Participantes detectados: ${allParticipants.join(', ')}`);
+        }
+    } else {
+        // Encontrado por matching simple - detectar el usuario
+        userSenderName = allParticipants.find(name => name !== exSenderName) || 'Usuario';
     }
 
     const exMessages = sampledMessages.filter(m => m.sender === exSenderName);
@@ -475,9 +586,7 @@ export async function analyzePersonality(
     // --- REQUEST 1: DEEP PSYCHOLOGICAL PROFILE ---
     onProgress?.(15, 'Analizando perfil psicológico profundo...');
 
-    // Identify the user (the other participant in the chat)
-    const allParticipants = Array.from(senderCounts.keys());
-    const userSenderName = allParticipants.find(name => name !== exSenderName) || 'Usuario';
+    // Note: allParticipants and userSenderName are already defined above from AI detection
 
     // Get sample of the full conversation with context
     const contextSample = sampledMessages.slice(0, 50).map(m => `${m.sender}: ${m.content.substring(0, 200)}`).join('\n');
@@ -601,49 +710,72 @@ HUELLA LINGÜÍSTICA:
 
     onProgress?.(95, 'Finalizando...');
 
-    // Combine all results
+    // Combine all results into ExProfile
     const profile: ExProfile = {
-        id: Date.now().toString(),
         exName: exName,
-        createdAt: new Date().toISOString(),
-        messageCount: messages.length,
-        profile: {
-            relationshipType: result1.relationshipType?.type || 'unknown',
-            confidence: result1.relationshipType?.confidence || 5,
-            evidence: result1.relationshipType?.evidence || [],
 
-            bigFive: result1.bigFive,
-            attachmentStyle: result1.attachment?.style,
-            attachment: result1.attachment,
-            emotionalTone: result1.emotionalTone?.primary, // Legacy field
-            emotionalToneAnalysis: result1.emotionalTone,
+        relationshipType: result1.relationshipType?.type || 'unknown',
 
-            communicationStyle: result1.communication?.style, // Legacy field
-            communication: result1.communication,
-            linguistics: result1.linguistics,
+        bigFive: result1.bigFive,
+        attachment: result1.attachment,
 
-            activityPatterns: result2.activityPatterns,
-            topics: result2.topics,
-            triggers: result2.triggers,
+        emotionalTone: result1.emotionalTone?.primary || 'variable',
 
-            commitmentLevel: result2.commitment?.level, // Legacy
-            commitment: result2.commitment,
-            conflictStyle: result2.conflict?.style, // Legacy
-            conflict: result2.conflict,
+        communicationStyle: result1.communication?.style || 'mixta',
+        commonPhrases: result1.communication?.commonPhrases || [],
+        commonEmojis: result1.linguistics?.commonEmojis || [],
 
-            affection: result3.affection,
-            stressResponse: result3.stress,
-
-            redFlags: result3.redFlags,
-            greenFlags: result3.greenFlags,
-            summary: result3.summary,
-            masterPrompt: result3.masterPrompt
+        loveLanguage: {
+            primary: 'palabras',
+            secondary: 'tiempo',
+            howExpressesLove: result1.communication?.expressionMethods || [],
+            howNeedsLove: result1.communication?.needsMethods || []
         },
+
+        emotionalIntelligence: result1.emotionalIntelligence || {
+            selfAwareness: 5,
+            selfRegulation: 5,
+            empathy: 5,
+            socialSkills: 5,
+            motivation: 5
+        },
+
+        mbtiPatterns: {
+            energySource: result1.bigFive.extraversion > 5 ? 'extrovertida' : 'introvertida',
+            informationStyle: result1.bigFive.openness > 5 ? 'conceptual' : 'detallista',
+            decisionStyle: result1.emotionalTone?.intensity > 5 ? 'emocional' : 'l�gica',
+            lifestyleStyle: result1.bigFive.conscientiousness > 5 ? 'estructurada' : 'flexible'
+        },
+
+        triggers: result2.triggers,
+        linguistics: result1.linguistics,
+
+        relationshipDynamics: {
+            powerDynamic: result2.powerDynamics?.style || 'igualitaria',
+            jealousyLevel: result2.jealousy?.level || 5,
+            trustDefault: result2.trust?.defaultLevel || 5,
+            conflictStyle: result2.conflict?.style || 'habla',
+            forgivenessStyle: result2.forgiveness?.style || 'con tiempo'
+        },
+
+        responsePatterns: result2.responsePatterns || {
+            whenHappy: [],
+            whenAngry: [],
+            whenSad: [],
+            whenJealous: [],
+            whenIgnored: [],
+            whenComplimented: []
+        },
+
+        topicsOfInterest: result2.topics || [],
+        redFlags: result3.redFlags || [],
+
+        // Optional fields from masterPrompt
         masterPrompt: result3.masterPrompt
     };
 
     const duration = Math.round((Date.now() - startTime) / 1000);
-    console.log(`[analyzePersonality] ? Analysis complete in ${duration}s`);
+    console.log(`[analyzePersonality] ✅ Analysis complete in ${duration}s`);
     onProgress?.(100, '¡Análisis completado!');
 
     return profile;
@@ -695,6 +827,43 @@ Responde SOLO con un JSON v�lido con esta estructura:
     }
 
     return messages;
+}
+
+/**
+ * Genera el prompt del sistema para simulateResponse
+ * Construye un prompt basado en el perfil psicológico del ex
+ */
+function generateSystemPrompt(profile: ExProfile, conversationHistory: ParsedMessage[]): string {
+    const recentMessages = conversationHistory.slice(-10).map(m =>
+        `${m.sender}: ${m.content}`
+    ).join('\n');
+
+    return `Eres ${profile.exName}. Simula sus respuestas naturales basándote en su personalidad:
+
+PERFIL PSICOLÓGICO:
+- Estilo de comunicación: ${profile.communicationStyle}
+- Tono emocional: ${profile.emotionalTone}
+- Apego: ${profile.attachment?.style || 'desconocido'}
+- Frases comunes: ${profile.commonPhrases?.slice(0, 5).join(', ') || 'ninguna'}
+- Emojis favoritos: ${profile.commonEmojis?.join(' ') || 'ninguno'}
+
+BIG FIVE:
+- Apertura: ${profile.bigFive?.openness}/10
+- Responsabilidad: ${profile.bigFive?.conscientiousness}/10  
+- Extroversión: ${profile.bigFive?.extraversion}/10
+- Amabilidad: ${profile.bigFive?.agreeableness}/10
+- Neuroticismo: ${profile.bigFive?.neuroticism}/10
+
+CONVERSACIÓN RECIENTE:
+${recentMessages || 'Sin historial'}
+
+INSTRUCCIONES:
+- Responde SOLO como ${profile.exName} respondería
+- Usa su vocabulario y estilo natural
+- NO uses frases formales o genéricas
+- Mantén coherencia con mensajes anteriores
+- Si estás enojado/a, tu tono debe reflejarlo
+- NO inventes fechas o eventos que no han pasado`;
 }
 
 // Simulate response from ex

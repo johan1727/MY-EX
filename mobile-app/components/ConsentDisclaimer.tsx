@@ -6,10 +6,14 @@ import {
     Modal,
     TouchableOpacity,
     ScrollView,
+    Dimensions,
+    SafeAreaView,
 } from 'react-native';
 import { AlertTriangle, Shield, Check, Brain } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { storage } from '@/lib/storage';
+
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface ConsentDisclaimerProps {
     visible: boolean;
@@ -24,92 +28,77 @@ export default function ConsentDisclaimer({ visible, onAccept }: ConsentDisclaim
 
     return (
         <Modal visible={visible} transparent animationType="fade">
-            <View style={styles.overlay}>
-                <View style={styles.modal}>
-                    <ScrollView showsVerticalScrollIndicator={false}>
-                        {/* Header */}
+            <SafeAreaView style={styles.safeArea}>
+                <View style={styles.overlay}>
+                    <View style={styles.modal}>
+                        {/* Header - Fixed at top */}
                         <View style={styles.header}>
                             <LinearGradient
                                 colors={['#f59e0b', '#ef4444']}
                                 style={styles.iconContainer}
                             >
-                                <AlertTriangle size={32} color="#fff" />
+                                <AlertTriangle size={18} color="#fff" />
                             </LinearGradient>
                             <Text style={styles.title}>Aviso Importante</Text>
-                            <Text style={styles.subtitle}>Lee antes de continuar</Text>
                         </View>
 
-                        {/* Disclaimers */}
-                        <View style={styles.section}>
-                            <View style={styles.disclaimer}>
-                                <Brain size={20} color="#a855f7" />
-                                <View style={styles.disclaimerContent}>
-                                    <Text style={styles.disclaimerTitle}>Contenido Generado por IA</Text>
-                                    <Text style={styles.disclaimerText}>
-                                        Todo el contenido de esta app es generado por inteligencia artificial.
-                                        Las respuestas son simulaciones y pueden contener errores o "alucinaciones".
-                                    </Text>
-                                </View>
-                            </View>
+                        {/* Scrollable Content - FLEX to take remaining space */}
+                        <ScrollView
+                            style={styles.scrollView}
+                            showsVerticalScrollIndicator={true}
+                            contentContainerStyle={styles.scrollContent}
+                            bounces={false}
+                        >
+                            <DisclaimerItem
+                                icon={<Brain size={14} color="#a855f7" />}
+                                title="Contenido IA"
+                                text="Respuestas simuladas, pueden contener errores."
+                            />
+                            <DisclaimerItem
+                                icon={<Shield size={14} color="#3b82f6" />}
+                                title="No es real"
+                                text="La IA NO suplanta a personas reales."
+                            />
+                            <DisclaimerItem
+                                icon={<AlertTriangle size={14} color="#f59e0b" />}
+                                title="Uso responsable"
+                                text="No para acosar ni contenido inapropiado."
+                            />
+                            <DisclaimerItem
+                                icon={<Shield size={14} color="#22c55e" />}
+                                title="Privacidad"
+                                text="No guardamos tus conversaciones."
+                            />
+                        </ScrollView>
 
-                            <View style={styles.disclaimer}>
-                                <Shield size={20} color="#3b82f6" />
-                                <View style={styles.disclaimerContent}>
-                                    <Text style={styles.disclaimerTitle}>No Representa a Personas Reales</Text>
-                                    <Text style={styles.disclaimerText}>
-                                        La IA NO representa ni suplanta a la persona real. Es una simulación
-                                        basada en patrones de texto con fines terapéuticos o de entretenimiento.
-                                    </Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.disclaimer}>
-                                <AlertTriangle size={20} color="#f59e0b" />
-                                <View style={styles.disclaimerContent}>
-                                    <Text style={styles.disclaimerTitle}>Responsabilidad del Usuario</Text>
-                                    <Text style={styles.disclaimerText}>
-                                        Tú eres responsable del contenido que subes. No uses esta app para
-                                        acosar, amenazar o generar contenido inapropiado.
-                                    </Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.disclaimer}>
-                                <Shield size={20} color="#22c55e" />
-                                <View style={styles.disclaimerContent}>
-                                    <Text style={styles.disclaimerTitle}>Privacidad de Datos</Text>
-                                    <Text style={styles.disclaimerText}>
-                                        Los chats que importas se procesan localmente y se envían a la API de
-                                        Google Gemini para análisis. No almacenamos tus conversaciones en
-                                        nuestros servidores.
-                                    </Text>
-                                </View>
-                            </View>
+                        {/* Footer - ALWAYS visible at bottom */}
+                        <View style={styles.footer}>
+                            <TouchableOpacity
+                                style={styles.acceptButton}
+                                onPress={handleAccept}
+                                activeOpacity={0.8}
+                            >
+                                <Check size={16} color="#fff" />
+                                <Text style={styles.acceptButtonText}>Entiendo y Acepto</Text>
+                            </TouchableOpacity>
                         </View>
-
-                        {/* Health Warning */}
-                        <View style={styles.healthWarning}>
-                            <Text style={styles.healthTitle}>⚠️ Aviso de Salud Mental</Text>
-                            <Text style={styles.healthText}>
-                                Esta app es una herramienta de práctica y autoconocimiento.
-                                NO reemplaza la terapia profesional. Si experimentas pensamientos
-                                de autolesión o angustia severa, por favor busca ayuda profesional.
-                            </Text>
-                        </View>
-
-                        {/* Accept Button */}
-                        <TouchableOpacity style={styles.acceptButton} onPress={handleAccept}>
-                            <Check size={20} color="#fff" />
-                            <Text style={styles.acceptButtonText}>Entiendo y Acepto</Text>
-                        </TouchableOpacity>
-
-                        <Text style={styles.footerText}>
-                            Al continuar, aceptas nuestros Términos de Servicio y Política de Privacidad.
-                        </Text>
-                    </ScrollView>
+                    </View>
                 </View>
-            </View>
+            </SafeAreaView>
         </Modal>
+    );
+}
+
+// Compact disclaimer item component
+function DisclaimerItem({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
+    return (
+        <View style={styles.disclaimer}>
+            {icon}
+            <View style={styles.disclaimerContent}>
+                <Text style={styles.disclaimerTitle}>{title}</Text>
+                <Text style={styles.disclaimerText}>{text}</Text>
+            </View>
+        </View>
     );
 }
 
@@ -124,105 +113,104 @@ export function AIGeneratedLabel() {
 }
 
 const styles = StyleSheet.create({
+    safeArea: {
+        flex: 1,
+    },
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        backgroundColor: 'rgba(0, 0, 0, 0.9)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
+        padding: 16,
     },
     modal: {
         backgroundColor: '#1a1a1a',
-        borderRadius: 24,
-        padding: 24,
-        maxHeight: '90%',
+        borderRadius: 16,
         width: '100%',
+        maxWidth: 400,
+        maxHeight: SCREEN_HEIGHT * 0.40, // Reduced to ensure button is always visible
+        minHeight: 250,
+        flexDirection: 'column',
     },
     header: {
+        flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 24,
+        padding: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#333',
+        gap: 10,
     },
     iconContainer: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 16,
     },
     title: {
-        fontSize: 24,
+        fontSize: 16,
         fontWeight: '700',
         color: '#fff',
     },
-    subtitle: {
-        fontSize: 14,
-        color: '#9ca3af',
-        marginTop: 4,
+    scrollView: {
+        flexGrow: 0,
+        flexShrink: 1,
     },
-    section: {
-        gap: 16,
-        marginBottom: 20,
+    scrollContent: {
+        padding: 12,
+        gap: 6,
     },
     disclaimer: {
         flexDirection: 'row',
-        backgroundColor: '#2a2a2a',
-        borderRadius: 12,
-        padding: 14,
-        gap: 12,
+        backgroundColor: '#252525',
+        borderRadius: 8,
+        padding: 8,
+        gap: 8,
+        alignItems: 'center',
     },
     disclaimerContent: {
         flex: 1,
     },
     disclaimerTitle: {
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: '600',
         color: '#fff',
-        marginBottom: 4,
     },
     disclaimerText: {
-        fontSize: 13,
+        fontSize: 10,
         color: '#9ca3af',
-        lineHeight: 19,
     },
     healthWarning: {
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-        borderWidth: 1,
-        borderColor: 'rgba(239, 68, 68, 0.3)',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 24,
-    },
-    healthTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#ef4444',
-        marginBottom: 8,
+        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+        borderRadius: 8,
+        padding: 10,
+        marginTop: 4,
     },
     healthText: {
-        fontSize: 13,
-        color: '#d1d5db',
-        lineHeight: 19,
+        fontSize: 11,
+        color: '#fca5a5',
+        textAlign: 'center',
+        fontWeight: '500',
+    },
+    footer: {
+        padding: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#333',
+        backgroundColor: '#1a1a1a',
     },
     acceptButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#22c55e',
-        borderRadius: 14,
-        paddingVertical: 16,
-        gap: 8,
-        marginBottom: 16,
+        borderRadius: 10,
+        paddingVertical: 12,
+        gap: 6,
     },
     acceptButtonText: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '600',
         color: '#fff',
-    },
-    footerText: {
-        fontSize: 12,
-        color: '#6b7280',
-        textAlign: 'center',
     },
     aiLabel: {
         flexDirection: 'row',

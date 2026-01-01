@@ -2,10 +2,8 @@ import { supabase } from './supabase';
 
 export enum SubscriptionTier {
     SURVIVOR = 'survivor',
-    STARTER = 'starter',
     EXPLORER = 'explorer',
     WARRIOR = 'warrior',
-    PREMIUM = 'premium',
     PHOENIX = 'phoenix'
 }
 
@@ -42,11 +40,11 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         color: '#9ca3af',
         features: [
             'Explora REMI gratis',
-            '30 mensajes cada 8 horas',
+            '20 mensajes cada 8 horas',
             'Una prueba del simulador'
         ],
         limits: {
-            dailyTokens: 6000,
+            dailyTokens: 4000,
             messageDecoder: 3,
             moodJournal: true,
             analytics: 'none',
@@ -55,32 +53,7 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
             vault: false,
             exportDiary: false,
             simulatorAnalyses: 1,
-            simulatorChatMessages: 30
-        }
-    },
-    [SubscriptionTier.STARTER]: {
-        name: 'Starter',
-        price: 2.49,
-        yearlyPrice: 20,
-        badge: 'Starter',
-        color: '#10b981',
-        features: [
-            'Chatea con REMI sobre tu proceso',
-            '450 mensajes cada 8 horas',
-            'Simula conversaciones con tu ex',
-            'Decodificador de mensajes semanal'
-        ],
-        limits: {
-            dailyTokens: 75000, // x5
-            messageDecoder: 30, // x5
-            moodJournal: true,
-            analytics: 'weekly',
-            panicButton: 'basic',
-            notifications: 30, // x5
-            vault: false,
-            exportDiary: false,
-            simulatorAnalyses: 45, // x5
-            simulatorChatMessages: -1
+            simulatorChatMessages: 20
         }
     },
     [SubscriptionTier.EXPLORER]: {
@@ -97,15 +70,15 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
             'Exporta tu diario emocional'
         ],
         limits: {
-            dailyTokens: 120000, // x5
-            messageDecoder: 75, // x5
+            dailyTokens: 120000,
+            messageDecoder: 75,
             moodJournal: true,
             analytics: 'weekly',
             panicButton: 'advanced',
-            notifications: 75, // x5
+            notifications: 75,
             vault: true,
             exportDiary: true,
-            simulatorAnalyses: 150, // x5
+            simulatorAnalyses: 150,
             simulatorChatMessages: -1
         }
     },
@@ -122,7 +95,7 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
             'Análisis diario de tu progreso'
         ],
         limits: {
-            dailyTokens: 150000, // x5
+            dailyTokens: 150000,
             messageDecoder: -1,
             moodJournal: true,
             analytics: 'weekly',
@@ -130,33 +103,6 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
             notifications: 75,
             vault: true,
             exportDiary: true,
-            simulatorAnalyses: -1,
-            simulatorChatMessages: -1
-        }
-    },
-    [SubscriptionTier.PREMIUM]: {
-        name: 'Premium',
-        price: 14.99,
-        yearlyPrice: 100,
-        badge: 'Premium',
-        color: '#8b5cf6',
-        features: [
-            '4,500 mensajes cada 8 horas',
-            'Contexto profundo en cada chat',
-            'Detección inteligente de red flags',
-            'Simulaciones de escenarios complejos',
-            'Acceso beta a nuevas funciones'
-        ],
-        limits: {
-            dailyTokens: 750000, // x5
-            messageDecoder: -1,
-            moodJournal: true,
-            analytics: 'daily',
-            panicButton: 'advanced',
-            notifications: 150, // x5
-            vault: true,
-            exportDiary: true,
-            prioritySupport: true,
             simulatorAnalyses: -1,
             simulatorChatMessages: -1
         }

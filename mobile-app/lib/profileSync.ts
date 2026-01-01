@@ -245,12 +245,22 @@ async function loadProfilesFromSupabase(userId: string): Promise<ExProfile[]> {
     console.log('[ProfileSync] Raw data from Supabase:', data?.length || 0, 'profiles');
 
     // Convert Supabase format to local format
-    return (data || []).map((p: SupabaseExProfile) => ({
-        id: `supabase_${p.id}`, // Use prefixed ID to avoid conflicts
-        supabaseId: p.id,
-        exName: p.ex_name,
-        profile: p.profile_data,
-        messageCount: p.message_count,
-        createdAt: p.created_at
-    }));
+    // Note: profile_data contains the full local profile structure with nested 'profile' field
+    // IMPORTANT: Use p.id (Supabase UUID) as the ID to match simulation_conversations.ex_profile_id
+    return (data || []).map((p: SupabaseExProfile) => {
+        const profileData = p.profile_data || {};
+
+        return {
+            id: p.id, // Use Supabase UUID - must match simulation_conversations.ex_profile_id
+            supabaseId: p.id,
+            exName: p.ex_name || profileData.exName,
+            profile: profileData.profile || profileData, // Extract nested profile or use entire object
+            messageCount: p.message_count || profileData.messageCount || 0,
+            createdAt: p.created_at || profileData.createdAt,
+            masterPrompt: profileData.masterPrompt || profileData.profile?.masterPrompt || '',
+            tokenCount: profileData.tokenCount
+        };
+    });
 }
+
+
