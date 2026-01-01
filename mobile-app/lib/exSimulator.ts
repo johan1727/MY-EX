@@ -804,30 +804,42 @@ export interface UsageLimits {
 }
 
 export function getUsageLimits(subscriptionTier: string): UsageLimits {
+    // Valores sincronizados con subscriptions.ts
     switch (subscriptionTier) {
-        case 'warrior':
+        case 'survivor':
+            // Plan gratuito: 20 mensajes cada 8h, 1 análisis
+            return {
+                maxProfiles: 1,
+                maxSimulationsPerMonth: 1,
+                maxMessagesPerSimulation: 20
+            };
+        case 'explorer':
+            // Explorer: 120k tokens/día, 150 análisis/mes
             return {
                 maxProfiles: 3,
-                maxSimulationsPerMonth: 30,
-                maxMessagesPerSimulation: 40
+                maxSimulationsPerMonth: 150,
+                maxMessagesPerSimulation: -1 // ilimitado
             };
-        case 'premium':
+        case 'warrior':
+            // Warrior: 150k tokens/día, ilimitado
             return {
                 maxProfiles: 5,
-                maxSimulationsPerMonth: 75,
-                maxMessagesPerSimulation: 60
+                maxSimulationsPerMonth: -1,
+                maxMessagesPerSimulation: -1
             };
         case 'phoenix':
+            // Phoenix: ~1M tokens/día, todo ilimitado
             return {
                 maxProfiles: 10,
-                maxSimulationsPerMonth: 200,
-                maxMessagesPerSimulation: 100
+                maxSimulationsPerMonth: -1,
+                maxMessagesPerSimulation: -1
             };
         default:
+            // Default = survivor
             return {
-                maxProfiles: 0,
-                maxSimulationsPerMonth: 0,
-                maxMessagesPerSimulation: 0
+                maxProfiles: 1,
+                maxSimulationsPerMonth: 1,
+                maxMessagesPerSimulation: 20
             };
     }
 }
