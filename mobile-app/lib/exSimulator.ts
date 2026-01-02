@@ -2,6 +2,7 @@
 import { intelligentTokenSampling } from './messageSampling';
 import { extractConversationContext } from './conversationHelpers';
 import { extractMessageSamples, MessageSamples } from './messageSampleExtractor';
+import { cleanSystemMessages, validateOneOnOneChat, detectLanguage, saveAnalysisProgress, loadAnalysisProgress, clearAnalysisCache, type SupportedLanguage } from './chatValidation';
 
 // TEMPORAL: Hardcodeando la API Key para bypasear el problema de Expo Web
 // TODO: Revertir esto antes de hacer commit!
@@ -14,7 +15,7 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 // Rate limiting helper - wait between API calls to prevent 429 errors
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-const STAGE_DELAY_MS = 500; // 500ms between stages (reduced from 2000ms for faster analysis)
+const STAGE_DELAY_MS = 10000; // 10s between stages (prevent rate limit - max 10 req/min)
 
 // Types
 export interface ParsedMessage {
@@ -249,6 +250,68 @@ export interface ExProfile {
     attachmentStyle?: 'seguro' | 'ansioso' | 'evitativo' | 'desorganizado';
     messageSamples?: MessageSamples;
     masterPrompt?: string; // Optional master prompt for advanced simulation
+
+    // === NEW: TEMPORAL EVOLUTION (Evolución de la Relación) ===
+    temporalEvolution?: {
+        phase1: { // Primer 30% del chat
+            emotionalTone: number; // 1-10
+            messageFrequency: 'alta' | 'media' | 'baja';
+            affectionLevel: number; // 1-10
+            conflictLevel: number; // 1-10
+        };
+        phase2: { // Medio 40%
+            emotionalTone: number;
+            messageFrequency: 'alta' | 'media' | 'baja';
+            affectionLevel: number;
+            conflictLevel: number;
+        };
+        phase3: { // Último 30%
+            emotionalTone: number;
+            messageFrequency: 'alta' | 'media' | 'baja';
+            affectionLevel: number;
+            conflictLevel: number;
+        };
+        trend: 'mejorando' | 'estable' | 'deteriorándose';
+        significantChanges: string[];
+    };
+
+    // === NEW: DELAY PATTERNS (Patrones de Tiempo de Respuesta) ===
+    delayPatterns?: {
+        toRomanticMessages: 'instantáneo' | 'minutos' | 'horas'; // Cómo responde a "te amo"
+        toUncomfortableMessages: 'instantáneo' | 'minutos' | 'horas'; // A mensajes incómodos
+        toNeutralMessages: 'instantáneo' | 'minutos' | 'horas'; // Baseline normal
+        byTimeOfDay: {
+            morning: 'rápido' | 'normal' | 'lento';
+            afternoon: 'rápido' | 'normal' | 'lento';
+            night: 'rápido' | 'normal' | 'lento';
+        };
+        typicalDelayMinutes: number; // Promedio en minutos
+    };
+
+    // === NEW: PREDICTIONS (Predicciones de Reacciones) ===
+    predictions?: {
+        ifMentionedNewPartner: string; // Cómo reaccionaría
+        ifReconciliationAttempt: string;
+        ifIgnoredFor2Days: string;
+        ifAskedAboutBreakup: string;
+        ifCongratulatedOnBirthday: string;
+        customPredictions?: Record<string, string>; // Predicciones personalizadas
+    };
+
+    // === NEW: MEMORY SELECTIVITY (Memoria Selectiva basada en Neuroticismo) ===
+    memorySelectivity?: {
+        retentionRate: number; // 0-1 (basado en neuroticismo)
+        remembersBothGoodAndBad: boolean;
+        exaggeratesNegative: boolean; // Si neuroticismo alto
+        typicallyForgets: string[]; // Qué tipo de cosas "olvida"
+    };
+
+    // === NEW: EXTRACTED FACTS (Hechos Extraídos - para Embeddings) ===
+    extractedFacts?: {
+        factType: 'personal' | 'relationship' | 'preference' | 'routine';
+        content: string; // Hecho anonimizado
+        importance: number; // 1-10
+    }[];
 }
 
 
@@ -351,13 +414,22 @@ export function parseWhatsAppExport(text: string): ParsedMessage[] {
         messages.push(currentMessage);
     }
 
-    console.log(`[parseWhatsAppExport] ? Parsing complete!`);
-    console.log(`[parseWhatsAppExport] Total messages parsed: ${messages.length}`);
+    console.log(`[parseWhatsAppExport] ✅ Parsing complete!`);
+    console.log(`[parse WhatsAppExport] Total messages parsed: ${messages.length}`);
     console.log(`[parseWhatsAppExport] Matched lines: ${matchedLines}`);
     console.log(`[parseWhatsAppExport] Multi-line appends: ${multiLineAppends}`);
     console.log(`[parseWhatsAppExport] Skipped (first 10): ${Math.min(skippedSystemMessages, 10)}`);
 
-    return messages;
+    // 🧹 Limpiar mensajes del sistema (nuevo)
+    const cleanedMessages = cleanSystemMessages(messages);
+    const filteredCount = messages.length - cleanedMessages.length;
+
+    if (filteredCount > 0) {
+        console.log(`[parseWhatsAppExport] 🧹 Filtrados ${filteredCount} mensajes del sistema`);
+        console.log(`[parseWhatsAppExport] 📊 Mensajes finales: ${cleanedMessages.length}`);
+    }
+
+    return cleanedMessages;
 }
 
 // Parse Telegram JSON export
@@ -512,13 +584,32 @@ async function generateWithRetry(model: any, prompt: string, retries = 2, timeou
 export async function analyzePersonality(
     messages: ParsedMessage[],
     exName: string,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: (progress: number, status: string) => void,
+    relationshipType?: 'ex' | 'friend' | 'family' | 'deceased'
 ): Promise<ExProfile> {
     const startTime = Date.now();
-    console.log('[analyzePersonality] ?? STARTING OPTIMIZED 3-STAGE ANALYSIS');
+    const isDeceased = relationshipType === 'deceased';
+    const isFamily = relationshipType === 'family';
+    const isFriend = relationshipType === 'friend';
+    console.log(`[analyzePersonality] 🚀 STARTING OPTIMIZED 6-STAGE ANALYSIS (type: ${relationshipType || 'ex'})`);
 
     if (!GEMINI_API_KEY) {
         throw new Error('API Key de Gemini no configurada.');
+    }
+
+    // 🌍 NUEVO: Detectar idioma del chat
+    const detectedLanguage = detectLanguage(messages);
+    console.log(`[analyzePersonality] 🌍 Idioma detectado: ${detectedLanguage}`);
+
+    // 💾 NUEVO: Verificar si hay caché de análisis parcial
+    const cache = loadAnalysisProgress(exName);
+    if (cache) {
+        console.log('[analyzePersonality] 💾 Caché encontrado:', {
+            block1: !!cache.block1,
+            block2: !!cache.block2,
+            block3: !!cache.block3
+        });
+        onProgress?.(5, 'Recuperando análisis previo...');
     }
 
     onProgress?.(5, 'Preparando mensajes...');
@@ -708,6 +799,195 @@ HUELLA LINGÜÍSTICA:
         affection: {}, stress: {}, redFlags: [], greenFlags: [], summary: "Perfil generado", masterPrompt: ""
     });
 
+    await delay(STAGE_DELAY_MS);
+
+    // --- REQUEST 4: MEMORY + TEMPORAL EVOLUTION (COMBINED) ---
+    onProgress?.(78, 'Analizando memoria y evolución temporal...');
+
+    const request4Prompt = `Analiza la MEMORIA de eventos y la EVOLUCIÓN TEMPORAL de la relación de "${exName}".
+
+INSTRUCCIONES:
+1. MEMORIA DE EVENTOS:
+   - Extrae fechas importantes mencionadas (aniversarios, cumpleaños, primera cita)
+   - Identifica momentos clave emocionales (primera pelea, reconciliaciones, declaraciones)
+   - Lista personas importantes (familia, amigos) - SIN datos identificables, solo roles
+
+2. EVOLUCIÓN TEMPORAL:
+   - Divide mentalmente el chat en 3 fases (inicio 30%, medio 40%, final 30%)
+   - Compara tono emocional, frecuencia, afecto en cada fase
+   - Determina si la relación mejoraba o empeoraba
+
+Responde con JSON:
+{
+    "keyMoments": [
+        { "event": "Primera declaración de amor", "emotionalWeight": 10, "context": "Después de..." },
+        { "event": "Pelea seria por celos", "emotionalWeight": 9, "topic": "confianza" }
+    ],
+    "importantDates": { "anniversary": "agosto", "specialDays": ["cumpleaños"] },
+    "importantPeople": [
+        { "role": "madre", "sentiment": "positivo" },
+        { "role": "mejor amiga", "sentiment": "neutral" }
+    ],
+    "temporalEvolution": {
+        "phase1": { "emotionalTone": 8, "messageFrequency": "alta", "affectionLevel": 9, "conflictLevel": 2 },
+        "phase2": { "emotionalTone": 6, "messageFrequency": "media", "affectionLevel": 6, "conflictLevel": 5 },
+        "phase3": { "emotionalTone": 4, "messageFrequency": "baja", "affectionLevel": 3, "conflictLevel": 7 },
+        "trend": "deteriorándose",
+        "significantChanges": ["Distanciamiento después de pelea en mayo"]
+    }
+}`;
+
+    const result4Str = await generateWithRetry(model, request4Prompt);
+    const result4 = safeParseJSON(result4Str, {
+        keyMoments: [], importantDates: {}, importantPeople: [], temporalEvolution: {}
+    });
+
+    await delay(STAGE_DELAY_MS);
+
+    // --- REQUEST 5: MICRO-BEHAVIORS + DELAY PATTERNS (COMBINED) ---
+    onProgress?.(85, 'Analizando micro-comportamientos y patrones de respuesta...');
+
+    const request5Prompt = `Analiza los MICRO-COMPORTAMIENTOS de escritura y PATRONES DE DELAY de "${exName}".
+
+MICRO-COMPORTAMIENTOS a detectar:
+1. Puntuación emotiva: ¿Usa ". . ." para suspenso? ¿"ok." significa molestia?
+2. Typos: ¿Hace errores cuando está nerviosa? ¿Los corrige?
+3. Double texting: ¿Envía múltiples mensajes seguidos?
+4. Mayúsculas: ¿MAYÚSCULAS = enojada o emocionada?
+5. Risa: "jajaja" vs "jaja" vs "JAJA" - ¿cuándo usa cada una?
+
+PATRONES DE DELAY:
+1. ¿Qué tan rápido responde a mensajes románticos vs incómodos?
+2. ¿Responde más lento de noche?
+3. ¿Cuál es su tiempo promedio de respuesta?
+
+Responde con JSON:
+{
+    "microBehaviors": {
+        "punctuationMeaning": { "ok.": "molesta", "...": "pensando/suspenso" },
+        "typosWhen": "nerviosa o apurada",
+        "corrigeTypos": false,
+        "doubleTexts": true,
+        "capsLockMeaning": "emocionada, no enojada",
+        "laughStyles": { "jajaja": "genuino", "jaja": "cortés", "JAJA": "muy divertido" }
+    },
+    "delayPatterns": {
+        "toRomanticMessages": "instantáneo",
+        "toUncomfortableMessages": "horas",
+        "toNeutralMessages": "minutos",
+        "byTimeOfDay": { "morning": "lento", "afternoon": "rápido", "night": "normal" },
+        "typicalDelayMinutes": 15
+    }
+}`;
+
+    const result5Str = await generateWithRetry(model, request5Prompt);
+    const result5 = safeParseJSON(result5Str, {
+        microBehaviors: {}, delayPatterns: {}
+    });
+
+    await delay(STAGE_DELAY_MS);
+
+    // --- REQUEST 6: PREDICTIONS + EXTRACTED FACTS ---
+    onProgress?.(92, isDeceased ? 'Generando recuerdos y momentos especiales...' : 'Generando predicciones y extrayendo hechos clave...');
+
+    // 🕊️ Adaptar escenarios según tipo de relación
+    const predictionScenarios = isDeceased ? `
+ESCENARIOS PARA SIMULACIÓN DE PERSONA FALLECIDA - ¿Qué diría "${exName}" en estos momentos?
+1. Si quisieran decirle algo que nunca pudieron expresar
+2. Si quisieran preguntarle sobre su vida
+3. Si quisieran compartir un logro personal con ${exName}
+4. Si quisieran hablar sobre un momento especial juntos
+5. Si quisieran despedirse apropiadamente` :
+        isFamily ? `
+ESCENARIOS FAMILIARES - ¿Cómo reaccionaría "${exName}" en estas situaciones?
+1. Si el usuario comparte un logro importante
+2. Si el usuario pide consejo sobre algo personal
+3. Si el usuario está pasando un momento difícil
+4. Si el usuario quiere hablar del pasado familiar
+5. Si el usuario necesita apoyo emocional` :
+            isFriend ? `
+ESCENARIOS DE AMISTAD - ¿Cómo reaccionaría "${exName}" en estas situaciones?
+1. Si el usuario está pasando un momento difícil
+2. Si el usuario quiere hacer planes juntos
+3. Si el usuario comparte buenas noticias
+4. Si hay un malentendido entre ustedes
+5. Si el usuario necesita un favor` :
+                `
+ESCENARIOS DE EX-PAREJA - ¿Cómo reaccionaría "${exName}" en estos escenarios?
+1. Si el usuario menciona que salió con alguien nuevo
+2. Si el usuario intenta reconciliación después de meses
+3. Si el usuario no responde por 2 días
+4. Si el usuario pregunta por qué terminaron
+5. Si el usuario la felicita en su cumpleaños`;
+
+    const predictionExamples = isDeceased ? `
+    "predictions": {
+        "ifWantedToSaySomething": "Respondería con la calidez y el cariño que siempre mostró...",
+        "ifAskedAboutLife": "Compartiría memorias con su forma característica de contar historias...",
+        "ifSharedAchievement": "Expresaría orgullo y alegría genuina...",
+        "ifTalkedAboutSpecialMoment": "Recordaría con detalle y emoción...",
+        "ifSaidGoodbye": "Daría una despedida amorosa con sus palabras típicas..."
+    }` :
+        isFamily ? `
+    "predictions": {
+        "ifSharedAchievement": "Reacción típica de orgullo familiar...",
+        "ifAskedForAdvice": "Daría consejo con su estilo particular...",
+        "ifGoingThroughHardTime": "Ofrecería apoyo familiar...",
+        "ifTalkedAboutPast": "Compartiría memorias familiares...",
+        "ifNeededSupport": "Brindaría apoyo incondicional..."
+    }` :
+            isFriend ? `
+    "predictions": {
+        "ifGoingThroughHardTime": "Ofrecería apoyo de amigo...",
+        "ifMakingPlans": "Respondería con entusiasmo o su forma típica...",
+        "ifSharedGoodNews": "Celebraría a su manera...",
+        "ifMisunderstanding": "Manejaría el conflicto con su estilo...",
+        "ifNeededFavor": "Ayudaría según su personalidad..."
+    }` :
+                `
+    "predictions": {
+        "ifMentionedNewPartner": "Se pondría celosa pero lo disfrazaría de indiferencia...",
+        "ifReconciliationAttempt": "Sería receptiva pero cautelosa, haría que 'la conquisten'...",
+        "ifIgnoredFor2Days": "Mandaría mensaje pasivo-agresivo tipo 'ok supongo que estás ocupado'...",
+        "ifAskedAboutBreakup": "Evitaría el tema o culparía al usuario...",
+        "ifCongratulatedOnBirthday": "Respondería con cariño genuino, momento vulnerable..."
+    }`;
+
+    const request6Prompt = `Genera PREDICCIONES de comportamiento y extrae HECHOS CLAVE sobre "${exName}".
+
+${predictionScenarios}
+
+HECHOS CLAVE - Extrae información anonimizada para memoria:
+- Preferencias (comida, música, hobbies)
+- Rutinas (trabaja de día, estudia, etc)
+- Valores importantes
+- ${isDeceased ? 'Frases que solía decir, recuerdos especiales' : 'Miedos o inseguridades'}
+
+MEMORIA SELECTIVA - Basado en su neuroticismo (${result1.bigFive?.neuroticism || 5}/10):
+- ¿Tiende a recordar más lo negativo?
+- ¿Exagera los problemas pasados?
+
+Responde con JSON:
+{
+${predictionExamples},
+    "extractedFacts": [
+        { "factType": "preference", "content": "Le gusta el café por las mañanas", "importance": 6 },
+        { "factType": "routine", "content": "Trabaja en oficina, horario 9-6", "importance": 7 },
+        { "factType": "personal", "content": "${isDeceased ? 'Frase típica que usaba' : 'Tiene miedo al abandono'}", "importance": 9 }
+    ],
+    "memorySelectivity": {
+        "retentionRate": 0.85,
+        "remembersBothGoodAndBad": false,
+        "exaggeratesNegative": ${!isDeceased},
+        "typicallyForgets": ["detalles positivos pequeños", "cumplidos"]
+    }
+}`;
+
+    const result6Str = await generateWithRetry(model, request6Prompt);
+    const result6 = safeParseJSON(result6Str, {
+        predictions: {}, extractedFacts: [], memorySelectivity: {}
+    });
+
     onProgress?.(95, 'Finalizando...');
 
     // Combine all results into ExProfile
@@ -771,12 +1051,70 @@ HUELLA LINGÜÍSTICA:
         redFlags: result3.redFlags || [],
 
         // Optional fields from masterPrompt
-        masterPrompt: result3.masterPrompt
+        masterPrompt: result3.masterPrompt,
+
+        // === NEW FIELDS FROM BLOCKS 4, 5, 6 ===
+
+        // Bloque 4: Memoria y Evolución Temporal
+        sharedMemory: {
+            insideJokes: [],
+            mentionedPeople: (result4.importantPeople || []).map((p: any) => ({
+                name: p.role || 'Desconocido',
+                relationship: p.role || '',
+                sentiment: p.sentiment || 'neutral'
+            })),
+            importantDates: Object.values(result4.importantDates || {}).filter((d: any) => typeof d === 'string') as string[],
+            significantPlaces: [],
+            conflictTopics: result4.keyMoments?.filter((m: any) => m.topic)?.map((m: any) => m.topic) || [],
+            sharedMemories: result4.keyMoments?.map((m: any) => m.event) || []
+        },
+        temporalEvolution: result4.temporalEvolution || undefined,
+
+        // Bloque 5: Micro-comportamientos y Delays
+        linguisticFingerprint: {
+            usesCapitals: result5.microBehaviors?.capsLockMeaning !== 'nunca',
+            usesOpeningMarks: false,
+            periodMeaning: result5.microBehaviors?.punctuationMeaning?.['ok.'] === 'molesta' ? 'pasivo-agresivo' : 'normal',
+            laughStyle: Object.keys(result5.microBehaviors?.laughStyles || {}),
+            fillerWords: [],
+            regionalisms: [],
+            greetings: [],
+            farewells: []
+        },
+        digitalBodyLanguage: {
+            responseSpeed: result5.delayPatterns?.toNeutralMessages || 'minutos',
+            doubleTexting: result5.microBehaviors?.doubleTexts || false,
+            readReceiptAnxiety: false,
+            emojiToTextRatio: 'medio',
+            voiceNoteUsage: 'raro',
+            allCapsWhen: result5.microBehaviors?.capsLockMeaning === 'emocionada' ? 'emocionado' : 'nunca'
+        },
+        delayPatterns: result5.delayPatterns || undefined,
+
+        // Bloque 6: Predicciones y Memoria Selectiva
+        predictions: result6.predictions || undefined,
+        memorySelectivity: result6.memorySelectivity || undefined,
+        extractedFacts: result6.extractedFacts || []
     };
 
     const duration = Math.round((Date.now() - startTime) / 1000);
     console.log(`[analyzePersonality] ✅ Analysis complete in ${duration}s`);
     onProgress?.(100, '¡Análisis completado!');
+
+    // 💾 NUEVO: Limpiar caché de análisis parcial (éxito completo)
+    clearAnalysisCache(exName);
+
+    // 💾 NUEVO: Guardar hechos extraídos en Supabase (para búsqueda futura)
+    if (profile.extractedFacts && profile.extractedFacts.length > 0) {
+        try {
+            const { saveExtractedFacts } = await import('./factEmbeddings');
+            // Usamos el exName como profileId temporal (debería ser el ID real del perfil)
+            await saveExtractedFacts(exName, profile.extractedFacts);
+            console.log(`[analyzePersonality] 💾 ${profile.extractedFacts.length} hechos guardados`);
+        } catch (e) {
+            console.warn('[analyzePersonality] Error guardando hechos:', e);
+        }
+    }
 
     return profile;
 }
@@ -875,12 +1213,32 @@ export async function simulateResponse(
 ): Promise<{ response: string; confidence: number }> {
     const systemPrompt = generateSystemPrompt(profile, conversationHistory);
 
+    // 🔗 Buscar hechos relevantes basados en el mensaje del usuario
+    let relevantFacts: string[] = [];
+    try {
+        const { getRelevantFactsForMessage } = await import('./factEmbeddings');
+        if (userMessage) {
+            relevantFacts = await getRelevantFactsForMessage(profile.exName, userMessage);
+        }
+    } catch (e) {
+        // Silently fail si no hay hechos
+    }
+
     let fullPrompt = `${systemPrompt}\n\n`;
+
+    // 🔗 Agregar hechos relevantes al contexto si existen
+    if (relevantFacts.length > 0) {
+        fullPrompt += `[HECHOS RELEVANTES - Usa esta información si es pertinente]\n`;
+        relevantFacts.forEach(fact => {
+            fullPrompt += `- ${fact}\n`;
+        });
+        fullPrompt += `\n`;
+    }
 
     if (userMessage) {
         fullPrompt += `Usuario: ${userMessage}`;
     } else {
-        fullPrompt += `(Contexto: El usuario ha estado en silencio. Inicia t� una conversaci�n casual o contin�a un tema pendiente.)`;
+        fullPrompt += `(Contexto: El usuario ha estado en silencio. Inicia tú una conversación casual o continúa un tema pendiente.)`;
     }
 
     const promptParts: any[] = [fullPrompt];

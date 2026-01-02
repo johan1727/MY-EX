@@ -1,4 +1,5 @@
 import { ParsedMessage } from './exSimulator';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 /**
  * Token-based sampling strategy
@@ -443,3 +444,190 @@ export function sampleForStage(
 
     return deduplicateMessages(sampled);
 }
+
+// ===============================================
+// 🤖 MUESTREO CON IA (NUEVO)
+// ===============================================
+
+/**
+ * Muestreo inteligente usando IA para determinar qué mensajes son más importantes
+ * Más costoso en tokens pero más preciso
+ * 
+ * Flujo:
+ * 1. Pre-muestreo algorítmico para reducir a ~5k mensajes (evita costos excesivos)
+ * 2. IA analiza muestra y genera "criterios de importancia" específicos
+ * 3. Aplica criterios de IA para re-seleccionar mensajes del set original
+ */
+export async function aiPoweredSampling(
+    messages: ParsedMessage[],
+    maxTokens: number = 500000,
+    geminiApiKey?: string
+): Promise<SamplingResult> {
+    console.log(`[AI-Sampling] 🤖 Iniciando muestreo con IA (${messages.length} mensajes)`);
+
+    // Validar que tenemos API key
+    const apiKey = geminiApiKey || process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    if (!apiKey) {
+        console.warn('[AI-Sampling] ⚠️ Sin API key, usando muestreo algorítmico');
+        return intelligentTokenSampling(messages, maxTokens);
+    }
+
+    try {
+        // Paso 1: Pre-muestreo algorítmico para reducir carga (máximo 1000 mensajes para análisis IA)
+        const preSampleSize = Math.min(1000, messages.length);
+        const step = Math.max(1, Math.floor(messages.length / preSampleSize));
+        const preSample: ParsedMessage[] = [];
+
+        for (let i = 0; i < messages.length && preSample.length < preSampleSize; i += step) {
+            preSample.push(messages[i]);
+        }
+
+        console.log(`[AI-Sampling] Pre-muestra: ${preSample.length} mensajes para análisis IA`);
+
+        // Paso 2: Construir resumen de muestra para la IA
+        const sampleText = preSample
+            .map((m, i) => `[${i}] ${m.sender}: ${m.content.substring(0, 100)}`)
+            .join('\n');
+
+        // Paso 3: Llamar a IA para identificar patrones de importancia
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+        const prompt = `Analiza estos mensajes de una conversación de WhatsApp y determina criterios de importancia.
+
+MUESTRA DE ${preSample.length} MENSAJES:
+${sampleText.substring(0, 15000)}
+
+Tu tarea:
+1. Identifica PATRONES de mensajes importantes (peleas, declaraciones de amor, temas recurrentes, momentos clave)
+2. Identifica PALABRAS CLAVE únicas de esta conversación (no genéricas, específicas de esta relación)
+3. Identifica NOMBRES o TEMAS importantes mencionados
+
+Responde en JSON:
+{
+    "importantPatterns": ["patrón 1", "patrón 2"], // Máximo 10
+    "uniqueKeywords": ["palabra1", "palabra2"], // Máximo 20, ESPECÍFICAS de esta conversación
+    "criticalTopics": ["tema1", "tema2"], // Máximo 5
+    "emotionalPeaks": [12, 45, 78] // Índices de mensajes con mayor carga emocional (de la muestra)
+}`;
+
+        const response = await model.generateContent(prompt);
+        const responseText = response.response.text();
+
+        // Parsear respuesta de IA
+        let aiCriteria: {
+            importantPatterns: string[];
+            uniqueKeywords: string[];
+            criticalTopics: string[];
+            emotionalPeaks: number[];
+        };
+
+        try {
+            // Extraer JSON del texto
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error('No JSON found');
+            aiCriteria = JSON.parse(jsonMatch[0]);
+        } catch (e) {
+            console.warn('[AI-Sampling] ⚠️ Error parseando respuesta IA, usando defaults');
+            aiCriteria = {
+                importantPatterns: [],
+                uniqueKeywords: EMOTIONAL_KEYWORDS.slice(0, 10),
+                criticalTopics: [],
+                emotionalPeaks: []
+            };
+        }
+
+        console.log('[AI-Sampling] Criterios de IA:', {
+            patterns: aiCriteria.importantPatterns?.length || 0,
+            keywords: aiCriteria.uniqueKeywords?.length || 0,
+            topics: aiCriteria.criticalTopics?.length || 0,
+            peaks: aiCriteria.emotionalPeaks?.length || 0
+        });
+
+        // Paso 4: Aplicar criterios de IA al set completo
+        const aiKeywords = [
+            ...(aiCriteria.uniqueKeywords || []),
+            ...(aiCriteria.criticalTopics || []),
+            ...(aiCriteria.importantPatterns || [])
+        ].filter(k => k && k.length > 2);
+
+        // Función de scoring mejorada con criterios de IA
+        const scoreWithAI = (msg: ParsedMessage, index: number): number => {
+            let score = 0;
+            const content = msg.content?.toLowerCase() || '';
+
+            // Score base (igual que algorítmico)
+            const tokens = estimateTokens(msg);
+            if (tokens > 50) score += 0.2;
+            else if (tokens > 20) score += 0.1;
+
+            // Score de posición
+            const position = index / messages.length;
+            if (position < 0.1 || position > 0.9) score += 0.2;
+
+            // NUEVO: Score con criterios de IA
+            aiKeywords.forEach(keyword => {
+                if (content.includes(keyword.toLowerCase())) {
+                    score += 0.3; // Alto peso para keywords identificadas por IA
+                }
+            });
+
+            // Score de keywords emocionales genéricas
+            if (hasEmotionalContent(msg)) score += 0.15;
+
+            return Math.min(score, 1);
+        };
+
+        // Paso 5: Puntuar y ordenar todos los mensajes
+        const scoredMessages = messages.map((msg, idx) => ({
+            message: msg,
+            index: idx,
+            score: scoreWithAI(msg, idx)
+        }));
+
+        scoredMessages.sort((a, b) => b.score - a.score);
+
+        // Paso 6: Calcular cuántos mensajes podemos incluir
+        let accumulatedTokens = 0;
+        const selectedMessages: ParsedMessage[] = [];
+
+        for (const { message } of scoredMessages) {
+            const msgTokens = estimateTokens(message);
+            if (accumulatedTokens + msgTokens <= maxTokens) {
+                selectedMessages.push(message);
+                accumulatedTokens += msgTokens;
+            }
+
+            if (accumulatedTokens >= maxTokens * 0.95) break; // 95% del límite
+        }
+
+        // Paso 7: Re-ordenar por timestamp
+        const finalMessages = deduplicateMessages(selectedMessages);
+        const finalTokens = finalMessages.reduce((sum, msg) => sum + estimateTokens(msg), 0);
+
+        console.log(`[AI-Sampling] ✅ Resultado: ${finalMessages.length} mensajes, ~${finalTokens} tokens`);
+
+        return {
+            messages: finalMessages,
+            stats: {
+                targetTokens: maxTokens,
+                estimatedTokens: finalTokens,
+                messagesIncluded: finalMessages.length,
+                totalMessages: messages.length,
+                strategy: {
+                    first: 0,
+                    recent: 0,
+                    long: 0,
+                    emotional: 0,
+                    random: 0 // AI-powered doesn't use these categories
+                }
+            }
+        };
+
+    } catch (error: any) {
+        console.error('[AI-Sampling] ❌ Error:', error?.message || error);
+        console.log('[AI-Sampling] Fallback a muestreo algorítmico');
+        return intelligentTokenSampling(messages, maxTokens);
+    }
+}
+

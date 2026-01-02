@@ -7,7 +7,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import JSZip from 'jszip';
 import { parseWhatsAppExport, analyzePersonality, ParsedMessage } from '../../../lib/exSimulator';
-import { intelligentTokenSampling } from '../../../lib/messageSampling';
+import { intelligentTokenSampling, aiPoweredSampling } from '../../../lib/messageSampling';
+import { validateOneOnOneChat } from '../../../lib/chatValidation';
 import { generateMasterPrompt } from '../../../lib/masterPromptGenerator';
 import ExportGuide from '../../../components/ExportGuide';
 import { storage } from '../../../lib/storage';
@@ -38,6 +39,24 @@ async function extractTextFromZip(zipData: string): Promise<string | null> {
     }
 }
 
+/**
+ * Detecta los participantes más activos en el chat
+ */
+const detectParticipants = (messages: ParsedMessage[]) => {
+    const counts: Record<string, number> = {};
+    messages.forEach(msg => {
+        counts[msg.sender] = (counts[msg.sender] || 0) + 1;
+    });
+
+    // Convertir a array y ordenar por frecuencia
+    const sorted = Object.entries(counts)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 2); // Tomar los top 2
+
+    return sorted;
+};
+
 type ImportStep = 'guide' | 'upload' | 'loading' | 'preview' | 'analyzing' | 'complete' | 'error';
 
 export default function ImportChat() {
@@ -54,6 +73,14 @@ export default function ImportChat() {
     const [progress, setProgress] = useState(0);
     const [debugLog, setDebugLog] = useState<string[]>([]);
     const [showRegistrationReminder, setShowRegistrationReminder] = useState(false);
+
+    // UI Improvements: Auto-detect participants
+    const [detectedParticipants, setDetectedParticipants] = useState<{ name: string; count: number }[]>([]);
+    const [userRole, setUserRole] = useState<'me' | 'ex' | null>(null);
+
+    // 🕊️ Selector de tipo de relación (evitar confusiones entre ex y fallecidos)
+    const [relationshipType, setRelationshipType] = useState<'ex' | 'friend' | 'family' | 'deceased' | null>(null);
+
 
     // Debug helper to log steps visually
     const addDebug = (msg: string) => {
@@ -177,22 +204,45 @@ export default function ImportChat() {
                             addDebug(`📨 Mensajes encontrados: ${messages.length.toLocaleString()}`);
                             await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
 
+                            // ✅ VALIDAR QUE SEA CHAT 1-A-1 (nuevo)
+                            const validation = validateOneOnOneChat(messages);
+
+                            if (!validation.valid) {
+                                setStep('error');
+                                setErrorMessage(validation.error || 'Error al validar el chat');
+                                addDebug('❌ ' + validation.error);
+                                return;
+                            }
+
+                            addDebug(`✅ Chat validado: ${validation.participants?.join(' y ')}`);
+                            await new Promise(resolve => setTimeout(resolve, 50));
+
                             if (messages.length > 0) {
                                 addDebug('⚙️ Optimizando muestra (500k tokens)...');
                                 await new Promise(resolve => setTimeout(resolve, 50));
 
                                 let finalMessages;
                                 try {
+                                    // 🤖 NUEVO: Usar muestreo con IA como default
+                                    addDebug('🤖 Muestreando con IA...');
+                                    const { messages: sampledMessages, stats } = await aiPoweredSampling(messages, 500000);
+                                    finalMessages = sampledMessages;
+                                    addDebug(`📊 ~${stats?.estimatedTokens?.toLocaleString() || 'N/A'} tokens (IA)`);
+                                } catch (samplingError) {
+                                    addDebug('⚠️ Fallback: muestreo algorítmico');
                                     const { messages: sampledMessages, stats } = intelligentTokenSampling(messages, 500000);
                                     finalMessages = sampledMessages;
                                     addDebug(`📊 ~${stats?.estimatedTokens?.toLocaleString() || 'N/A'} tokens`);
-                                } catch (samplingError) {
-                                    addDebug('⚠️ Fallback: últimos 25k mensajes');
-                                    finalMessages = messages.slice(-25000);
                                 }
 
                                 setParsedMessages(finalMessages);
                                 setParsedCount(finalMessages.length);
+
+                                // DETECTAR PARTICIPANTES
+                                const participants = detectParticipants(finalMessages);
+                                setDetectedParticipants(participants);
+                                addDebug(`👥 Detectados: ${participants.map(p => p.name).join(', ')}`);
+
                                 setStep('preview');
                                 addDebug(`✅ ${finalMessages.length.toLocaleString()} mensajes listos`);
                             } else {
@@ -509,7 +559,7 @@ export default function ImportChat() {
                         const mapped = Math.round(5 + (p * 0.55));
                         setProgress(mapped);
                         if (p % 20 === 0) addDebug(`AI Progress: ${p}%`);
-                    }),
+                    }, relationshipType || 'ex'), // 🕊️ Pasar tipo de relación
                     timeoutPromise
                 ]);
 
@@ -875,61 +925,190 @@ export default function ImportChat() {
                 )}
 
                 {step === 'preview' && (
-                    <>
-                        <Text style={styles.sectionLabel}>CONFIGURACIÓN DE ANÁLISIS</Text>
+                    <View>
+                        <Text style={styles.sectionLabel}>CONFIRMAR IDENTIDAD</Text>
 
-                        <View style={styles.nameCard}>
-                            <Text style={styles.nameLabel}>¿Cómo se llama la persona?</Text>
-                            <Text style={styles.nameHint}>
-                                ⚠️ Escribe el nombre EXACTO como aparece en el chat exportado (el nombre del contacto). Si no coincide, el análisis no funcionará.
+                        <View style={styles.statsCard}>
+                            <Text style={styles.statsTitle}>Conversación detectada</Text>
+                            <Text style={styles.statsValue}>{parsedCount.toLocaleString()} mensajes</Text>
+                            <Text style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
+                                Entre: {detectedParticipants.map(p => p.name).join(' y ')}
                             </Text>
-                            <TextInput
-                                style={styles.nameInput}
-                                placeholder="Ej: Alex"
-                                placeholderTextColor="#444"
-                                value={exName}
-                                onChangeText={setExName}
-                            />
                         </View>
 
-                        {truncatedInfo && (
-                            <View style={styles.truncationNotice}>
-                                <Text style={styles.truncationIcon}>✂️</Text>
-                                <View style={styles.truncationTextContainer}>
-                                    <Text style={styles.truncationTitle}>Archivo optimizado</Text>
-                                    <Text style={styles.truncationDesc}>
-                                        Usamos los mensajes más recientes ({(truncatedInfo.used / 1024 / 1024).toFixed(1)}MB de {(truncatedInfo.original / 1024 / 1024).toFixed(1)}MB)
+                        <View style={styles.roleSelectionContainer}>
+                            <Text style={styles.sectionTitle}>¿Quién eres tú?</Text>
+                            <Text style={styles.sectionSubtitle}>Selecciona tu nombre para que la IA simule a la otra persona.</Text>
+
+                            {detectedParticipants.map((participant, index) => {
+                                const isMe = userRole === 'me' && exName !== participant.name;
+                                const isEx = exName === participant.name;
+
+                                return (
+                                    <TouchableOpacity
+                                        key={index}
+                                        style={[
+                                            styles.roleButton,
+                                            isMe && styles.roleButtonActive,
+                                            isEx && { opacity: 0.5 } // Gray out if selected as ex
+                                        ]}
+                                        onPress={() => {
+                                            // "Yo soy este"
+                                            const other = detectedParticipants.find(p => p.name !== participant.name);
+                                            if (other) {
+                                                setExName(other.name);
+                                                setUserRole('me');
+                                            }
+                                        }}
+                                    >
+                                        <View style={styles.avatarPlaceholder}>
+                                            <Text style={styles.avatarText}>{participant.name.charAt(0)}</Text>
+                                        </View>
+                                        <View style={styles.roleInfo}>
+                                            <Text style={styles.roleName}>
+                                                {participant.name}
+                                                {isMe && <Text style={{ color: '#4fd1c5' }}> (Tú)</Text>}
+                                                {isEx && <Text style={{ color: '#a855f7' }}> (Simulación)</Text>}
+                                            </Text>
+                                            <Text style={styles.roleCount}>{participant.count} mensajes</Text>
+                                        </View>
+                                        {isMe && (
+                                            <View style={styles.checkIcon}>
+                                                <CheckCircle color="#4fd1c5" size={24} />
+                                            </View>
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            })}
+
+                            {/* Fallback manual input if detection fails or users wants to override */}
+                            <TouchableOpacity
+                                style={{ marginTop: 16, padding: 10, alignItems: 'center' }}
+                                onPress={() => {
+                                    Alert.prompt('Ingresar nombre manual', 'Escribe el nombre EXACTO de la persona a simular:', (name) => {
+                                        if (name) {
+                                            setExName(name);
+                                            setUserRole(null);
+                                        }
+                                    });
+                                }}
+                            >
+                                <Text style={{ color: '#666', fontSize: 12, textDecorationLine: 'underline' }}>
+                                    ¿No aparecen los nombres correctos? Ingresar manualmente
+                                </Text>
+                            </TouchableOpacity>
+
+                            {exName && (
+                                <View style={styles.confirmationBox}>
+                                    <Text style={styles.confirmationText}>
+                                        🔮 Creando simulación de: <Text style={{ fontWeight: 'bold', color: '#fff' }}>{exName}</Text>
                                     </Text>
                                 </View>
-                            </View>
-                        )}
+                            )}
 
-                        <View style={styles.previewHeader}>
-                            <Text style={styles.previewTitle}>Vista Previa</Text>
-                            <View style={styles.previewBadge}>
-                                <Text style={styles.previewBadgeText}>{parsedMessages.length} msgs</Text>
-                            </View>
-                        </View>
+                            {/* 🕊️ SELECTOR DE TIPO DE RELACIÓN - Para evitar confusiones */}
+                            {exName && (
+                                <View style={{ marginTop: 20, marginBottom: 10 }}>
+                                    <Text style={styles.sectionTitle}>¿Qué relación tienes con {exName}?</Text>
+                                    <Text style={{ color: '#888', fontSize: 12, marginBottom: 12, textAlign: 'center' }}>
+                                        Esto ayuda a la IA a ser más precisa y respetuosa
+                                    </Text>
 
-                        <View style={styles.previewCard}>
-                            <ScrollView nestedScrollEnabled style={styles.previewScroll}>
-                                {parsedMessages.slice(0, 10).map((msg, i) => (
-                                    <View key={i} style={[styles.previewMessage, msg.sender === 'user' ? styles.previewMessageUser : styles.previewMessageEx]}>
-                                        <View style={[styles.previewBubble, msg.sender === 'user' ? styles.previewBubbleUser : styles.previewBubbleEx]}>
-                                            <Text style={styles.previewText}>{msg.content.substring(0, 100)}</Text>
-                                        </View>
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+                                        {/* Ex-Pareja */}
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.relationTypeButton,
+                                                relationshipType === 'ex' && styles.relationTypeButtonActive
+                                            ]}
+                                            onPress={() => setRelationshipType('ex')}
+                                        >
+                                            <Text style={styles.relationTypeEmoji}>💔</Text>
+                                            <Text style={[
+                                                styles.relationTypeText,
+                                                relationshipType === 'ex' && styles.relationTypeTextActive
+                                            ]}>Ex-Pareja</Text>
+                                        </TouchableOpacity>
+
+                                        {/* Amigo/a */}
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.relationTypeButton,
+                                                relationshipType === 'friend' && styles.relationTypeButtonActive
+                                            ]}
+                                            onPress={() => setRelationshipType('friend')}
+                                        >
+                                            <Text style={styles.relationTypeEmoji}>👫</Text>
+                                            <Text style={[
+                                                styles.relationTypeText,
+                                                relationshipType === 'friend' && styles.relationTypeTextActive
+                                            ]}>Amigo/a</Text>
+                                        </TouchableOpacity>
+
+                                        {/* Familiar */}
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.relationTypeButton,
+                                                relationshipType === 'family' && styles.relationTypeButtonActive
+                                            ]}
+                                            onPress={() => setRelationshipType('family')}
+                                        >
+                                            <Text style={styles.relationTypeEmoji}>👨‍👩‍👧</Text>
+                                            <Text style={[
+                                                styles.relationTypeText,
+                                                relationshipType === 'family' && styles.relationTypeTextActive
+                                            ]}>Familiar</Text>
+                                        </TouchableOpacity>
+
+                                        {/* Fallecido - UI sensible */}
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.relationTypeButton,
+                                                relationshipType === 'deceased' && styles.relationTypeButtonDeceased
+                                            ]}
+                                            onPress={() => setRelationshipType('deceased')}
+                                        >
+                                            <Text style={styles.relationTypeEmoji}>🕊️</Text>
+                                            <Text style={[
+                                                styles.relationTypeText,
+                                                relationshipType === 'deceased' && styles.relationTypeTextActive
+                                            ]}>Fallecido/a</Text>
+                                        </TouchableOpacity>
                                     </View>
-                                ))}
-                            </ScrollView>
+
+                                    {/* Mensaje especial para fallecidos */}
+                                    {relationshipType === 'deceased' && (
+                                        <View style={{
+                                            marginTop: 12,
+                                            padding: 12,
+                                            backgroundColor: 'rgba(147, 112, 219, 0.15)',
+                                            borderRadius: 12,
+                                            borderWidth: 1,
+                                            borderColor: 'rgba(147, 112, 219, 0.3)'
+                                        }}>
+                                            <Text style={{ color: '#b8a9c9', fontSize: 13, textAlign: 'center', lineHeight: 18 }}>
+                                                💜 Entendemos lo difícil que es. Esta simulación puede ayudarte a procesar emociones,
+                                                recordar momentos o tener conversaciones que quedaron pendientes.
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                            )}
                         </View>
 
-                        <TouchableOpacity onPress={handleAnalyze} style={styles.primaryButton}>
-                            <Text style={styles.primaryButtonText}>INICIAR ANÁLISIS</Text>
+                        <TouchableOpacity
+                            style={[styles.primaryButton, (!exName || !relationshipType) && styles.disabledButton]}
+                            disabled={!exName || !relationshipType}
+                            onPress={handleAnalyze}
+                        >
+                            <Brain color="#fff" size={20} style={{ marginRight: 8 }} />
+                            <Text style={styles.primaryButtonText}>Comenzar Análisis IA</Text>
                         </TouchableOpacity>
-                    </>
+                    </View>
                 )}
-            </ScrollView>
-        </View>
+
+            </ScrollView >
+        </View >
     );
 }
 
@@ -988,8 +1167,6 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     sourceCard: {
-        width: '48%',
-        backgroundColor: '#0f0f11',
         borderRadius: 24,
         padding: 24,
         alignItems: 'center',
@@ -1414,6 +1591,59 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontFamily: 'monospace',
         marginBottom: 2,
+    },
+    // New Role Selection Styles
+    roleSelectionContainer: { marginTop: 24, marginBottom: 24 },
+    sectionTitle: { color: '#fff', fontSize: 18, fontWeight: '700', marginBottom: 4 },
+    sectionSubtitle: { color: '#666', fontSize: 13, marginBottom: 16 },
+    roleButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1c1c1e', padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#333' },
+    roleButtonActive: { borderColor: '#4fd1c5', backgroundColor: 'rgba(79, 209, 197, 0.1)' },
+    avatarPlaceholder: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+    avatarText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+    roleInfo: { flex: 1 },
+    roleName: { color: '#fff', fontSize: 16, fontWeight: '600' },
+    roleCount: { color: '#666', fontSize: 12, marginTop: 2 },
+    checkIcon: { marginLeft: 16 },
+    confirmationBox: { marginTop: 16, padding: 16, backgroundColor: 'rgba(168, 85, 247, 0.2)', borderRadius: 12, borderWidth: 1, borderColor: '#a855f7', alignItems: 'center' },
+    confirmationText: { color: '#d8b4fe', fontSize: 14 },
+    statsCard: { backgroundColor: '#1c1c1e', padding: 16, borderRadius: 12, marginBottom: 24, borderColor: '#333', borderWidth: 1 },
+    statsTitle: { color: '#666', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
+    statsValue: { color: '#fff', fontSize: 24, fontWeight: '900' },
+    disabledButton: { opacity: 0.5 },
+
+    // 🕊️ Estilos para selector de tipo de relación
+    relationTypeButton: {
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        backgroundColor: '#1c1c1e',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#333',
+        minWidth: 70,
+    },
+    relationTypeButtonActive: {
+        borderColor: '#4fd1c5',
+        backgroundColor: 'rgba(79, 209, 197, 0.15)',
+    },
+    relationTypeButtonDeceased: {
+        borderColor: '#9370DB',
+        backgroundColor: 'rgba(147, 112, 219, 0.2)',
+    },
+    relationTypeEmoji: {
+        fontSize: 24,
+        marginBottom: 4,
+    },
+    relationTypeText: {
+        color: '#888',
+        fontSize: 11,
+        textAlign: 'center',
+    },
+    relationTypeTextActive: {
+        color: '#fff',
+        fontWeight: '600',
     },
 });
 
