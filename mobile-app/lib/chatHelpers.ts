@@ -200,23 +200,23 @@ INSTRUCCION CRITICA: Responde EXACTAMENTE como lo harías tú en WhatsApp real.
 
     // Build relationship description based on detected type
     const getRelationshipDescription = () => {
-        switch (profile.relationshipType) {
-            case 'ex':
-                return `Ex pareja de ${userName}. La relación ya terminó.`;
+        const relType = (profile && profile.relationshipType) ? profile.relationshipType : 'ex'; // Default to 'ex' if undefined
+        switch (relType) {
             case 'partner':
-                return `Pareja actual de ${userName}.`;
+                return `Eres la pareja actual de la persona. La relación es activa y presente.`;
             case 'friend':
-                return `Amiga/o de ${userName}.`;
-            case 'crush':
-                return `Alguien de quien ${userName} estaba interesada/o.`;
+                return `Eres un amigo/a cercano de la persona. Mantienen una amistad significativa.`;
+            case 'family':
+                return `Eres un familiar de la persona. Existe un vínculo familiar importante.`;
             case 'family_parent':
                 return `Padre/madre de ${userName}. Mantén el tono paternal/maternal característico.`;
             case 'family_sibling':
                 return `Hermano/a de ${userName}. Mantén la dinámica de hermanos.`;
             case 'family_other':
                 return `Familiar de ${userName} (tío, primo, abuelo, etc).`;
+            case 'crush':
+                return `Alguien de quien ${userName} estaba interesada/o.`;
             case 'deceased':
-                return `Una persona muy querida por ${userName} que ya falleció. Responde como si estuvieras vivo, basándote en cómo eras cuando vivías.`;
             default:
                 return `Conocida/o de ${userName}. Mantén coherencia con el tipo de relación que se observe en los mensajes analizados.`;
         }

@@ -178,6 +178,7 @@ export async function generateMasterPrompt(
     messages: ParsedMessage[],
     exSenderName: string,
     exName: string,
+    relationshipType: string = 'ex',
     onProgress?: ProgressCallback
 ): Promise<MasterPromptResult> {
     const startTime = Date.now();
@@ -201,7 +202,7 @@ export async function generateMasterPrompt(
     }
 
     const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash-exp',
+        model: 'gemini-2.0-flash',
         generationConfig: {
             temperature: 0.7,
             maxOutputTokens: 8000 // Máximo por llamada
@@ -284,8 +285,9 @@ export async function generateMasterPrompt(
 
     // FASE FINAL: Ensamblar Master Prompt
     onProgress?.(98, 'Ensamblando Prompt Maestro...', 2);
-
-    const masterPrompt = assembleMasterPrompt(analysisResults, exName);
+    // --- STEP 9: Assemble Master Prompt ---
+    const userName = userMessages[0]?.sender || 'Usuario'; // Define userName here
+    const masterPrompt = assembleMasterPrompt(analysisResults, exName, relationshipType, userName);
     const tokenCount = estimateTokenCount(masterPrompt);
 
     const durationSeconds = Math.floor((Date.now() - startTime) / 1000);
@@ -743,10 +745,24 @@ Responde en markdown. Enfócate en el estado ACTUAL basado en mensajes recientes
 /**
  * Ensambla todas las categorías en un Master Prompt coherente
  */
-function assembleMasterPrompt(results: Record<string, string>, exName: string): string {
+function assembleMasterPrompt(results: Record<string, string>, exName: string, relationshipType: string, userName: string): string {
+    // Determine relationship context statement based on type
+    const relationshipContext = relationshipType === 'ex-partner'
+        ? `${userName} es tu EX pareja. YA NO están juntos. Terminaron. La relación terminó. Ahora es solo una simulación para que ${userName} pueda practicar.`
+        : relationshipType === 'deceased'
+            ? `Eres ${exName}, quien ya falleció. ${userName} está recordando y hablando contigo en memoria.`
+            : relationshipType === 'friend'
+                ? `${userName} es tu amigo/a. Mantienen una relación de amistad.`
+                : relationshipType === 'family'
+                    ? `${userName} es parte de tu familia. Es un familiar cercano.`
+                    : `${userName} es tu pareja actual. Están juntos actualmente en una relación.`;
+
     return `# MASTER PROMPT: ${exName}
 
 Este es el perfil completo y exhaustivo de ${exName}, creado a partir del análisis profundo de mensajes reales.
+
+CONTEXTO FUNDAMENTAL:
+${relationshipContext}
 
 INSTRUCCIÓN CRÍTICA: Eres ${exName}. NO estás imitando a ${exName}. ERES ${exName}.
 Todo lo que está aquí define quién eres, cómo piensas, qué sientes, cómo te comportas.
@@ -791,7 +807,7 @@ Cuando respondas como ${exName}:
 
 1. **AUTENTICIDAD TOTAL**: Responde como ${exName} respondería, basándote en TODO lo anterior
 2. **COHERENCIA**: Mantén consistencia con tu personalidad, valores, miedos
-3. **RELACIÓN**: Actúa según el tipo de relación que se observe en los mensajes (amiga, ex, conocida, etc.)
+3. **RELACIÓN**: El usuario te ha definido como: **${relationshipType.toUpperCase()}**. Actúa acorde a este rol y a la dinámica observada en los mensajes.
 4. **NATURALIDAD**: Escribe como lo harías en WhatsApp real (mensajes cortos, tu estilo)
 5. **MEMORIA**: Usa la información de este prompt como tu "memoria" completa
 

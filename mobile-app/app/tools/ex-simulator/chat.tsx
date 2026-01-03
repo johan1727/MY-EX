@@ -39,6 +39,10 @@ import {
     saveSession
 } from '../../../lib/simulationEngine';
 import { SimulationSession } from '../../../lib/simulationState';
+import { refineProfileWithChat } from '../../../lib/exSimulator';
+import { checkDefensiveTrigger } from '../../../lib/defensiveTopicsDetector';
+import { checkJealousyTrigger } from '../../../lib/jealousyDetector';
+import { getNicknameForPhase } from '../../../lib/nicknameEvolutionTracker';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 console.log('[ExChat] API Key check:', GEMINI_API_KEY ? `Present (${GEMINI_API_KEY.substring(0, 8)}...)` : 'MISSING');
@@ -77,6 +81,9 @@ export default function ExSimulatorChat() {
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [hasShownLoginPrompt, setHasShownLoginPrompt] = useState(false);
 
+    // NEW: Advanced features state
+    const [selectedPhase, setSelectedPhase] = useState<'honeymoon' | 'stable' | 'crisis' | 'breakup'>('stable');
+
     // FREE USER LIMITS - SURVIVOR tier (Supabase)
     const FREE_MESSAGE_LIMIT = 30; // simulator_chat_messages for survivor
     const userMessageCount = messages.filter(m => m.role === 'user').length;
@@ -86,31 +93,61 @@ export default function ExSimulatorChat() {
     }, []);
 
     useEffect(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
+        // Auto-scroll to bottom when messages change
+        setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
     }, [messages]);
 
+    // Auto-scroll on mount
+    useEffect(() => {
+        setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: false });
+        }, 500);
+    }, []);
+
     const loadProfile = async () => {
+        console.log('[ExChat] 🔍 Starting loadProfile...');
+
         // Get user ID for cloud sync
         const { data: { user } } = await supabase.auth.getUser();
         if (user?.id) {
             setUserId(user.id);
+            console.log('[ExChat] User logged in:', user.id);
+        } else {
+            console.log('[ExChat] Guest mode - no user');
         }
 
         const stored = await storage.getItem('exSimulator_currentProfile');
+        console.log('[ExChat] Stored profile exists:', !!stored);
+
         if (stored) {
             const data = JSON.parse(stored);
+            console.log('[ExChat] Profile loaded:', {
+                id: data.id,
+                exName: data.exName,
+                relationshipType: data.relationshipType,
+                hasProfile: !!data.profile,
+                hasMasterPrompt: !!data.profile?.masterPrompt || !!data.masterPrompt,
+                supabaseId: data.supabaseId
+            });
+
             if (data.supabaseId) {
                 try {
                     const masterPromptData = await loadMasterPrompt(data.supabaseId);
                     if (masterPromptData) {
                         data.masterPrompt = masterPromptData.masterPrompt;
                         data.tokenCount = masterPromptData.tokenCount;
+                        console.log('[ExChat] Master prompt loaded from Supabase');
                     }
-                } catch (err) { }
+                } catch (err) {
+                    console.log('[ExChat] Master prompt load failed, using local');
+                }
             }
             setProfileData(data);
             const detectedUserName = data.userName || 'Usuario';
             setUserName(detectedUserName);
+            console.log('[ExChat] ✅ Profile set successfully');
 
             // Try to load conversation from cloud first
             let loadedMessages: any[] = [];
@@ -184,6 +221,7 @@ export default function ExSimulatorChat() {
                 }
             }
         } else {
+            console.log('[ExChat] ❌ No profile found in storage, redirecting back');
             router.back();
         }
     };
@@ -228,6 +266,54 @@ export default function ExSimulatorChat() {
                 console.log('[ExChat] Session summary failed:', err)
             );
         }
+
+        // NEW: Dynamic Profile Refinement every 15 messages
+        if (msgs.length % 15 === 0 && msgs.length > 0 && profileData) {
+            console.log('[ExChat] Triggering dynamic profile refinement...');
+            const recent = msgs.slice(-15).map(m => ({
+                role: m.role as 'user' | 'assistant',
+                content: m.content
+            }));
+
+            // Determine interaction type roughly
+            const lastMsg = msgs[msgs.length - 1].content.toLowerCase();
+            const type = (lastMsg.includes('odio') || lastMsg.includes('nunca') || lastMsg.includes('!')) ? 'conflict' :
+                (lastMsg.includes('amo') || lastMsg.includes('quiero') || lastMsg.includes('❤')) ? 'intimate' : 'neutral';
+
+            try {
+                refineProfileWithChat(profileData.profile || profileData, recent, type).then(updates => {
+                    if (updates && Object.keys(updates).length > 0) {
+                        console.log('[ExChat] Refining profile with updates:', updates);
+
+                        // Deep merge updates into profile
+                        const currentProfile = profileData.profile || profileData;
+                        const newInnerProfile = { ...currentProfile, ...updates };
+
+                        // Update triggers specifically if they are partial
+                        if (updates.triggers && currentProfile.triggers) {
+                            newInnerProfile.triggers = { ...currentProfile.triggers, ...updates.triggers };
+                        }
+
+                        // Update state
+                        const newProfileData = { ...profileData, profile: newInnerProfile };
+                        setProfileData(newProfileData);
+
+                        // Persist
+                        storage.setItem('exSimulator_currentProfile', JSON.stringify(newProfileData));
+
+                        // If logged in, update to cloud (silent update)
+                        if (userId && profileData.supabaseId) {
+                            supabase.from('ex_profiles')
+                                .update({ profile_data: newInnerProfile })
+                                .eq('id', profileData.supabaseId)
+                                .then(() => console.log('[ExChat] Profile refined in cloud'));
+                        }
+                    }
+                });
+            } catch (e) {
+                console.log('[ExChat] Refinement failed:', e);
+            }
+        }
     };
 
     // Generate a summary of important conversation points for long-term memory
@@ -235,7 +321,7 @@ export default function ExSimulatorChat() {
         if (!profileData) return;
 
         try {
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
             // Analyze last 50 messages for better memory (was 30)
             const recentMsgs = msgs.slice(-50).map(m =>
                 `${m.role === 'user' ? 'Usuario' : profileData.exName}: ${m.content}`
@@ -334,22 +420,38 @@ Formato: bullets concisos pero informativos. Máximo 500 caracteres:`;
 
         const userMessage: Message = {
             role: 'user',
-            content: inputText,
+            content: inputText.trim(),
             timestamp: new Date(),
-            seen: false
+            seen: false,
         };
 
-        const updatedMessages = [...messages, userMessage];
-        setMessages(updatedMessages);
-        const currentInput = inputText;
+        const newMessages = [...messages, userMessage];
+        setMessages(newMessages);
+        const currentInput = inputText; // Keep currentInput for later use
         setInputText('');
+        setIsTyping(true);
+
+        // FEATURE #4 & #5: Detect defensive/jealous triggers
+        let promptModifier = '';
+        const defensiveTopic = checkDefensiveTrigger(inputText, profileData.profile?.defensiveTopics || []);
+        const jealousyTrigger = checkJealousyTrigger(inputText, profileData.profile?.jealousyTriggers || []);
+
+        if (defensiveTopic) {
+            promptModifier += `\n[MODO DEFENSIVO]: El usuario mencionó "${defensiveTopic.topic}", un tema que te pone a la defensiva. Responde con actitud defensiva o contraatacando sutilmente.`;
+            console.log('[ExChat] 🛡️ Defensive mode activated:', defensiveTopic.topic);
+        }
+
+        if (jealousyTrigger) {
+            promptModifier += `\n[MODO CELOSO]: El usuario mencionó a "${jealousyTrigger.name}" (${jealousyTrigger.context}), alguien que te causa celos. Responde con tono celoso, inseguro o molesto.`;
+            console.log('[ExChat] 💚 Jealous mode activated:', jealousyTrigger.name);
+        }
 
         try {
             if (!GEMINI_API_KEY) {
                 throw new Error('API_KEY_MISSING');
             }
 
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
             let systemPrompt: string;
 
             // Build memory context if available
@@ -385,14 +487,14 @@ ${conversationMemory}
 
             if (profileData.masterPrompt) {
                 // Use last 20 messages for context
-                const recentContext = messages.slice(-20).map(m =>
+                const recentContext = newMessages.slice(-20).map(m =>
                     `${m.role === 'user' ? userName : profileData.exName}: ${m.content}`
                 ).join('\n');
 
-                // Full context: Master prompt + Facts + Past summaries + RAG + Memory + Recent
-                systemPrompt = `${profileData.masterPrompt}\n${factsContext}\n${pastSummaries}\n${ragContext}\n${memoryContext}\nCONTEXTO RECIENTE:\n${recentContext}\n\nMENSAJE ACTUAL: "${currentInput}"\n\nRESPONDE (sin poner tu nombre antes):`;
+                // Full context: Master prompt + Facts + Past summaries + RAG + Memory + Recent + Modifiers
+                systemPrompt = `${profileData.masterPrompt}\n${factsContext}\n${pastSummaries}\n${ragContext}\n${memoryContext}\nCONTEXTO RECIENTE:\n${recentContext}\n\nMENSAJE ACTUAL: "${currentInput}"\n${promptModifier}\n\nRESPONDE (sin poner tu nombre antes):`;
             } else {
-                systemPrompt = buildEnhancedPrompt(profileData, userName, currentInput, messages);
+                systemPrompt = buildEnhancedPrompt(profileData, userName, currentInput, messages) + promptModifier;
             }
 
             // NEW: Calculate emotional delay if session available
@@ -421,8 +523,8 @@ ${conversationMemory}
             // Use the calculated delay (2-6 seconds)
             await new Promise(resolve => setTimeout(resolve, emotionalDelay));
 
-            updatedMessages[updatedMessages.length - 1].seen = true;
-            setMessages([...updatedMessages]);
+            newMessages[newMessages.length - 1].seen = true;
+            setMessages([...newMessages]);
             setIsTyping(true);
 
             // NEW: Retry logic for API calls
@@ -468,8 +570,40 @@ ${conversationMemory}
             // Also remove any remaining name prefix
             fullText = fullText.replace(/^[A-Za-záéíóúñÁÉÍÓÚÑ]+:\s*/i, '').trim();
 
-            const fragments = fragmentMessage(fullText, profileData.profile.attachmentStyle);
-            let currentMessages = [...updatedMessages];
+            // FEATURE #2: Apply messaging pattern (metralleta vs biblia)
+            const messagingPattern = profileData.profile?.messagingPattern;
+            let fragments: any[] = [];
+
+            if (messagingPattern?.style === 'metralleta' && fullText.length > 60) {
+                // Split into 3-5 short messages
+                const avgLength = messagingPattern.avgMessageLength || 50;
+                const sentences = fullText.match(/[^.!?]+[.!?]+/g) || [fullText];
+
+                let tempFragments: string[] = [];
+                let currentFragment = '';
+                for (const sentence of sentences) {
+                    if (currentFragment.length + sentence.length > avgLength && currentFragment.length > 0) {
+                        tempFragments.push(currentFragment.trim());
+                        currentFragment = sentence;
+                    } else {
+                        currentFragment += ' ' + sentence;
+                    }
+                }
+                if (currentFragment.trim()) tempFragments.push(currentFragment.trim());
+
+                // Convert to fragment objects
+                fragments = tempFragments.map((text, i) => ({
+                    text,
+                    delay: i === 0 ? 0 : 800
+                }));
+                console.log('[ExChat] 💬 Metralleta mode:', fragments.length, 'messages');
+            } else {
+                // Biblia or normal: use original fragmentMessage logic
+                fragments = fragmentMessage(fullText, profileData.profile.attachmentStyle);
+                console.log('[ExChat] 📖 Biblia/normal mode:', fragments.length, 'message(s)');
+            }
+
+            let currentMessages = [...newMessages];
 
             for (let i = 0; i < fragments.length; i++) {
                 const fragment = fragments[i];
@@ -510,7 +644,7 @@ ${conversationMemory}
                 timestamp: new Date(),
                 seen: false
             };
-            setMessages([...updatedMessages, errorMessage]);
+            setMessages([...newMessages, errorMessage]);
 
             // If can retry, show alert with option
             if (canRetry && error.message !== 'API_KEY_MISSING') {
@@ -546,7 +680,7 @@ ${conversationMemory}
         <SafeAreaView style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.push('/(tabs)')} style={styles.backButton}>
+                <TouchableOpacity onPress={() => router.push('/tools/ex-simulator')} style={styles.backButton}>
                     <ArrowLeft size={24} color="white" />
                 </TouchableOpacity>
                 <View style={styles.headerCenter}>
@@ -558,6 +692,7 @@ ${conversationMemory}
                         <Text style={styles.headerStatus}>
                             {isTyping ? 'Escribiendo...' : 'En línea'}
                         </Text>
+
                     </View>
                 </View>
                 {/* Premium Upgrade Banner - only for free users */}
@@ -587,19 +722,13 @@ ${conversationMemory}
                         <View
                             style={[
                                 styles.messageBubble,
-                                msg.role === 'user' ? styles.messageBubbleUser : styles.messageBubbleAssistant
+                                msg.role === 'user' ? styles.userBubble : styles.assistantBubble
                             ]}
                         >
-                            <Text style={[
-                                styles.messageText,
-                                msg.role === 'user' ? styles.messageTextUser : styles.messageTextAssistant
-                            ]}>
+                            <Text style={styles.messageText}>
                                 {msg.content}
                             </Text>
-                            <Text style={[
-                                styles.messageTime,
-                                msg.role === 'user' ? styles.messageTimeUser : styles.messageTimeAssistant
-                            ]}>
+                            <Text style={styles.messageTime}>
                                 {msg.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                 {msg.role === 'user' && msg.seen && ' • Leído'}
                             </Text>
@@ -623,7 +752,7 @@ ${conversationMemory}
             <View style={styles.inputContainer}>
                 <View style={styles.inputWrapper}>
                     <TextInput
-                        style={styles.textInput}
+                        style={styles.input}
                         placeholder="Escribe un mensaje..."
                         placeholderTextColor="#666"
                         value={inputText}
@@ -632,6 +761,7 @@ ${conversationMemory}
                         editable={!isTyping}
                         multiline
                     />
+                    {/* Send Button */}
                     {inputText.trim() && (
                         <TouchableOpacity
                             onPress={sendMessage}
@@ -642,14 +772,6 @@ ${conversationMemory}
                         </TouchableOpacity>
                     )}
                 </View>
-                {/* Message counter for free users */}
-                {!isPremium && (
-                    <Text style={styles.messageCounter}>
-                        {FREE_MESSAGE_LIMIT - userMessageCount > 0
-                            ? `${FREE_MESSAGE_LIMIT - userMessageCount} mensajes restantes`
-                            : 'Sin mensajes restantes'}
-                    </Text>
-                )}
             </View>
 
             {/* LOGIN RECOMMENDATION MODAL */}
@@ -743,14 +865,24 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.1)',
+        padding: 16,
         backgroundColor: '#0a0a0a',
+        borderBottomWidth: 1,
+        borderBottomColor: '#1f1f1f',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 4,
     },
     backButton: {
-        padding: 8,
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+        borderRadius: 20,
+        backgroundColor: '#1a1a1a',
     },
     headerCenter: {
         flex: 1,
@@ -759,29 +891,40 @@ const styles = StyleSheet.create({
         marginLeft: 8,
     },
     avatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#a855f7',
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#7c3aed',
         justifyContent: 'center',
         alignItems: 'center',
+        marginRight: 12,
+        shadowColor: '#7c3aed',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 2,
     },
     avatarText: {
-        color: 'white',
+        color: '#fff',
         fontSize: 18,
-        fontWeight: 'bold',
+        fontWeight: '700',
+        letterSpacing: 0.5,
     },
     headerInfo: {
-        marginLeft: 12,
+        flex: 1,
     },
     headerName: {
-        color: 'white',
+        color: '#fff',
         fontSize: 17,
         fontWeight: '600',
+        marginBottom: 2,
+        letterSpacing: 0.3,
     },
     headerStatus: {
-        color: '#22c55e',
-        fontSize: 12,
+        color: '#10b981',
+        fontSize: 13,
+        fontWeight: '500',
+        letterSpacing: 0.2,
     },
     headerRight: {
         width: 40,
@@ -821,35 +964,37 @@ const styles = StyleSheet.create({
     },
     messageBubble: {
         maxWidth: '75%',
-        borderRadius: 20,
+        marginVertical: 4,
         paddingHorizontal: 16,
-        paddingVertical: 10,
+        paddingVertical: 12,
+        borderRadius: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
     },
-    messageBubbleUser: {
-        backgroundColor: '#a855f7',
+    userBubble: {
+        alignSelf: 'flex-end',
+        backgroundColor: '#7c3aed', // Purple gradient base
+        marginLeft: 50,
         borderBottomRightRadius: 4,
     },
-    messageBubbleAssistant: {
-        backgroundColor: '#1c1c1e',
+    assistantBubble: {
+        alignSelf: 'flex-start',
+        backgroundColor: '#1f1f1f',
+        marginRight: 50,
         borderBottomLeftRadius: 4,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
+        borderColor: '#2a2a2a',
     },
     messageText: {
-        fontSize: 16,
+        fontSize: 15,
         lineHeight: 22,
-    },
-    messageTextUser: {
-        color: 'white',
-    },
-    messageTextAssistant: {
-        color: '#e5e5e5',
+        color: '#fff',
+        letterSpacing: 0.2,
     },
     messageTime: {
-        fontSize: 10,
-        marginTop: 4,
-    },
-    messageTimeUser: {
         color: 'rgba(255,255,255,0.7)',
         textAlign: 'right',
     },
@@ -874,32 +1019,45 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         backgroundColor: '#0a0a0a',
         borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.1)',
+        borderTopColor: '#1f1f1f',
     },
     inputWrapper: {
         flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#1c1c1e',
+        alignItems: 'flex-end',
+        backgroundColor: '#1a1a1a',
         borderRadius: 24,
         paddingHorizontal: 16,
         paddingVertical: 8,
-        minHeight: 48,
+        borderWidth: 1.5,
+        borderColor: '#2a2a2a',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
-    textInput: {
+    input: {
         flex: 1,
-        color: 'white',
-        fontSize: 16,
+        color: '#fff',
+        fontSize: 15,
         maxHeight: 100,
         paddingVertical: 8,
+        lineHeight: 20,
+        letterSpacing: 0.2,
     },
     sendButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#a855f7',
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: '#7c3aed',
         justifyContent: 'center',
         alignItems: 'center',
         marginLeft: 8,
+        shadowColor: '#7c3aed',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.4,
+        shadowRadius: 6,
+        elevation: 3,
     },
     messageCounter: {
         color: 'rgba(255,255,255,0.5)',
@@ -971,5 +1129,65 @@ const styles = StyleSheet.create({
     modalSecondaryText: {
         color: 'rgba(255,255,255,0.5)',
         fontSize: 14,
+    },
+    // NEW: Suggestion chips styles
+    suggestionsContainer: {
+        backgroundColor: '#111',
+        padding: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#222',
+    },
+    suggestionsTitle: {
+        color: '#9ca3af',
+        fontSize: 12,
+        marginBottom: 8,
+        fontWeight: '500',
+    },
+    suggestionsList: {
+        flexDirection: 'row',
+    },
+    suggestionChip: {
+        backgroundColor: '#1e1e1e',
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+        borderRadius: 20,
+        marginRight: 8,
+        borderWidth: 1,
+        borderColor: '#333',
+    },
+    suggestionText: {
+        color: '#a855f7',
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    // NEW: Phase selector styles
+    phaseSelector: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    phaseSelectorLabel: {
+        color: '#9ca3af',
+        fontSize: 10,
+        marginRight: 6,
+    },
+    phaseChip: {
+        backgroundColor: '#1e1e1e',
+        paddingVertical: 4,
+        paddingHorizontal: 10,
+        borderRadius: 12,
+        marginRight: 4,
+        borderWidth: 1,
+        borderColor: '#333',
+    },
+    phaseChipActive: {
+        backgroundColor: '#a855f7',
+        borderColor: '#a855f7',
+    },
+    phaseChipText: {
+        fontSize: 16,
+    },
+    phaseChipTextActive: {
+        opacity: 1,
     },
 });

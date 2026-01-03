@@ -168,7 +168,7 @@ export async function createSessionSummary(
     if (messages.length < 10) return null;
 
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         const msgText = messages.map(m =>
             `${m.role === 'user' ? 'Usuario' : exName}: ${m.content}`

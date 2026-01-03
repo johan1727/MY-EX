@@ -201,6 +201,8 @@ export function detectLanguage(messages: ParsedMessage[]): SupportedLanguage {
 // CACHÉ DE ANÁLISIS PARCIAL (RECOVERY)
 // ===============================================
 
+import { storage } from './storage';
+
 export interface AnalysisCache {
     exName: string;
     block1?: any;
@@ -211,14 +213,15 @@ export interface AnalysisCache {
 }
 
 /**
- * Guarda el progreso del análisis en localStorage para recovery
+ * Guarda el progreso del análisis en storage para recovery
+ * Works on both web (localStorage) and native (AsyncStorage)
  */
-export function saveAnalysisProgress(
+export async function saveAnalysisProgress(
     exName: string,
     blockNumber: 1 | 2 | 3,
     data: any,
     language: SupportedLanguage
-): void {
+): Promise<void> {
     const cacheKey = `analysis_cache_${exName}`;
 
     // Leer caché existente
@@ -229,7 +232,7 @@ export function saveAnalysisProgress(
     };
 
     try {
-        const existing = localStorage.getItem(cacheKey);
+        const existing = await storage.getItem(cacheKey);
         if (existing) {
             cache = JSON.parse(existing);
         }
@@ -243,7 +246,7 @@ export function saveAnalysisProgress(
 
     // Guardar
     try {
-        localStorage.setItem(cacheKey, JSON.stringify(cache));
+        await storage.setItem(cacheKey, JSON.stringify(cache));
         console.log(`[AnalysisCache] ✅ Bloque ${blockNumber} guardado`);
     } catch (e) {
         console.error('[AnalysisCache] Error guardando caché:', e);
@@ -251,13 +254,14 @@ export function saveAnalysisProgress(
 }
 
 /**
- * Recupera el progreso del análisis desde localStorage
+ * Recupera el progreso del análisis desde storage
+ * Works on both web (localStorage) and native (AsyncStorage)
  */
-export function loadAnalysisProgress(exName: string): AnalysisCache | null {
+export async function loadAnalysisProgress(exName: string): Promise<AnalysisCache | null> {
     const cacheKey = `analysis_cache_${exName}`;
 
     try {
-        const cached = localStorage.getItem(cacheKey);
+        const cached = await storage.getItem(cacheKey);
         if (!cached) return null;
 
         const cache: AnalysisCache = JSON.parse(cached);
@@ -266,7 +270,7 @@ export function loadAnalysisProgress(exName: string): AnalysisCache | null {
         const ageHours = (Date.now() - cache.timestamp) / (1000 * 60 * 60);
         if (ageHours > 24) {
             console.log('[AnalysisCache] Caché expirado (>24h), ignorando');
-            localStorage.removeItem(cacheKey);
+            await storage.removeItem(cacheKey);
             return null;
         }
 
@@ -286,9 +290,10 @@ export function loadAnalysisProgress(exName: string): AnalysisCache | null {
 
 /**
  * Limpia el caché de análisis una vez completado exitosamente
+ * Works on both web (localStorage) and native (AsyncStorage)
  */
-export function clearAnalysisCache(exName: string): void {
+export async function clearAnalysisCache(exName: string): Promise<void> {
     const cacheKey = `analysis_cache_${exName}`;
-    localStorage.removeItem(cacheKey);
+    await storage.removeItem(cacheKey);
     console.log(`[AnalysisCache] 🧹 Caché limpiado para "${exName}"`);
 }

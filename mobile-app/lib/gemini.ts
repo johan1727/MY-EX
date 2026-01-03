@@ -5,7 +5,7 @@ import { checkProhibitedContent } from "./contentModeration";
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 export async function sendMessageToGemini(message: string, imageBase64?: string | null) {
     try {

@@ -410,7 +410,7 @@ async function analyzeEmotionalImpact(
         const prompt = buildEmotionAnalysisPrompt(userMessage, currentEmotion, profile);
 
         const model = genAI.getGenerativeModel({
-            model: 'gemini-2.0-flash-exp',
+            model: 'gemini-2.0-flash',
             generationConfig: {
                 temperature: 0.3,
                 maxOutputTokens: 200
@@ -529,7 +529,7 @@ function updateConversationMemory(
 async function generateResponse(prompt: string, maxLength: number): Promise<string> {
     try {
         const model = genAI.getGenerativeModel({
-            model: 'gemini-2.0-flash-exp',
+            model: 'gemini-2.0-flash',
             generationConfig: {
                 temperature: 0.8, // Más variabilidad para respuestas naturales
                 maxOutputTokens: Math.ceil(maxLength / 3) // Aproximado

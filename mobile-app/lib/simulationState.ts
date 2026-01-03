@@ -231,7 +231,7 @@ export async function saveSessionToSupabase(session: SimulationSession): Promise
             .upsert({
                 id: session.id,
                 user_id: session.userId,
-                profile_id: session.profileId,
+                ex_profile_id: session.profileId,
                 started_at: session.startedAt,
                 last_message_at: session.lastMessageAt,
                 current_emotion: session.currentEmotion,
@@ -272,7 +272,7 @@ export async function loadSessionFromSupabase(profileId: string): Promise<Simula
             .from('simulation_sessions')
             .select('*')
             .eq('user_id', user.user.id)
-            .eq('profile_id', profileId)
+            .eq('ex_profile_id', profileId)
             .order('last_message_at', { ascending: false })
             .limit(1)
             .single();
@@ -295,7 +295,7 @@ export async function loadSessionFromSupabase(profileId: string): Promise<Simula
 
         return {
             id: data.id,
-            profileId: data.profile_id,
+            profileId: data.ex_profile_id,
             userId: data.user_id,
             startedAt: data.started_at,
             lastMessageAt: data.last_message_at,

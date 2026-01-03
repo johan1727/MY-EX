@@ -36,9 +36,10 @@ interface SubscriptionContextType {
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
 // Configuración de límites por plan
+// Configuración de límites por plan (Sincronizado con SQL 2026-01-02)
 const TIER_LIMITS = {
     survivor: {
-        daily_messages: 10,
+        daily_messages: 60, // 18k tokens / 300
         weekly_decodings: 1,
         vault_access: false,
         mood_journal: false,
@@ -46,24 +47,24 @@ const TIER_LIMITS = {
         ex_simulator: false,
     },
     explorer: {
-        daily_messages: 750,
-        weekly_decodings: 75,
+        daily_messages: 500, // 150k tokens / 300
+        weekly_decodings: 50,
         vault_access: true,
         mood_journal: true,
         export_data: true,
         ex_simulator: true,
     },
     warrior: {
-        daily_messages: 1500,
-        weekly_decodings: -1,
+        daily_messages: 1300, // 400k tokens / 300
+        weekly_decodings: 200,
         vault_access: true,
         mood_journal: true,
         export_data: true,
         ex_simulator: true,
     },
     phoenix: {
-        daily_messages: -1,
-        weekly_decodings: -1,
+        daily_messages: 6500, // 2M tokens / 300 (Virtualmente ilimitado)
+        weekly_decodings: 1000,
         vault_access: true,
         mood_journal: true,
         export_data: true,
@@ -107,13 +108,21 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     const fetchTierFromSupabase = async (userId: string) => {
         try {
             console.log('[Subscription] Fetching tier for user:', userId);
-            console.log('[Subscription] Supabase URL:', supabase.supabaseUrl);
 
-            const { data: profile, error } = await supabase
+            // Create a timeout promise (5s)
+            const timeoutPromise = new Promise<{ data: any, error: any }>((_, reject) =>
+                setTimeout(() => reject(new Error('Supabase request timed out')), 5000)
+            );
+
+            // Execute query
+            const queryPromise = supabase
                 .from('profiles')
                 .select('subscription_tier')
                 .eq('id', userId)
                 .single();
+
+            // Race against timeout
+            const { data: profile, error } = await Promise.race([queryPromise, timeoutPromise]);
 
             console.log('[Subscription] Query completed');
             console.log('[Subscription] Error:', error);

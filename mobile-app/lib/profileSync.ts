@@ -141,8 +141,11 @@ export async function deleteProfile(profileId: string, supabaseId?: string): Pro
 // ============== PRIVATE FUNCTIONS ==============
 
 async function saveProfileLocal(profile: ExProfile): Promise<void> {
+    console.log('[ProfileSync] Saving profile locally:', profile.id, profile.exName);
+
     // Save as current profile
     await storage.setItem('exSimulator_currentProfile', JSON.stringify(profile));
+    console.log('[ProfileSync] ✅ Saved to exSimulator_currentProfile');
 
     // Add to all profiles list
     const existingProfiles = await loadProfilesLocal();
@@ -155,6 +158,7 @@ async function saveProfileLocal(profile: ExProfile): Promise<void> {
     }
 
     await storage.setItem('exSimulator_allProfiles', JSON.stringify(existingProfiles));
+    console.log('[ProfileSync] ✅ Saved to exSimulator_allProfiles, total:', existingProfiles.length);
 }
 
 async function loadProfilesLocal(): Promise<ExProfile[]> {
@@ -198,13 +202,15 @@ async function saveProfileToSupabase(profile: ExProfile, userId: string): Promis
             })
             .eq('id', profile.supabaseId)
             .select()
-            .single();
+            .maybeSingle(); // Use maybeSingle to avoid errors if not found
 
         if (error) {
             console.error('[ProfileSync] Update error:', error);
             return null;
         }
-        return data;
+
+        // If not found (e.g. deleted on server), fall through to insert
+        if (data) return data as SupabaseExProfile;
     }
 
     // Insert new profile
@@ -225,7 +231,7 @@ async function saveProfileToSupabase(profile: ExProfile, userId: string): Promis
     }
 
     console.log('[ProfileSync] Created new profile in Supabase:', data.id);
-    return data;
+    return data as SupabaseExProfile;
 }
 
 async function loadProfilesFromSupabase(userId: string): Promise<ExProfile[]> {

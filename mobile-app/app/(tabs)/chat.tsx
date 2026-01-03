@@ -148,7 +148,7 @@ export default function CoachChatScreen() {
     const handleAIResponse = async (history: Message[], userPrompt: string, msgId: string, imageBase64?: string | null, audioBase64?: string | null) => {
         setIsTyping(true);
         try {
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
             const systemPrompt = `Eres REMI, un amigo que entiende las rupturas porque también las ha vivido.
 

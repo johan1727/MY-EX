@@ -4,18 +4,16 @@ import { extractConversationContext } from './conversationHelpers';
 import { extractMessageSamples, MessageSamples } from './messageSampleExtractor';
 import { cleanSystemMessages, validateOneOnOneChat, detectLanguage, saveAnalysisProgress, loadAnalysisProgress, clearAnalysisCache, type SupportedLanguage } from './chatValidation';
 
-// TEMPORAL: Hardcodeando la API Key para bypasear el problema de Expo Web
 // TODO: Revertir esto antes de hacer commit!
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
+console.log('[DEBUG] Loaded API Key start:', GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 10) : 'UNDEFINED');
 
-console.log('[Gemini] ? API Key HARDCODEADA para testing local');
-console.log('[Gemini] API Key detectada (comienza con:', GEMINI_API_KEY.substring(0, 8), '...)');
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 // Rate limiting helper - wait between API calls to prevent 429 errors
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-const STAGE_DELAY_MS = 10000; // 10s between stages (prevent rate limit - max 10 req/min)
+const STAGE_DELAY_MS = 5000; // 5s between stages (paid tier allows 60 RPM)
 
 // Types
 export interface ParsedMessage {
@@ -101,15 +99,58 @@ export interface ExProfile {
         typosFrequency: 'ninguno' | 'raro' | 'frecuente';
         // NEW: LIWC-inspired fields
         ghostingTendency: 'nunca' | 'rara vez' | 'ocasional' | 'frecuente';
-        capitalization: 'normal' | 'TODO MAY�SCULAS' | 'todo min�sculas' | 'mixto';
+        capitalization: 'normal' | 'TODO MAYSCULAS' | 'todo minsculas' | 'mixto';
         petNames: string[];      // ["amor", "bb", "mi vida"]
         insultPatterns: string[]; // ["tonto", "idiota"] - when angry
         pronounUsage: {
-            firstPerson: 'alto' | 'medio' | 'bajo';  // Correlaci�n con neuroticismo
-            secondPerson: 'alto' | 'medio' | 'bajo'; // Correlaci�n con agreeableness
-            weUs: 'alto' | 'medio' | 'bajo';         // Conexi�n relacional
+            firstPerson: 'alto' | 'medio' | 'bajo';  // Correlacin con neuroticismo
+            secondPerson: 'alto' | 'medio' | 'bajo'; // Correlacin con agreeableness
+            weUs: 'alto' | 'medio' | 'bajo';         // Conexin relacional
         };
     };
+
+    // === MESSAGING PATTERN (Feature #2: Double Text Analysis) ===
+    messagingPattern?: {
+        avgMessagesPerBurst: number;     // Average number of messages sent consecutively
+        burstFrequency: number;           // How often sends bursts (0-1)
+        avgMessageLength: number;         // Average characters per message
+        style: 'metralleta' | 'biblia' | 'balanceado'; // Visual style
+        examplesShort?: string[];         // Examples of short bursts
+        examplesLong?: string[];          // Examples of long messages
+    };
+
+    // === DEFENSIVE TOPICS (Feature #4: Projected Insecurity) ===
+    defensiveTopics?: Array<{
+        topic: string;              // e.g., "dinero", "ex parejas", "familia"
+        examples: string[];         // Examples of defensive responses
+        intensity: number;          // 1-10: How defensive they get
+        triggerWords: string[];     // Words that trigger defensiveness
+    }>;
+
+    // === JEALOUSY TRIGGERS (Feature #5: Jealousy Detector) ===
+    jealousyTriggers?: Array<{
+        name: string;               // Name of the person
+        context: string;            // Relationship (friend, coworker, ex)
+        conflictCount: number;      // How many times caused issues
+        examples: string[];         // Examples of jealous reactions
+    }>;
+
+    // === NICKNAME EVOLUTION (Feature #6: Relationship Phase Simulation) ===
+    nicknameEvolution?: Array<{
+        nickname: string;           // Pet name used
+        startPeriod: string;        // When it started (e.g., "início", "medio", "final")
+        endPeriod: string;          // When it ended
+        phase: 'honeymoon' | 'stable' | 'crisis' | 'breakup'; // Relationship phase
+        frequency: number;          // How often used (1-10)
+    }>;
+
+    // === TOP CONFLICTS (Feature #7: Recurring Issues) ===
+    topConflicts?: Array<{
+        topic: string;              // Topic of conflict (e.g., "tiempo", "celos", "familia")
+        occurrences: number;        // How many times it came up
+        severity: number;           // 1-10 how serious
+        examples: string[];         // Example quotes from conflicts
+    }>;
 
     // === RELATIONSHIP DYNAMICS ===
     relationshipDynamics: {
@@ -117,7 +158,7 @@ export interface ExProfile {
         jealousyLevel: number;   // 1-10
         trustDefault: number;    // 1-10
         conflictStyle: 'habla' | 'evita' | 'explota' | 'manipula';
-        forgivenessStyle: 'f�cil' | 'con tiempo' | 'dif�cil' | 'rencorosa';
+        forgivenessStyle: 'fcil' | 'con tiempo' | 'difcil' | 'rencorosa';
     };
 
     // === CONTEXTUAL RESPONSE PATTERNS ===
@@ -312,6 +353,93 @@ export interface ExProfile {
         content: string; // Hecho anonimizado
         importance: number; // 1-10
     }[];
+
+    // === PREMIUM: RELATIONSHIP SPECIFIC PSYCHOLOGY ===
+    relationshipPsychology?: {
+        // Shared
+        reciprocityScore: number; // 0-100
+        powerBalance: 'balanced' | 'user-dominant' | 'other-dominant';
+
+        // Ex-Specific
+        breakupPatterns?: {
+            quietQuitting: boolean;
+            fadingAway: boolean;
+        };
+
+        // Friend-Specific
+        friendshipRole?: string; // Leader, follower, etc.
+        frenemyScore?: number; // 0-100 (envy/competition)
+
+        // Family-Specific
+        familyRole?: string; // Black sheep, etc.
+        emotionalBlackmail?: boolean;
+
+        // Deceased-Specific
+        emotionalLegacy?: string[];
+        lifeImprint?: string[];
+    };
+
+    // === PREMIUM: DEEP LINGUISTIC ANALYSIS ===
+    linguisticAnalysis?: {
+        subtext: string; // "Agresividad pasiva", "Defensivo", etc.
+        intellectualization: number; // 1-10
+        toneShiftUnderStress: string;
+        psychologicalCrutches: string[]; // Muletillas psicolgicas
+    };
+
+    // === NEW: INTIMATE DETAILS ===
+    intimateDetails?: {
+        nicknames: {
+            fromExToUser: string[]; // "bebé", "gordi"
+            fromUserToEx: string[]; // "amor", "precioso"
+        };
+        recurringComplaints: string[]; // "nunca me escuchas", "siempre llegas tarde"
+        insideJokes: string[]; // Referencias específicas
+        loveLanguageSpecifics: string[]; // "abrazos por la espalda", "notas de voz largas"
+    };
+
+    // === NEW: PSYCHOLOGICAL X-RAY (Gottman + Attachment) ===
+    psychologicalXRay?: {
+        fourHorsemen: {
+            criticism: number; // 0-100 (Frequency/Intensity)
+            contempt: number; // 0-100 (The worst one)
+            defensiveness: number; // 0-100
+            stonewalling: number; // 0-100
+        };
+        attachmentStyle: {
+            type: 'seguro' | 'ansioso' | 'evitativo-burlon' | 'evitativo-miedoso' | 'desorganizado';
+            confidence: number; // 0-100
+            manifestations: string[]; // "Se aleja cuando hay intimidad", "Manda mensajes compulsivos"
+        };
+    };
+
+    // === PHASE 7: ADVANCED BEHAVIORAL ANALYSIS (4 nuevas fases) ===
+    conflictResolution?: {
+        style: 'evade' | 'confront' | 'manipulate' | 'resolve' | 'passive-aggressive';
+        typicalPhrases: string[];
+        coolingOffTime: string;
+        apologizesFirst: boolean;
+        holdsGrudges: boolean;
+    };
+    loveLanguageDetailed?: {
+        primary: 'words' | 'acts' | 'time' | 'gifts' | 'touch';
+        secondary: 'words' | 'acts' | 'time' | 'gifts' | 'touch';
+        examples: string[];
+        preferredExpressions: string[];
+    };
+    humorProfile?: {
+        types: string[];  // 'sarcastic', 'ironic', 'absurd', 'dark', 'puns', 'memes'
+        sensitivity: 'low' | 'medium' | 'high';
+        tabooTopics: string[];
+        insideJokes: string[];
+        laughTriggers: string[];
+    };
+    emotionalTriggersAdvanced?: {
+        negative: { topic: string; intensity: number; typicalReaction: string }[];
+        positive: { topic: string; effect: string }[];
+        avoidTopics: string[];
+        safeTopics: string[];
+    };
 }
 
 
@@ -488,7 +616,7 @@ async function detectExSenderWithAI(
         ).join('\n');
 
         const model = genAI.getGenerativeModel({
-            model: 'gemini-2.0-flash-exp',
+            model: 'gemini-2.0-flash',
             generationConfig: { temperature: 0.1, maxOutputTokens: 200 }
         });
 
@@ -546,13 +674,15 @@ Responde SOLO con JSON:
     };
 }
 
-// Internal helper for retrying AI calls with timeout
-// INCREASED timeout for large file support (was 30s, now 90s)
-async function generateWithRetry(model: any, prompt: string, retries = 2, timeoutMs = 90000): Promise<string> {
-    let lastError;
+// Internal helper for retrying AI calls with timeout and exponential backoff
+// Optimized for paid tier with better error handling
+async function generateWithRetry(model: any, prompt: string, retries = 3, timeoutMs = 90000): Promise<string> {
+    let lastError: any;
+    const errors: string[] = [];
+
     for (let i = 0; i <= retries; i++) {
         try {
-            console.log(`[AI Call] Attempt ${i + 1}/${retries + 1}, timeout: ${timeoutMs}ms`);
+            console.log(`[AI Call] Attempt ${i + 1}/${retries + 1}, timeout: ${timeoutMs}ms, prompt: ${prompt.length} chars`);
 
             // Create timeout promise
             const timeoutPromise = new Promise<never>((_, reject) =>
@@ -566,19 +696,46 @@ async function generateWithRetry(model: any, prompt: string, retries = 2, timeou
             ]);
 
             const text = result.response.text();
-            console.log(`[AI Call] Success! Response length: ${text.length} chars`);
+            console.log(`[AI Call] ✅ Success! Response length: ${text.length} chars`);
             return text;
         } catch (error: any) {
             lastError = error;
-            console.warn(`[AI Retry ${i}] Failed:`, error?.message || error);
+            const errorMsg = error?.message || String(error);
+            errors.push(`Attempt ${i + 1}: ${errorMsg}`);
+
+            // Detailed error logging
+            console.error(`[AI Error] Attempt ${i + 1}/${retries + 1}:`, {
+                message: errorMsg,
+                code: error?.code,
+                status: error?.status,
+                promptLength: prompt.length
+            });
+
             if (i < retries) {
-                const waitTime = 2000 * (i + 1);
-                console.log(`[AI Call] Waiting ${waitTime}ms before retry...`);
+                // Exponential backoff: 2s, 4s, 8s
+                const waitTime = Math.min(2000 * Math.pow(2, i), 10000);
+                console.log(`[AI Call] ⏳ Waiting ${waitTime}ms before retry (exponential backoff)...`);
                 await new Promise(resolve => setTimeout(resolve, waitTime));
             }
         }
     }
-    throw lastError;
+
+    // Create detailed error message for user
+    const isRateLimit = lastError?.message?.includes('429') || lastError?.message?.includes('quota');
+    const isTimeout = lastError?.message?.includes('timeout');
+    const isTooLong = lastError?.message?.includes('token') || lastError?.message?.includes('context');
+
+    let userFriendlyError = 'Error de conexión con la IA. ';
+    if (isRateLimit) {
+        userFriendlyError = 'Demasiadas solicitudes. Espera 1 minuto e intenta de nuevo.';
+    } else if (isTimeout) {
+        userFriendlyError = 'El análisis tardó demasiado. Intenta con menos mensajes.';
+    } else if (isTooLong) {
+        userFriendlyError = 'El chat es muy largo. Se usará una muestra más pequeña.';
+    }
+
+    console.error('[AI Call] ❌ All retries failed:', errors);
+    throw new Error(userFriendlyError);
 }
 
 export async function analyzePersonality(
@@ -602,7 +759,7 @@ export async function analyzePersonality(
     console.log(`[analyzePersonality] 🌍 Idioma detectado: ${detectedLanguage}`);
 
     // 💾 NUEVO: Verificar si hay caché de análisis parcial
-    const cache = loadAnalysisProgress(exName);
+    const cache = await loadAnalysisProgress(exName);
     if (cache) {
         console.log('[analyzePersonality] 💾 Caché encontrado:', {
             block1: !!cache.block1,
@@ -672,7 +829,7 @@ export async function analyzePersonality(
     const promptSample = [...firstMessages, ...randomMiddle, ...lastMessages];
     const styleSample = promptSample.map(m => m.content).join('\n');
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     // --- REQUEST 1: DEEP PSYCHOLOGICAL PROFILE ---
     onProgress?.(15, 'Analizando perfil psicológico profundo...');
@@ -685,13 +842,19 @@ export async function analyzePersonality(
     // Extract context for enhanced analysis
     const context = extractConversationContext(sampledMessages, exName);
 
-    const request1Prompt = `Analiza profundamente a "${exName}" basándote en estos mensajes.
+    const request1Prompt = `Analiza profundamente a "${exName}" basándote EXCLUSIVAMENTE en estos mensajes REALES.
+
+⚠️ REGLAS CRÍTICAS - CUMPLIMIENTO OBLIGATORIO:
+1. TODA conclusión DEBE tener 3+ CITAS LITERALES del chat
+2. Si NO encuentras evidencia → pon "No detectado" (NO inventes)
+3. Las citas deben ser EXACTAS (copia/pega del chat)
+4. PROHIBIDO usar valores genéricos o especular
 
 CONTEXTO CRÍTICO:
 - Persona a simular: ${context.participants.target}
 - Usuario real: ${context.participants.user}
 
-HUELLA LINGÜÍSTICA:
+HUELLA LINGÜÍSTICA DETECTADA:
 - Emojis favoritos: ${context.fingerprint.topEmojis.join(' ') || 'ninguno'}
 - Palabras signature: ${context.fingerprint.signatureWords.join(', ') || 'ninguna'}
 - Estilo de risa: ${context.fingerprint.laughStyle.join(', ') || 'jajaja'}
@@ -708,23 +871,38 @@ HUELLA LINGÜÍSTICA:
     MENSAJES:
     ${styleSample.slice(0, 30000)} // Limit to fit context
 
-    Responde con un JSON válido que incluya:
-    1. relationshipType: (ex|partner|friend|etc) con confidence y evidence.
-    2. bigFive: (openness, conscientiousness, extraversion, agreeableness, neuroticism) con scores 1-10 y reasons.
-    3. attachment: style (seguro|ansioso|evitativo|desorganizado) con spectrum (anxiety 1-10, avoidance 1-10) y analysis.
-    4. emotionalTone: primary, secondary, stability (1-10), intensity (1-10).
-    5. communication: style (directo|pasivo-agresivo|etc), verbosity (1-10), formality (formal|casual|vulgar).
-    6. linguistics: vocabularyComplexity (1-10), emojiFrequency (high|med|low), signatureWords (array string).
+    INSTRUCCIONES DE ANÁLISIS:
 
-    Formato JSON esperado:
+    Para CADA campo, DEBES:
+    1. Leer los mensajes y buscar EVIDENCIA REAL
+    2. Citar AL MENOS 3 ejemplos textuales
+    3. Si no hay evidencia → pon score=5 (neutral) y reason="No hay suficiente información"
+
+    Responde con un JSON válido que incluya:
+    1. relationshipType: (ex|partner|friend|etc) con confidence y evidence (3+ citas literales).
+    2. bigFive: (openness, conscientiousness, extraversion, agreeableness, neuroticism) con scores 1-10, reasons Y evidence (3+ citas literales CADA UNO).
+    3. attachment: style (seguro|ansioso|evitativo|desorganizado) con spectrum (anxiety 1-10, avoidance 1-10), analysis Y evidence (3+ citas).
+    4. emotionalTone: primary, secondary, stability (1-10), intensity (1-10) Y evidence (3+ citas).
+    5. communication: style (directo|pasivo-agresivo|etc), verbosity (1-10), formality (formal|casual|vulgar) Y evidence (3+ citas).
+    6. linguistics: vocabularyComplexity (1-10), emojiFrequency (high|med|low), signatureWords (array string) Y evidence (3+ citas).
+
+    Formato JSON esperado (CON EVIDENCIA LITERAL OBLIGATORIA):
     {
-      "relationshipType": { "type": "...", "confidence": 8, "evidence": ["..."] },
-      "bigFive": { "openness": { "score": 5, "reason": "..." }, ... },
-      "attachment": { "style": "...", "spectrum": { "anxiety": 5, "avoidance": 5 }, "analysis": "..." },
-      "emotionalTone": { "primary": "...", "secondary": "...", "stability": 5, "intensity": 5 },
-      "communication": { "style": "...", "verbosity": 5, "formality": "..." },
-      "linguistics": { "vocabularyComplexity": 5, "emojiFrequency": "...", "signatureWords": ["..."] }
+      "relationshipType": { "type": "ex", "confidence": 8, "evidence": ["Literal del chat 1", "Literal 2", "Literal 3"] },
+      "bigFive": {
+        "openness": { "score": 7, "reason": "Explicación basada en evidencia", "evidence": ["Dijo: '...'", "También: '...'", "Y: '...'"] },
+        "conscientiousness": { "score": 5, "reason": "...", "evidence": ["...", "...", "..."] },
+        "extraversion": { "score": 6, "reason": "...", "evidence": ["...", "...", "..."] },
+        "agreeableness": { "score": 5, "reason": "...", "evidence": ["...", "...", "..."] },
+        "neuroticism": { "score": 7, "reason": "...", "evidence": ["...", "...", "..."] }
+      },
+      "attachment": { "style": "ansioso", "spectrum": { "anxiety": 7, "avoidance": 3 }, "analysis": "...", "evidence": ["Cuando le dejaron de hablar: '...'", "Al enfrentar conflicto: '...'", "Sobre compromiso: '...'"] },
+      "emotionalTone": { "primary": "ansioso", "secondary": "nostálgico", "stability": 4, "intensity": 7, "evidence": ["Frecuentemente dice: '...'", "Tono general: '...'", "Reacciona con: '...'"] },
+      "communication": { "style": "pasivo-agresivo", "verbosity": 6, "formality": "casual", "evidence": ["Ejemplo: '...'", "Palabras que usa: '...'", "Nunca dice: '...'"] },
+      "linguistics": { "vocabularyComplexity": 5, "emojiFrequency": "high", "signatureWords": ["ntp", "aja", "sip"], "evidence": ["Usa constantemente: '...'", "Nunca: '...'", "Característica: '...'"] }
     }
+
+    ⚠️ RECORDATORIO FINAL: Sin evidencia = NO inventes. Toda conclusión necesita 3+ citas LITERALES del chat.
     `;
 
     const result1Str = await generateWithRetry(model, request1Prompt);
@@ -738,23 +916,55 @@ HUELLA LINGÜÍSTICA:
     // --- REQUEST 2: BEHAVIORAL PATTERNS ---
     onProgress?.(45, 'Analizando patrones de comportamiento...');
 
-    const request2Prompt = `Basado en el mismo perfil de "${exName}", analiza sus patrones de comportamiento.
+    const request2Prompt = `Basado en el mismo perfil de "${exName}", analiza sus patrones de comportamiento CON EVIDENCIA LITERAL.
+    
+    ⚠️ REGLA CRÍTICA: Para CADA patrón, cita EJEMPLOS REALES del chat.
     
     Responde con un JSON válido que incluya:
     1. activityPatterns: activeHours (array strings), responseTime (rápido|lento|variable), consistency (1-10).
-    2. topics: recurrent (array strings), passions (array strings), avoided (array strings).
-    3. triggers: emotional (qué lo enoja/entristece), calming (qué lo calma), joy (qué le alegra).
-    4. commitment: level (1-10), fears (miedo al compromiso/abandono/etc), values (array).
+    2. topics: recurrent (array de {topic, count, lastMentioned}), passions (array con evidencia), avoided (array con evidencia).
+    3. triggers: emotional (QUÉ lo enoja/entristece CON EJEMPLOS LITERALES), calming (qué lo calma CON EJEMPLOS), joy (qué le alegra CON EJEMPLOS).
+    4. commitment: level (1-10), fears (miedo al compromiso/abandono/etc CON EJEMPLOS), values (array CON EJEMPLOS).
     5. conflict: style (evasivo|confrontativo|mediador), resolution (busca solución|culpa a otros), patience (1-10).
-
-    Formato JSON esperado:
+    
+    FORMATO REQUERIDO:
     {
-      "activityPatterns": { "activeHours": ["..."], "responseTime": "...", "consistency": 5 },
-      "topics": { "recurrent": ["..."], "passions": ["..."], "avoided": ["..."] },
-      "triggers": { "emotional": ["..."], "calming": ["..."], "joy": ["..."] },
-      "commitment": { "level": 5, "fears": ["..."], "values": ["..."] },
-      "conflict": { "style": "...", "resolution": "...", "patience": 5 }
+      "activityPatterns": { 
+        "activeHours": ["mañana (8-12)", "tarde (14-18)"], 
+        "responseTime": "rápido (<5 min)", 
+        "consistency": 8,
+        "evidence": ["Siempre responde en las mañanas rápido", "Por las noches tarda horas"]
+      },
+      "topics": { 
+        "recurrent": [
+          {"topic": "familia", "count": 45, "lastMentioned": "hace 2 días", "example": "Literal del chat sobre familia"},
+          {"topic": "trabajo", "count": 32, "lastMentioned": "ayer", "example": "Literal del chat sobre trabajo"}
+        ],
+        "passions": [{"topic": "música", "evidence": ["Dijo: 'amo este grupo'", "Literal 2", "Literal 3"]}],
+        "avoided": [{"topic": "ex anterior", "evidence": ["Cambió de tema cuando mencioné", "Dijo: 'no quiero hablar de eso'"]}]
+      },
+      "triggers": { 
+        "emotional": [
+          {"trigger": "cuando le recordé lo de su ex", "reaction": "Me bloqueó 3 días", "literal": "Mensaje literal donde se enojó"},
+          {"trigger": "...", "reaction": "...", "literal": "..."}
+        ],
+        "calming": [{"action": "hablar de su perro", "evidence": ["Se calmó cuando dije...", "Literal"]}],
+        "joy": [{"action": "sorpresas pequeñas", "evidence": ["Dijo: 'me encanta cuando haces esto'", "Literal"]}]
+      },
+      "commitment": { 
+        "level": 7, 
+        "fears": [{"fear": "abandono", "evidence": ["Dijo: 'todos me dejan'", "Literal 2"]}],
+        "values": [{"value": "lealtad", "evidence": ["Mencionó: 'lo más importante es la lealtad'"]}]
+      },
+      "conflict": { 
+        "style": "evasivo", 
+        "resolution": "culpa a otros", 
+        "patience": 3,
+        "evidence": ["Cuando peleamos dijo: '...'" "Siempre me echa la culpa: '...'"]
+      }
     }
+    
+    ⚠️ CRÍTICO: Sin ejemplos literales = respuesta no válida.
     `;
 
     const result2Str = await generateWithRetry(model, request2Prompt);
@@ -804,38 +1014,122 @@ HUELLA LINGÜÍSTICA:
     // --- REQUEST 4: MEMORY + TEMPORAL EVOLUTION (COMBINED) ---
     onProgress?.(78, 'Analizando memoria y evolución temporal...');
 
-    const request4Prompt = `Analiza la MEMORIA de eventos y la EVOLUCIÓN TEMPORAL de la relación de "${exName}".
+    const request4Prompt = `Analiza la MEMORIA de eventos y la EVOLUCIÓN TEMPORAL de la relación de "${exName}" CON FECHAS Y CITAS LITERALES.
+
+⚠️ REGLAS CRÍTICAS:
+1. Si encuentras una fecha EN EL CHAT ("15 de agosto", "mi cumpleaños es el 5 de marzo") → USALA TAL CUAL
+2. Si NO encuentras fecha exacta → pon null (NO inventes "agosto" genérico)
+3. CITA LITERALMENTE el mensaje donde sucedió cada evento clave
+4. MÍNIMO 15-30 eventos clave con citas textuales
 
 INSTRUCCIONES:
 1. MEMORIA DE EVENTOS:
-   - Extrae fechas importantes mencionadas (aniversarios, cumpleaños, primera cita)
-   - Identifica momentos clave emocionales (primera pelea, reconciliaciones, declaraciones)
-   - Lista personas importantes (familia, amigos) - SIN datos identificables, solo roles
+   - Busca en el chat FECHAS EXACTAS mencionadas (DD/MM, "mi cumpleaños", "aniversario")
+   - Extrae 20-30 momentos clave emocionales CON LA FECHA Y EL MENSAJE LITERAL
+   - Lista personas importantes - SIN datos identificables, solo roles ("hermana", "mejor amiga")
 
 2. EVOLUCIÓN TEMPORAL:
-   - Divide mentalmente el chat en 3 fases (inicio 30%, medio 40%, final 30%)
-   - Compara tono emocional, frecuencia, afecto en cada fase
-   - Determina si la relación mejoraba o empeoraba
+   - Divide el chat en 3 fases (inicio 30%, medio 40%, final 30%)
+   - Compara tono, frecuencia, afecto en CADA fase CON EJEMPLOS LITERALES
+   - Determina si mejoraba o empeoraba CON EVIDENCIA
 
-Responde con JSON:
+FORMATO JSON REQUERIDO:
 {
     "keyMoments": [
-        { "event": "Primera declaración de amor", "emotionalWeight": 10, "context": "Después de..." },
-        { "event": "Pelea seria por celos", "emotionalWeight": 9, "topic": "confianza" }
+        { 
+            "event": "Primera declaración de amor", 
+            "date": "12 de marzo" (o null si no está en el chat),
+            "emotionalWeight": 10, 
+            "literal": "Mensaje EXACTO del chat: 'te amo con todo mi corazón...'",
+            "context": "Después de 2 meses de relación"
+        },
+        { 
+            "event": "Pelea seria por celos", 
+            "date": "28 de mayo",
+            "emotionalWeight": 9, 
+            "literal": "Mensaje literal: 'me tienes harta con tus inseguridades...'",
+            "topic": "confianza"
+        },
+        ... (EXTRAE 15-30 EVENTOS REALES, NO INVENTES)
     ],
-    "importantDates": { "anniversary": "agosto", "specialDays": ["cumpleaños"] },
+    "importantDates": { 
+        "anniversary": "14 de febrero" (o null),
+        "firstDate": "3 de enero" (o null),
+        "birthday": "5 de marzo" (o null),
+        "specialDays": [
+            {"date": "10 de abril", "event": "primer viaje juntos", "literal": "Dijo: 'nunca olvidaré este día...'"}
+        ]
+    },
     "importantPeople": [
-        { "role": "madre", "sentiment": "positivo" },
-        { "role": "mejor amiga", "sentiment": "neutral" }
+        { "role": "madre", "sentiment": "positivo", "evidence": ["Dijo: 'mi mamá te adora'", "Literal 2"] },
+        { "role": "mejor amiga", "name": "[nombre si está en chat, sino null]", "sentiment": "neutral", "evidence": ["Mencionó..."] }
+    ],
+    "activitiesTogether": [
+        {"activity": "ir al cine", "frequency": "frecuente", "evidence": ["Mensaje: 'vamos al cine este finde'"]},
+        {"activity": "cocinar juntos", "frequency": "ocasional", "evidence": ["Literal del chat"]}
+    ],
+    "outingsAndTrips": [
+        {"type": "viaje", "where": "playa/ciudad", "when": "verano/fecha", "sentiment": "muy positivo", "evidence": ["Literal: 'la playa contigo fue lo mejor'"]},
+        {"type": "salida", "where": "restaurante/lugar", "when": "mes o null", "sentiment": "positivo", "evidence": ["Del chat"]}
+    ],
+    "problemsFaced": [
+        {"problem": "celos", "severity": 8, "whenStarted": "abril o null", "resolved": false, "evidence": ["Reclamo literal: 'siempre estás con tus amigas'"]},
+        {"problem": "falta de tiempo", "severity": 6, "whenStarted": "mayo o null", "resolved": false, "evidence": ["Queja: 'ya no me dedicas tiempo'"]}
+    ],
+    "giftsAndGestures": [
+        {"occasion": "cumpleaños/aniversario", "gift": "collar/flores/etc", "reaction": "encantada/feliz", "evidence": ["Literal: 'me encanta el collar bebé ❤️'"]},
+        {"occasion": "sin razón", "gift": "detalle", "reaction": "sorprendida", "evidence": ["Mensaje del chat"]}
+    ],
+    "celebrationsTogether": [
+        {"event": "navidad/cumpleaños/etc", "year": "2023 o null", "significance": "alta/media/baja", "evidence": ["Mensaje: 'esta navidad contigo fue especial'"]},
+        {"event": "año nuevo", "year": "2024 o null", "significance": "baja", "evidence": ["Mensaje literal"]}
     ],
     "temporalEvolution": {
-        "phase1": { "emotionalTone": 8, "messageFrequency": "alta", "affectionLevel": 9, "conflictLevel": 2 },
-        "phase2": { "emotionalTone": 6, "messageFrequency": "media", "affectionLevel": 6, "conflictLevel": 5 },
-        "phase3": { "emotionalTone": 4, "messageFrequency": "baja", "affectionLevel": 3, "conflictLevel": 7 },
-        "trend": "deteriorándose",
-        "significantChanges": ["Distanciamiento después de pelea en mayo"]
+        "phase1": { 
+            "emotionalTone": 9, 
+            "messageFrequency": "muy alta (50+ msgs/d
+
+ía)", 
+            "affectionLevel": 10, 
+            "conflictLevel": 1,
+            "exampleMessages": [
+                "Del inicio: 'te extraño tanto bebé ❤️'",
+                "También: 'eres lo mejor que me ha pasado'",
+                "Y: 'cada día te amo más'"
+            ]
+        },
+        "phase2": { 
+            "emotionalTone": 6, 
+            "messageFrequency": "media (20 msgs/día)", 
+            "affectionLevel": 6, 
+            "conflictLevel": 5,
+            "exampleMessages": [
+                "Del medio: 'ya no me hablas como antes'",
+                "Literal: 'siento que ya no me quieres'"
+            ]
+        },
+        "phase3": { 
+            "emotionalTone": 3, 
+            "messageFrequency": "baja (5 msgs/día)", 
+            "affectionLevel": 2, 
+            "conflictLevel": 9,
+            "exampleMessages": [
+                "Del final: 'esto no tiene sentido'",
+                "Literal: 'mejor dejemos esto así'",
+                "Último mensaje: 'adiós'"
+            ]
+        },
+        "trend": "deteriorándose rápidamente",
+        "significantChanges": [
+            {"when": "mayo", "what": "Distanciamiento después de pelea", "evidence": ["Dejó de decir 'te amo'", "Mensajes más cortos"]}
+        ]
     }
-}`;
+}
+
+⚠️ CRÍTICO: 
+- Fechas reales o null (NO inventes)
+- MÍNIMO 15 keyMoments con literales
+- Cada fase CON 3+ mensajes literales de ejemplo`;
 
     const result4Str = await generateWithRetry(model, request4Prompt);
     const result4 = safeParseJSON(result4Str, {
@@ -988,6 +1282,215 @@ ${predictionExamples},
         predictions: {}, extractedFacts: [], memorySelectivity: {}
     });
 
+    // ====== BLOQUE 7: ANÁLISIS AVANZADO DE COMPORTAMIENTO (4 fases combinadas) ======
+    onProgress?.(92, 'Analizando patrones avanzados...');
+    await delay(STAGE_DELAY_MS);
+
+    const conflictContext = isDeceased ? 'diferencias de opinión en vida' :
+        isFamily ? 'conflictos familiares' :
+            isFriend ? 'desacuerdos entre amigos' :
+                'peleas de pareja';
+
+    const request7Prompt = `Analiza PATRONES AVANZADOS de "${exName}" basándote en estos mensajes:
+
+${styleSample.substring(0, 8000)}
+
+CONTEXTO: ${isDeceased ? 'Esta persona falleció - sé respetuoso y enfócate en cómo era en vida.' :
+            isFamily ? 'Es un familiar del usuario.' :
+                isFriend ? 'Es un amigo/a del usuario.' :
+                    'Es una ex-pareja del usuario.'}
+
+Analiza las siguientes 4 áreas:
+
+1. RESOLUCIÓN DE CONFLICTOS (${conflictContext}):
+- ¿Cómo maneja ${exName} los ${conflictContext}?
+- ¿Evade, confronta, manipula, resuelve, o es pasivo-agresivo?
+- ¿Qué frases típicas usa durante ${conflictContext}?
+- ¿Cuánto tarda en calmarse?
+- ¿Quién pide disculpas primero?
+
+2. LENGUAJE DEL AMOR:
+- ¿Cómo expresa afecto? (palabras, actos de servicio, tiempo de calidad, regalos, contacto físico)
+- Ejemplos específicos del chat
+- ¿Cómo prefiere recibir afecto?
+
+3. PERFIL DE HUMOR:
+- Tipo de humor (sarcástico, irónico, absurdo, oscuro, chistes, memes)
+- Nivel de sensibilidad (¿se ofende fácil?)
+- Temas tabú para bromas
+- ¿Tiene chistes internos recurrentes?
+
+4. DETONANTES EMOCIONALES:
+- ¿Qué temas lo/la ponen ${isDeceased ? 'ponían' : ''} de mal humor? (con intensidad 1-10)
+- ¿Qué temas ${isDeceased ? 'lo/la alegraban' : 'lo/la alegran'}?
+- Temas a EVITAR en conversación
+- Temas SEGUROS para conversar
+
+Responde SOLO con JSON:
+{
+    "conflictResolution": {
+        "style": "evade|confront|manipulate|resolve|passive-aggressive",
+        "typicalPhrases": ["frase1", "frase2"],
+        "coolingOffTime": "minutos|horas|días",
+        "apologizesFirst": true/false,
+        "holdsGrudges": true/false
+    },
+    "loveLanguageDetailed": {
+        "primary": "words|acts|time|gifts|touch",
+        "secondary": "words|acts|time|gifts|touch",
+        "examples": ["ejemplo del chat"],
+        "preferredExpressions": ["cómo le gusta que le expresen cariño"]
+    },
+    "humorProfile": {
+        "types": ["sarcastic", "memes"],
+        "sensitivity": "low|medium|high",
+        "tabooTopics": ["tema que no tolera en broma"],
+        "insideJokes": ["chiste interno recurrente"],
+        "laughTriggers": ["qué lo hace reír"]
+    },
+    "emotionalTriggersAdvanced": {
+        "negative": [{"topic": "tema", "intensity": 8, "typicalReaction": "cómo reacciona"}],
+        "positive": [{"topic": "tema positivo", "effect": "efecto que causa"}],
+        "avoidTopics": ["temas a evitar"],
+        "safeTopics": ["temas seguros"]
+    }
+}`;
+
+    const result7Str = await generateWithRetry(model, request7Prompt);
+    const result7 = safeParseJSON(result7Str, {
+        conflictResolution: { style: 'resolve', typicalPhrases: [], coolingOffTime: 'horas', apologizesFirst: false, holdsGrudges: false },
+        loveLanguageDetailed: { primary: 'words', secondary: 'time', examples: [], preferredExpressions: [] },
+        humorProfile: { types: [], sensitivity: 'medium', tabooTopics: [], insideJokes: [], laughTriggers: [] },
+        emotionalTriggersAdvanced: { negative: [], positive: [], avoidTopics: [], safeTopics: [] }
+    });
+
+    // ====== BLOQUE 8: PREMIUM ANALYSIS (Relationship Psychology + Linguistic DNA) ======
+    onProgress?.(94, 'Generando análisis premium (Psicología & ADN)...');
+    await delay(STAGE_DELAY_MS);
+
+    const isEx = !isFriend && !isFamily && !isDeceased;
+
+    const psychContext = isEx ? 'RELACIÓN ROMÁNTICA (EX-PAREJA)' :
+        isFriend ? 'AMISTAD' :
+            isFamily ? 'FAMILIA' :
+                'PERSONA FALLECIDA (MEMORIAL)';
+
+    const request8Prompt = `Analiza la PSICOLOGÍA DE LA RELACIÓN y el ADN LINGÜÍSTICO de "${exName}" basándote en los mensajes previos.
+    
+    CONTEXTO: ${psychContext}
+    
+    1. PSICOLOGÍA DE LA RELACIÓN (${psychContext}):
+       ${isEx ? `- Psicología Oscura: ¿Hay señales de Gaslighting, Love Bombing o Stonewalling?
+                 - Dinámica de Poder: Reciprocidad y equilibrio.
+                 - Patrón de Ruptura: Desapego silencioso vs explosivo.` : ''}
+       ${isFriend ? `- Frenemy Detector: ¿Hay envidia, competencia o sarcasmo hiriente?
+                     - Rol en el Grupo: Líder, seguidor, payaso, etc.
+                     - Reciprocidad: ¿Solo escribe por interés?` : ''}
+       ${isFamily ? `- Dinámicas Familiares: Chantaje emocional, culpa, jerarquías.
+                     - Rol Familiar: Oveja negra, favorito, mediador.` : ''}
+       ${isDeceased ? `- Legado Emocional: Lo que más le importaba.
+                       - Impacto en Vida: Huella positiva que dejó.` : ''}
+
+    2. ADN LINGÜÍSTICO (Análisis Profundo):
+       - Subtexto: ¿Qué dicen sus palabras "entre líneas"? (ej: "estoy bien" cuando no lo está).
+       - Intelectualización: ¿Usa palabras complejas para evitar emociones? (1-10)
+       - Muletillas Psicológicas: Palabras que revelan inseguridad o necesidad de control.
+       - Evolución del Tono: ¿Cómo cambia bajo estrés?
+
+    3. DETALLES ÍNTIMOS Y APODOS:
+       - Apodos: ¿Cómo llama al usuario? (ej: bebé, gordi, amor) ¿Cómo le dice el usuario a él/ella?
+       - Quejas Recurrentes: ¿De qué se queja siempre? "Nunca me escuchas", "Llegas tarde".
+       - Chistes Internos: Referencias que solo ellos entienden.
+       - Lenguaje del Amor Específico: Ej: "Abrazos por la espalda", "Notas de voz de 5 min".
+
+    4. RADIOGRAFÍA PSICOLÓGICA (NUEVO - GOTTMAN & APEGO CON EVIDENCIA):
+       ⚠️ REGLA CRÍTICA: Para CADA "jinete", debes citar AL MENOS 5 EJEMPLOS LITERALES del chat
+       
+       - Los 4 Jinetes del Apocalipsis (Gottman): Evalúa 0-100% de presencia CON EVIDENCIA.
+         * CRÍTICA (Criticism): Atacar carácter/personalidad (no comportamiento). 
+Examples (MÍNIMO 5): ["Dijo: 'eres un...'", "Literal 2", "..."]
+         * DESPRECIO (Contempt): Sarcasmo, insultos, superioridad moral (EL PEOR).
+Examples (MÍNIMO 5): ["Se burló: '...'", "...", "..."]
+         * DEFENSIVIDAD (Defensiveness): Victimización, "sí, pero...", excusas.
+Examples (MÍNIMO 5): ["Cuando le dije X, respondió: 'pero tu...'"]
+         * INDIFERENCIA (Stonewalling): Ley del hielo, monosílabos, "visto".
+Examples (MÍNIMO 5): ["Me dejó en visto 3 días", "Respondió solo: 'ok.'"]
+       
+       - Estilo de Apego: Seguro, Ansioso, Evitativo-Burlón, Evitativo-Miedoso, Desorganizado.
+         * Confianza (0-100%).
+         * Manifestaciones CON EJEMPLOS: Ej: "Se aleja ante intimidad: 'necesito espacio' cuando le dije te amo"
+
+    Responde SOLO con JSON:
+    {
+        "relationshipPsychology": {
+            "reciprocityScore": 50, // 0-100
+            "powerBalance": "balanced|user-dominant|other-dominant",
+            ${isEx ? `"breakupPatterns": { "quietQuitting": boolean, "fadingAway": boolean },` : ''}
+            ${isFriend ? `"friendshipRole": "...", "frenemyScore": 0,` : ''}
+            ${isFamily ? `"familyRole": "...", "emotionalBlackmail": boolean,` : ''}
+            ${isDeceased ? `"emotionalLegacy": ["..."], "lifeImprint": ["..."]` : ''}
+        },
+        "linguisticAnalysis": {
+            "subtext": "análisis del subtexto...",
+            "intellectualization": 5, // 1-10
+            "toneShiftUnderStress": "descripción...",
+            "psychologicalCrutches": ["palabra1", "palabra2"]
+        },
+        "intimateDetails": {
+            "nicknames": { 
+                "fromExToUser": ["..."], 
+                "fromUserToEx": ["..."] 
+            },
+            "recurringComplaints": [{"complaint": "nunca me escuchas", "frequency": "alta", "literal": "Dijo: '...'"}],
+            "insideJokes": [{"joke": "...", "context": "...", "example": "Literal del chat"}],
+            "loveLanguageSpecifics": [{"action": "abrazos por la espalda", "evidence": ["Mencionó: '...'", "Literal 2"]}]
+        },
+        "psychologicalXRay": {
+            "fourHorsemen": {
+           "criticism": {
+                    "score": 0-100,
+                    "examples": ["Literal 1", "Literal 2", "Literal 3", "Literal 4", "Literal 5"]
+                },
+                "contempt": {
+                    "score": 0-100,
+                    "examples": ["Literal 1", "Literal 2", "Literal 3", "Literal 4", "Literal 5"]
+                },
+                "defensiveness": {
+                    "score": 0-100,
+                    "examples": ["Literal 1", "Literal 2", "Literal 3", "Literal 4", "Literal 5"]
+                },
+                "stonewalling": {
+                    "score": 0-100,
+                    "examples": ["Literal 1", "Literal 2", "Literal 3", "Literal 4", "Literal 5"]
+                }
+            },
+            "attachmentStyle": {
+                "type": "seguro|ansioso|evitativo-burlon|evitativo-miedoso|desorganizado",
+                "confidence": 85,
+                "manifestations": [
+                    {"behavior": "Comunicación directa", "evidence": ["Dijo: '...'", "Literal 2"]},
+                    {"behavior": "No juega juegos mentales", "evidence": ["...", "..."]}
+                ]
+            }
+        }
+    }
+    
+    ⚠️ CRÍTICO: Cada jinete DEBE tener 5+ ejemplos literales. Sin ejemplos = score 0.`;
+
+    let result8: any = { relationshipPsychology: {}, linguisticAnalysis: {}, intimateDetails: {}, psychologicalXRay: {} };
+    try {
+        const result8Str = await generateWithRetry(model, request8Prompt);
+        result8 = safeParseJSON(result8Str, {
+            relationshipPsychology: { reciprocityScore: 50, powerBalance: 'balanced' },
+            linguisticAnalysis: { subtext: 'Normal', intellectualization: 5, toneShiftUnderStress: 'Ninguno', psychologicalCrutches: [] },
+            intimateDetails: { nicknames: { fromExToUser: [], fromUserToEx: [] }, recurringComplaints: [], insideJokes: [], loveLanguageSpecifics: [] },
+            psychologicalXRay: { fourHorsemen: { criticism: 0, contempt: 0, defensiveness: 0, stonewalling: 0 }, attachmentStyle: { type: 'seguro', confidence: 50, manifestations: [] } }
+        });
+    } catch (e) {
+        console.warn('Error en análisis premium (skipping):', e);
+    }
+
+
     onProgress?.(95, 'Finalizando...');
 
     // Combine all results into ExProfile
@@ -1094,7 +1597,23 @@ ${predictionExamples},
         // Bloque 6: Predicciones y Memoria Selectiva
         predictions: result6.predictions || undefined,
         memorySelectivity: result6.memorySelectivity || undefined,
-        extractedFacts: result6.extractedFacts || []
+        extractedFacts: result6.extractedFacts || [],
+
+        // Bloque 7: Análisis Avanzado (4 fases nuevas)
+        conflictResolution: result7.conflictResolution || undefined,
+        loveLanguageDetailed: result7.loveLanguageDetailed || undefined,
+        humorProfile: result7.humorProfile || undefined,
+        emotionalTriggersAdvanced: result7.emotionalTriggersAdvanced || undefined,
+
+        // === PREMIUM: RELATIONSHIP SPECIFIC PSYCHOLOGY ===
+        relationshipPsychology: result8.relationshipPsychology || undefined,
+        linguisticAnalysis: result8.linguisticAnalysis || undefined,
+
+        // === NEW: INTIMATE DETAILS ===
+        intimateDetails: result8.intimateDetails || undefined,
+
+        // === NEW: PSYCHOLOGICAL X-RAY ===
+        psychologicalXRay: result8.psychologicalXRay || undefined
     };
 
     const duration = Math.round((Date.now() - startTime) / 1000);
@@ -1102,19 +1621,10 @@ ${predictionExamples},
     onProgress?.(100, '¡Análisis completado!');
 
     // 💾 NUEVO: Limpiar caché de análisis parcial (éxito completo)
-    clearAnalysisCache(exName);
+    await clearAnalysisCache(exName);
 
-    // 💾 NUEVO: Guardar hechos extraídos en Supabase (para búsqueda futura)
-    if (profile.extractedFacts && profile.extractedFacts.length > 0) {
-        try {
-            const { saveExtractedFacts } = await import('./factEmbeddings');
-            // Usamos el exName como profileId temporal (debería ser el ID real del perfil)
-            await saveExtractedFacts(exName, profile.extractedFacts);
-            console.log(`[analyzePersonality] 💾 ${profile.extractedFacts.length} hechos guardados`);
-        } catch (e) {
-            console.warn('[analyzePersonality] Error guardando hechos:', e);
-        }
-    }
+    // Nota: Los hechos extraídos (extractedFacts) se devuelven en el objeto profile
+    // y deben ser guardados por el llamador (AnalysisContext) una vez que se tenga un UUID válido.
 
     return profile;
 }
@@ -1139,7 +1649,7 @@ Responde SOLO con un JSON v�lido con esta estructura:
 }`;
 
         try {
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
             const result = await model.generateContent([
                 prompt,
                 { inlineData: { data: base64, mimeType: 'image/jpeg' } }
@@ -1176,18 +1686,50 @@ function generateSystemPrompt(profile: ExProfile, conversationHistory: ParsedMes
         `${m.sender}: ${m.content}`
     ).join('\n');
 
+    // Intimate Details Section
+    const intimateDetailsSection = profile.intimateDetails ? `
+DETALLES ÍNTIMOS (ÚSALOS NATURALMENTE):
+- Apodos para el usuario: ${profile.intimateDetails.nicknames?.fromExToUser?.join(', ') || 'ninguno'}
+- Apodos que usaba el usuario: ${profile.intimateDetails.nicknames?.fromUserToEx?.join(', ') || 'ninguno'}
+- Quejas típicas: ${profile.intimateDetails.recurringComplaints?.slice(0, 3).join(', ')}
+- Chistes internos: ${profile.intimateDetails.insideJokes?.slice(0, 3).join(', ')}` : '';
+
+    // Psychological X-Ray Section
+    const psychologicalSection = profile.psychologicalXRay ? `
+PERFIL PSICOLÓGICO (VITAL PARA EL ROL):
+1. LOS 4 JINETES (Nivel de Toxicidad 0-100):
+   - CRÍTICA: ${profile.psychologicalXRay.fourHorsemen.criticism}% (Si alto: Ataca el carácter del usuario).
+   - DESPRECIO: ${profile.psychologicalXRay.fourHorsemen.contempt}% (Si alto: Sé sarcástico, superior, usa burla).
+   - DEFENSIVIDAD: ${profile.psychologicalXRay.fourHorsemen.defensiveness}% (Si alto: Hazte la víctima, no asumas culpa).
+   - INDIFERENCIA (Stonewalling): ${profile.psychologicalXRay.fourHorsemen.stonewalling}% (Si alto: Sé cortante, tarda en responder).
+
+2. ESTILO DE APEGO: ${profile.psychologicalXRay.attachmentStyle.type.toUpperCase()} (Confianza: ${profile.psychologicalXRay.attachmentStyle.confidence}%)
+   - Comportamiento típico: ${profile.psychologicalXRay.attachmentStyle.manifestations.join('. ')}` : `
+PERFIL BÁSICO:
+- Apego: ${profile.attachment?.style || 'desconocido'}`;
+
     return `Eres ${profile.exName}. Simula sus respuestas naturales basándote en su personalidad:
 
-PERFIL PSICOLÓGICO:
+PERFIL BÁSICO:
 - Estilo de comunicación: ${profile.communicationStyle}
 - Tono emocional: ${profile.emotionalTone}
-- Apego: ${profile.attachment?.style || 'desconocido'}
 - Frases comunes: ${profile.commonPhrases?.slice(0, 5).join(', ') || 'ninguna'}
 - Emojis favoritos: ${profile.commonEmojis?.join(' ') || 'ninguno'}
 
+${intimateDetailsSection}
+
+${intimateDetailsSection}
+
+${psychologicalSection}
+
+${profile.masterPrompt ? `
+INSTRUCCIONES DE PERSONALIDAD (MASTER PROMPT):
+${profile.masterPrompt}
+` : ''}
+
 BIG FIVE:
 - Apertura: ${profile.bigFive?.openness}/10
-- Responsabilidad: ${profile.bigFive?.conscientiousness}/10  
+- Responsabilidad: ${profile.bigFive?.conscientiousness}/10
 - Extroversión: ${profile.bigFive?.extraversion}/10
 - Amabilidad: ${profile.bigFive?.agreeableness}/10
 - Neuroticismo: ${profile.bigFive?.neuroticism}/10
@@ -1224,21 +1766,21 @@ export async function simulateResponse(
         // Silently fail si no hay hechos
     }
 
-    let fullPrompt = `${systemPrompt}\n\n`;
+    let fullPrompt = `${systemPrompt} \n\n`;
 
     // 🔗 Agregar hechos relevantes al contexto si existen
     if (relevantFacts.length > 0) {
         fullPrompt += `[HECHOS RELEVANTES - Usa esta información si es pertinente]\n`;
         relevantFacts.forEach(fact => {
-            fullPrompt += `- ${fact}\n`;
+            fullPrompt += `- ${fact} \n`;
         });
         fullPrompt += `\n`;
     }
 
     if (userMessage) {
-        fullPrompt += `Usuario: ${userMessage}`;
+        fullPrompt += `Usuario: ${userMessage} `;
     } else {
-        fullPrompt += `(Contexto: El usuario ha estado en silencio. Inicia tú una conversación casual o continúa un tema pendiente.)`;
+        fullPrompt += `(Contexto: El usuario ha estado en silencio.Inicia tú una conversación casual o continúa un tema pendiente.)`;
     }
 
     const promptParts: any[] = [fullPrompt];
@@ -1248,13 +1790,19 @@ export async function simulateResponse(
         fullPrompt += `\n[El usuario ha enviado una imagen]`;
     }
 
-    fullPrompt += `\n\n${profile.exName}:`;
+    fullPrompt += `\n\n${profile.exName}: `;
     promptParts[0] = fullPrompt; // Update text part
 
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
         const result = await model.generateContent(promptParts);
-        const response = result.response.text().trim();
+        let response = result.response.text().trim();
+
+        // 🐛 FIX: Prevent empty or "." only messages
+        if (!response || response === '.' || response === '...' || response.length < 2) {
+            console.warn('[Simulator] AI returned invalid response:', response);
+            response = '...'; // Fallback: typing indicator
+        }
 
         // Calculate confidence based on response characteristics
         const usesCommonPhrases = profile.commonPhrases.some(phrase =>
@@ -1278,7 +1826,7 @@ export async function analyzeConversation(
     profile: ExProfile
 ): Promise<ConversationAnalysis> {
     const conversationText = messages.map(m =>
-        `${m.role === 'user' ? 'Usuario' : profile.exName}: ${m.content}`
+        `${m.role === 'user' ? 'Usuario' : profile.exName}: ${m.content} `
     ).join('\n');
 
     const prompt = `Analiza esta conversaci�n simulada entre un usuario y su ex (${profile.exName}):
@@ -1307,7 +1855,7 @@ Enf�cate en:
 Responde SOLO con el JSON.`;
 
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
         const result = await model.generateContent(prompt);
         const response = result.response.text();
 
@@ -1384,6 +1932,61 @@ function safeParseJSON(jsonString: string, defaultValue: any): any {
         return JSON.parse(cleaned);
     } catch (e) {
         return defaultValue;
+    }
+}
+
+/**
+ * DYNAMIC ANALYSIS: Refines the profile based on live chat interaction.
+ * Called every X messages to detecting evolving personality traits.
+ */
+export async function refineProfileWithChat(
+    currentProfile: ExProfile,
+    recentMessages: { role: 'user' | 'assistant'; content: string }[],
+    interactionType: 'conflict' | 'neutral' | 'intimate'
+): Promise<Partial<ExProfile> | null> {
+    if (recentMessages.length < 5) return null;
+
+    const conversationSample = recentMessages.map(m =>
+        `${m.role === 'user' ? 'Usuario' : currentProfile.exName}: ${m.content}`
+    ).join('\n');
+
+    const prompt = `Analiza esta interacción reciente para REFINAR el perfil de "${currentProfile.exName}".
+    
+    PERFIL ACTUAL:
+    - Estado Emocional: ${currentProfile.emotionalTone}
+    - Apego: ${currentProfile.attachment?.style}
+    - Triggers conocidos: ${currentProfile.triggers?.negative.join(', ')}
+
+    INTERACCIÓN RECIENTE (${interactionType}):
+    ${conversationSample}
+
+    DETECTA CAMBIOS O NUEVOS DATOS:
+    1. ¿Ha aparecido un NUEVO trigger negativo o positivo?
+    2. ¿El tono emocional ha cambiado drásticamente? (ej: de frío a cálido)
+    3. ¿Se ha revelado una "verdad oculta" o dato nuevo importante?
+    
+    Responde SOLO con un JSON con los campos a ACTUALIZAR (o null si no hay cambios relevantes):
+    {
+        "emotionalTone": "...", 
+        "triggers": { "negative": ["viejo", "NUEVO TRIGGER"] },
+        "relationshipPsychology": { "reciprocityScore": 60 } // Si cambió la dinámica
+    }
+    
+    Si no hay cambios significativos, responde JSON vacío: {}`;
+
+    try {
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const result = await model.generateContent(prompt);
+        const response = result.response.text();
+
+        const updates = safeParseJSON(response, {});
+        if (Object.keys(updates).length === 0) return null;
+
+        return updates;
+
+    } catch (e) {
+        console.warn('Error refining profile:', e);
+        return null;
     }
 }
 

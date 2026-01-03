@@ -204,16 +204,17 @@ export function intelligentTokenSampling(
 
     if (messages.length > MAX_MESSAGES_TO_PROCESS) {
         console.log(`[TokenSampling] ⚠️ Very large array (${messages.length}), pre-sampling...`);
-        // Take: first 5k + middle 10k (random) + last 15k (most important = recent)
-        const first = messages.slice(0, 5000);
-        const last = messages.slice(-15000);
-        // Take 10k from the middle (spread out)
-        const middleStart = Math.floor(messages.length * 0.2);
-        const middleEnd = Math.floor(messages.length * 0.8);
+        // IMPROVED: For ex-partner relationships, recent context is CRITICAL
+        // Take: first 2k + middle 3k (random) + last 25k (MOST IMPORTANT = recent state)
+        const first = messages.slice(0, 2000);
+        const last = messages.slice(-25000); // Increased from 15k to 25k for better recency
+        // Take 3k from the middle (spread out) 
+        const middleStart = Math.floor(messages.length * 0.25);
+        const middleEnd = Math.floor(messages.length * 0.75);
         const middleMessages = messages.slice(middleStart, middleEnd);
-        const middleStep = Math.max(1, Math.floor(middleMessages.length / 10000));
+        const middleStep = Math.max(1, Math.floor(middleMessages.length / 3000));
         const middle: ParsedMessage[] = [];
-        for (let i = 0; i < middleMessages.length && middle.length < 10000; i += middleStep) {
+        for (let i = 0; i < middleMessages.length && middle.length < 3000; i += middleStep) {
             middle.push(middleMessages[i]);
         }
         workingMessages = [...first, ...middle, ...last];
@@ -266,8 +267,8 @@ export function intelligentTokenSampling(
     samples.first = workingMessages.slice(0, Math.min(200, workingMessages.length));
     console.log(`[TokenSampling] First: ${samples.first.length} messages`);
 
-    // 2. Recent messages (estado actual) - MINIMAL for performance
-    samples.recent = workingMessages.slice(-Math.min(500, workingMessages.length));
+    // 2. Recent messages (estado actual) - INCREASED for better context
+    samples.recent = workingMessages.slice(-Math.min(1500, workingMessages.length)); // Changed from 500 to 1500
     console.log(`[TokenSampling] Recent: ${samples.recent.length} messages`);
 
     // 3. Long messages - MINIMAL for performance

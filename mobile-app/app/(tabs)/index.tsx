@@ -533,7 +533,7 @@ export default function MainScreen() {
         }
 
         try {
-            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
             let result;
 
             // Send multimodal if image exists

@@ -4,12 +4,15 @@ import { StatusBar } from 'expo-status-bar';
 import { View, AppState, Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { SubscriptionProvider } from '../lib/SubscriptionContext';
+import { AnalysisProvider } from '../lib/AnalysisContext';
 import { shouldLockApp, markAppLocked } from '../lib/security';
 import AppLockScreen from '../components/AppLockScreen';
 import CookieConsent from '../components/CookieConsent';
 import AnimatedSplash from '../components/AnimatedSplash';
 import ShareIntentModal from '../components/ShareIntentModal';
 import { storage } from '../lib/storage';
+import { BackgroundAnalysisManager } from '../lib/BackgroundAnalysisManager';
+import { AnalysisProgressIndicator } from '../components/AnalysisProgressIndicator';
 
 import { NotificationManager } from '../lib/notifications';
 
@@ -92,6 +95,21 @@ export default function RootLayout() {
             resetShareIntent();
         }
     }, [showSplash, shareIntentHandled, hasShareIntent, shareIntent]);
+
+    // AUTO-NAVIGATION: Listen for analysis completions
+    useEffect(() => {
+        const unsubscribe = BackgroundAnalysisManager.onAnalysisCompleted(({ exName, profileId }) => {
+            console.log('[RootLayout] Analysis completed for:', exName, 'Profile ID:', profileId);
+
+            // Save profile ID to navigate to
+            storage.setItem('exSimulator_navigateToProfile', profileId);
+
+            // Navigate to chat immediately
+            router.push(`/tools/ex-simulator/chat`);
+        });
+
+        return () => unsubscribe();
+    }, [router]);
 
     // Handle modal actions
     const handleShareAnalyze = () => {
@@ -206,32 +224,36 @@ export default function RootLayout() {
     }
 
     return (
-        <SubscriptionProvider>
-            <View style={{ flex: 1 }}>
-                <Stack screenOptions={{ headerShown: false }}>
-                    <Stack.Screen name="welcome" />
-                    <Stack.Screen name="auth" />
-                    <Stack.Screen name="auth/callback" />
-                    <Stack.Screen name="onboarding" />
-                    <Stack.Screen name="onboarding-extended" />
-                    <Stack.Screen name="(tabs)" />
-                    <Stack.Screen name="tools/decoder" />
-                    <Stack.Screen name="tools/panic" />
-                    {/* Main Simulator is now /(tabs)/chat, keeping import as tool */}
-                    <Stack.Screen name="tools/ex-simulator/import" />
-                    <Stack.Screen name="tools/journal" />
-                    <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
-                    <Stack.Screen name="security-setup" />
-                </Stack>
-                <ShareIntentModal
-                    visible={showShareModal}
-                    onAnalyze={handleShareAnalyze}
-                    onCancel={handleShareCancel}
-                    type={shareModalType}
-                />
-                <CookieConsent />
-                <StatusBar style="light" />
-            </View>
-        </SubscriptionProvider>
+        <AnalysisProvider>
+            <SubscriptionProvider>
+                <View style={{ flex: 1 }}>
+                    <Stack screenOptions={{ headerShown: false }}>
+                        <Stack.Screen name="welcome" />
+                        <Stack.Screen name="auth" />
+                        <Stack.Screen name="auth/callback" />
+                        <Stack.Screen name="onboarding" />
+                        <Stack.Screen name="onboarding-extended" />
+                        <Stack.Screen name="(tabs)" />
+                        <Stack.Screen name="tools/decoder" />
+                        <Stack.Screen name="tools/panic" />
+                        {/* Main Simulator is now /(tabs)/chat, keeping import as tool */}
+                        <Stack.Screen name="tools/ex-simulator/import" />
+                        <Stack.Screen name="tools/journal" />
+                        <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
+                        <Stack.Screen name="security-setup" />
+                    </Stack>
+                    <ShareIntentModal
+                        visible={showShareModal}
+                        onAnalyze={handleShareAnalyze}
+                        onCancel={handleShareCancel}
+                        type={shareModalType}
+                    />
+                    <CookieConsent />
+                    {/* Show progress indicator for any active background analysis - REMOVED PER USER REQUEST */}
+                    {/* <AnalysisProgressIndicator /> */}
+                    <StatusBar style="light" />
+                </View>
+            </SubscriptionProvider>
+        </AnalysisProvider>
     );
 }

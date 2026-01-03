@@ -14,6 +14,8 @@ import ExportGuide from '../../../components/ExportGuide';
 import { storage } from '../../../lib/storage';
 import { saveProfile } from '../../../lib/profileSync';
 import { supabase } from '../../../lib/supabase';
+import { useAnalysis } from '../../../lib/AnalysisContext';
+import { BackgroundAnalysisManager } from '../../../lib/BackgroundAnalysisManager';
 
 // Helper to extract text from ZIP file (WhatsApp exports as ZIP with media)
 async function extractTextFromZip(zipData: string): Promise<string | null> {
@@ -66,12 +68,45 @@ export default function ImportChat() {
     const [rawText, setRawText] = useState('');
     const [parsedMessages, setParsedMessages] = useState<ParsedMessage[]>([]);
     const [exName, setExName] = useState('');
-    const [analyzing, setAnalyzing] = useState(false);
+    // const [analyzing, setAnalyzing] = useState(false); // Removed in favor of Context
     const [errorMessage, setErrorMessage] = useState('');
     const [parsedCount, setParsedCount] = useState(0);
     const [truncatedInfo, setTruncatedInfo] = useState<{ original: number; used: number } | null>(null);
-    const [progress, setProgress] = useState(0);
-    const [debugLog, setDebugLog] = useState<string[]>([]);
+    // const [progress, setProgress] = useState(0); // Removed in favor of Context
+    // const [debugLog, setDebugLog] = useState<string[]>([]); // Removed in favor of Context
+
+
+    // Use Context
+    const {
+        isAnalyzing,
+        progress,
+        currentLogs: debugLog, // Map to existing name for minimal refactor
+        result,
+        error: contextError,
+        startAnalysis,
+        resetAnalysis
+    } = useAnalysis();
+
+    // Sync context state
+    useEffect(() => {
+        if (isAnalyzing && step !== 'analyzing') {
+            setStep('analyzing');
+        }
+        if (result && !isAnalyzing && step === 'analyzing') {
+            setStep('complete');
+            // Check for guest/user redirect
+            supabase.auth.getUser().then(({ data: { user } }) => {
+                if (!user) {
+                    setShowRegistrationReminder(true);
+                } else {
+                    setTimeout(() => router.replace('/(tabs)' as any), 1500);
+                }
+            });
+        }
+    }, [isAnalyzing, result, step]);
+
+
+
     const [showRegistrationReminder, setShowRegistrationReminder] = useState(false);
 
     // UI Improvements: Auto-detect participants
@@ -79,14 +114,17 @@ export default function ImportChat() {
     const [userRole, setUserRole] = useState<'me' | 'ex' | null>(null);
 
     // 🕊️ Selector de tipo de relación (evitar confusiones entre ex y fallecidos)
-    const [relationshipType, setRelationshipType] = useState<'ex' | 'friend' | 'family' | 'deceased' | null>(null);
+    const [relationshipType, setRelationshipType] = useState<'partner' | 'ex' | 'friend' | 'family' | 'deceased' | null>(null);
+    const [showManualInput, setShowManualInput] = useState(false);
 
-
-    // Debug helper to log steps visually
+    // Debug helper to log steps visually (mapped to console for background compat)
     const addDebug = (msg: string) => {
-        console.log(`[DEBUG] ${msg}`);
-        setDebugLog(prev => [...prev.slice(-10), `${new Date().toLocaleTimeString()}: ${msg}`]);
+        console.log(`[Import] ${msg}`);
+        // Optional: sync with context logs if needed, but context has its own log
     };
+
+
+
 
     // Check for shared file on mount
     useEffect(() => {
@@ -298,7 +336,7 @@ export default function ImportChat() {
     const handleFileUpload = async () => {
         try {
             const result = await DocumentPicker.getDocumentAsync({
-                type: 'text/plain',
+                type: ['text/plain', 'application/zip', 'application/x-zip-compressed'],
                 copyToCacheDirectory: true
             });
             if (result.canceled) return;
@@ -307,37 +345,130 @@ export default function ImportChat() {
             addDebug('📂 Archivo seleccionado');
             const file = result.assets[0];
 
-            // SMART FILE READING: Support ANY file size using blob.slice
-            const response = await fetch(file.uri);
-            const blob = await response.blob();
-            const fileSizeMB = blob.size / 1024 / 1024;
-            addDebug(`📏 Tamaño: ${fileSizeMB.toFixed(1)}MB`);
-            await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
+            // Check if it's a ZIP file
+            const isZip = file.name.toLowerCase().endsWith('.zip');
+            let text = ''; // Initialize here so it's accessible after if/else
 
-            // For 500k tokens, we need ~2 million chars (~10MB text max)
-            const MAX_READ_SIZE = 10 * 1024 * 1024; // 10MB
-            let text: string;
-
-            if (blob.size > MAX_READ_SIZE) {
-                // LARGE FILE: Read only the TAIL (most recent messages)
-                addDebug(`📦 Archivo grande - optimizando...`);
+            if (isZip) {
+                addDebug('📦 Detectado archivo ZIP, extrayendo...');
                 await new Promise(resolve => setTimeout(resolve, 50));
 
-                const tailBlob = blob.slice(blob.size - MAX_READ_SIZE);
-                text = await tailBlob.text();
+                try {
+                    // Read ZIP file
+                    const response = await fetch(file.uri);
+                    const blob = await response.blob();
+                    const zip = await JSZip.loadAsync(blob);
 
-                // Find first complete line
-                const firstNewline = text.indexOf('\n');
-                if (firstNewline > 0 && firstNewline < 1000) {
-                    text = text.slice(firstNewline + 1);
+                    // Find first .txt file
+                    const txtFiles = Object.keys(zip.files).filter(name =>
+                        name.toLowerCase().endsWith('.txt') && !zip.files[name].dir
+                    );
+
+                    if (txtFiles.length === 0) {
+                        throw new Error('No se encontró archivo .txt dentro del ZIP');
+                    }
+
+                    addDebug(`📄 Encontrado: ${txtFiles[0]}`);
+                    const txtFile = zip.files[txtFiles[0]];
+                    text = await txtFile.async('text');
+
+                    // Apply same size limits as normal files
+                    const MAX_READ_SIZE = 10 * 1024 * 1024;
+                    if (text.length > MAX_READ_SIZE) {
+                        addDebug(`✂️ Archivo muy grande, aplicando sampling...`);
+                        // Apply 3-part sampling
+                        const START_SIZE = 512 * 1024;
+                        const MIDDLE_SIZE = 1 * 1024 * 1024;
+                        const END_SIZE = 8.5 * 1024 * 1024;
+
+                        const startText = text.slice(0, START_SIZE);
+                        const middleStart = Math.floor(text.length * 0.3 + Math.random() * text.length * 0.3);
+                        const middleText = text.slice(middleStart, middleStart + MIDDLE_SIZE);
+                        const endText = text.slice(text.length - END_SIZE);
+
+                        text = startText + '\n\n[...mensajes anteriores...]\n\n' + middleText + '\n\n[...mensajes anteriores...]\n\n' + endText;
+                        setTruncatedInfo({ original: text.length, used: text.length });
+                    }
+                } catch (zipError: any) {
+                    setStep('error');
+                    setErrorMessage(`Error al extraer ZIP: ${zipError.message}`);
+                    return;
                 }
-
-                setTruncatedInfo({ original: blob.size, used: text.length });
-                addDebug(`✂️ Usando últimos ${(text.length / 1024 / 1024).toFixed(1)}MB (mensajes recientes)`);
             } else {
-                // NORMAL FILE: Read entire file
-                text = await blob.text();
-            }
+
+                // SMART FILE READING: Support ANY file size using blob.slice
+                const response = await fetch(file.uri);
+                const blob = await response.blob();
+                const fileSizeMB = blob.size / 1024 / 1024;
+                addDebug(`📏 Tamaño: ${fileSizeMB.toFixed(1)}MB`);
+                await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
+
+                // For 500k tokens, we need ~2 million chars (~10MB text max)
+                const MAX_READ_SIZE = 10 * 1024 * 1024; // 10MB total
+                // Using outer 'text' variable declared at line 311
+                if (blob.size > MAX_READ_SIZE) {
+                    // SMART SAMPLING: Read START + MIDDLE + END for better context
+                    addDebug(`📦 Archivo grande (${fileSizeMB.toFixed(1)}MB) - sampling inteligente...`);
+                    await new Promise(resolve => setTimeout(resolve, 50));
+
+                    try {
+                        // Distribute 10MB across 3 sections
+                        const START_SIZE = 512 * 1024;      // 512KB - primeros mensajes (contexto inicial)
+                        const MIDDLE_SIZE = 1 * 1024 * 1024; // 1MB - evolución de la relación
+                        const END_SIZE = 8.5 * 1024 * 1024;  // 8.5MB - mensajes más recientes (más importantes)
+
+                        // 1. READ START (context of how relationship began)
+                        const startBlob = blob.slice(0, START_SIZE);
+                        let startText = await startBlob.text();
+                        // Find last complete line in start section
+                        const lastNewlineStart = startText.lastIndexOf('\n');
+                        if (lastNewlineStart > 0) {
+                            startText = startText.slice(0, lastNewlineStart);
+                        }
+                        addDebug(`📍 Inicio: ${(startText.length / 1024).toFixed(0)}KB`);
+
+                        // 2. READ MIDDLE (random section for relationship evolution)
+                        const middleStart = Math.floor(blob.size * 0.3 + Math.random() * blob.size * 0.3);
+                        const middleBlob = blob.slice(middleStart, middleStart + MIDDLE_SIZE);
+                        let middleText = await middleBlob.text();
+                        // Find first and last complete lines
+                        const firstNewlineMid = middleText.indexOf('\n');
+                        const lastNewlineMid = middleText.lastIndexOf('\n');
+                        if (firstNewlineMid > 0 && lastNewlineMid > firstNewlineMid) {
+                            middleText = middleText.slice(firstNewlineMid + 1, lastNewlineMid);
+                        }
+                        addDebug(`🔄 Medio: ${(middleText.length / 1024).toFixed(0)}KB`);
+
+                        // 3. READ END (most recent - most important for simulation)
+                        const endBlob = blob.slice(blob.size - END_SIZE);
+                        let endText = await endBlob.text();
+                        const firstNewlineEnd = endText.indexOf('\n');
+                        if (firstNewlineEnd > 0 && firstNewlineEnd < 1000) {
+                            endText = endText.slice(firstNewlineEnd + 1);
+                        }
+                        addDebug(`📍 Final: ${(endText.length / 1024 / 1024).toFixed(1)}MB`);
+
+                        // Combine with separator markers
+                        text = startText + '\n\n[...mensajes anteriores...]\n\n' + middleText + '\n\n[...mensajes anteriores...]\n\n' + endText;
+
+                        setTruncatedInfo({ original: blob.size, used: text.length });
+                        addDebug(`✅ Sampling: ${(text.length / 1024 / 1024).toFixed(1)}MB de ${fileSizeMB.toFixed(1)}MB`);
+                    } catch (samplingError) {
+                        // FALLBACK: If smart sampling fails, use simple tail method
+                        addDebug(`⚠️ Sampling falló, usando método simple...`);
+                        const tailBlob = blob.slice(blob.size - MAX_READ_SIZE);
+                        text = await tailBlob.text();
+                        const firstNewline = text.indexOf('\n');
+                        if (firstNewline > 0 && firstNewline < 1000) {
+                            text = text.slice(firstNewline + 1);
+                        }
+                        setTruncatedInfo({ original: blob.size, used: text.length });
+                    }
+                } else {
+                    // NORMAL FILE: Read entire file
+                    text = await blob.text();
+                }
+            } // Close the if(isZip) / else block
             await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
 
             setRawText(text);
@@ -349,12 +480,17 @@ export default function ImportChat() {
 
             // CRITICAL FIX: Use requestAnimationFrame-style yielding to prevent freeze
             // Parse in chunks to allow UI to stay responsive
+
+            // Capture text value before async operations to prevent scope issues
+            const textToProcess = text;
+            addDebug(`🔍 Texto a procesar: ${textToProcess.length} caracteres`);
+
             let messages: ParsedMessage[] = [];
             try {
                 // Parse synchronously but with a timeout wrapper to catch hangs
                 const parsePromise = new Promise<ParsedMessage[]>((resolve, reject) => {
                     try {
-                        const result = parseWhatsAppExport(text);
+                        const result = parseWhatsAppExport(textToProcess);
                         resolve(result);
                     } catch (e) {
                         reject(e);
@@ -408,6 +544,12 @@ export default function ImportChat() {
             addDebug(`✅ Listo: ${finalMessages.length.toLocaleString()} mensajes`);
             setParsedMessages(finalMessages);
             setParsedCount(finalMessages.length);
+
+            // DETECTAR PARTICIPANTES (same as checkSharedFile)
+            const participants = detectParticipants(finalMessages);
+            setDetectedParticipants(participants);
+            addDebug(`👥 Detectados: ${participants.map(p => p.name).join(', ')}`);
+
             setStep('preview');
         } catch (e: any) {
             setStep('error');
@@ -437,304 +579,98 @@ export default function ImportChat() {
             return;
         }
 
-        // Check for existing profile with same name
+        // Check for existing profile with same name (with timeout)
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const { data: existingProfile } = await supabase
-                    .from('ex_profiles')
-                    .select('id, ex_name')
-                    .eq('user_id', user.id)
-                    .ilike('ex_name', exName)
-                    .maybeSingle();
-
-                if (existingProfile) {
-                    // Profile exists - ask user what to do
-                    return new Promise<void>((resolve) => {
-                        Alert.alert(
-                            '⚠️ Perfil Existente',
-                            `Ya existe un perfil llamado "${existingProfile.ex_name}".\\n\\n¿Qué quieres hacer?`,
-                            [
-                                {
-                                    text: '🔄 Actualizar Existente',
-                                    onPress: async () => {
-                                        // Set a flag to update instead of create
-                                        (window as any).__updateProfileId = existingProfile.id;
-                                        await continueAnalysis();
-                                        resolve();
-                                    }
-                                },
-                                {
-                                    text: '➕ Crear Nuevo',
-                                    onPress: async () => {
-                                        // Clear flag to create new
-                                        delete (window as any).__updateProfileId;
-                                        await continueAnalysis();
-                                        resolve();
-                                    }
-                                },
-                                { text: 'Cancelar', style: 'cancel', onPress: () => resolve() }
-                            ]
-                        );
-                    });
+            const checkPromise = async () => {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const { data: existingProfile } = await supabase
+                        .from('ex_profiles')
+                        .select('id, ex_name')
+                        .eq('user_id', user.id)
+                        .ilike('ex_name', exName)
+                        .maybeSingle();
+                    return existingProfile;
                 }
+                return null;
+            };
+
+            const timeoutPromise = new Promise<any>((_, reject) =>
+                setTimeout(() => reject(new Error('Duplicate check timeout')), 5000)
+            );
+
+            // Race query against timeout
+            const existingProfile = await Promise.race([checkPromise(), timeoutPromise]);
+
+            if (existingProfile) {
+                // Profile exists - ask user what to do
+                return new Promise<void>((resolve) => {
+                    Alert.alert(
+                        '⚠️ Perfil Existente',
+                        `Ya existe un perfil llamado "${existingProfile.ex_name}".\\n\\n¿Qué quieres hacer?`,
+                        [
+                            {
+                                text: '🔄 Actualizar Existente',
+                                onPress: async () => {
+                                    // Set a flag to update instead of create
+                                    (window as any).__updateProfileId = existingProfile.id;
+                                    await continueAnalysis();
+                                    resolve();
+                                }
+                            },
+                            {
+                                text: '➕ Crear Nuevo',
+                                onPress: async () => {
+                                    // Clear flag to create new
+                                    delete (window as any).__updateProfileId;
+                                    await continueAnalysis();
+                                    resolve();
+                                }
+                            },
+                            { text: 'Cancelar', style: 'cancel', onPress: () => resolve() }
+                        ]
+                    );
+                });
             }
         } catch (err) {
             console.log('[handleAnalyze] Error checking for duplicates:', err);
             // Continue anyway
         }
 
-        // No duplicate - proceed normally
-        await continueAnalysis();
+        // Navigate to analysis screen with data for hybrid progress display
+        // Limit to 20,000 messages for local storage to prevent QuotaExceededError (approx 2MB)
+        // The background analysis will likely have access to more if needed via other means,
+        // but for the UI progress and initial prompt this should be enough.
+        await storage.setItem('exSimulator_analyzeData', JSON.stringify({
+            parsedMessages: parsedMessages.slice(0, 20000),
+            exName,
+            relationshipType
+        }));
+
+        router.push('/tools/ex-simulator/analysis');
     };
 
     const continueAnalysis = async () => {
-        // Helper to force UI update on Android
-        const forceProgressUpdate = async (value: number) => {
-            setProgress(value);
-            addDebug(`Progress: ${value}%`);
-            await new Promise(resolve => setTimeout(resolve, 50));
-        };
+        // Navigate to analysis screen with data for hybrid progress display
+        // Navigate to analysis screen with data for hybrid progress display
+        await storage.setItem('exSimulator_analyzeData', JSON.stringify({
+            parsedMessages: parsedMessages.slice(0, 20000),
+            exName,
+            relationshipType
+        }));
 
-        // Set step and initial progress IMMEDIATELY
-        setDebugLog([]); // Clear debug log FIRST
-        setStep('analyzing');
-        setAnalyzing(true);
-
-        // Now add debug AFTER clearing
-        const isUpdate = !!(window as any).__updateProfileId;
-        addDebug(isUpdate ? '🔄 Actualizando perfil' : '🚀 Análisis iniciado');
-        addDebug(`Ex: ${exName}`);
-        await forceProgressUpdate(1);
-
-        try {
-            if (!parsedMessages || parsedMessages.length === 0) {
-                throw new Error('No hay mensajes para analizar. Sube un archivo primero.');
-            }
-
-            // NEW: Validate minimum messages from target person
-            const MINIMUM_EX_MESSAGES = 30;
-            const exMessages = parsedMessages.filter(m =>
-                m.sender.toLowerCase().includes(exName.toLowerCase()) ||
-                exName.toLowerCase().includes(m.sender.toLowerCase())
-            );
-
-            if (exMessages.length < MINIMUM_EX_MESSAGES) {
-                Alert.alert(
-                    '📊 Pocos mensajes',
-                    `Para un análisis preciso necesitamos al menos ${MINIMUM_EX_MESSAGES} mensajes de "${exName}".\n\nEncontramos solo ${exMessages.length} mensajes.\n\n💡 Tip: Asegúrate de que el nombre coincida exactamente con el chat o sube una conversación más larga.`,
-                    [
-                        {
-                            text: 'Cancelar', style: 'cancel', onPress: () => {
-                                setAnalyzing(false);
-                                setStep('upload');
-                            }
-                        },
-                        { text: 'Continuar igual', onPress: () => { } }
-                    ]
-                );
-                // Don't return - let them continue if they want
-            }
-
-            addDebug(`✅ Mensajes a analizar: ${parsedMessages.length}`);
-            addDebug(`📨 De ${exName}: ${exMessages.length} mensajes`);
-            await forceProgressUpdate(5);
-            addDebug('🧠 Preparando IA...');
-            await forceProgressUpdate(8);
-
-            // Stage 1: Analyze personality (5-60%) with timeout
-            let profile;
-            try {
-                addDebug('🚀 Enviando a Gemini AI...');
-                await forceProgressUpdate(10);
-
-                // REDUCED timeout - 2 minutes max
-                const timeoutPromise = new Promise<never>((_, reject) => {
-                    setTimeout(() => reject(new Error('TIMEOUT: El análisis tardó más de 2 minutos. Intenta con menos mensajes.')), 120000);
-                });
-
-                // Race between analysis and timeout
-                profile = await Promise.race([
-                    analyzePersonality(parsedMessages, exName, (p, s) => {
-                        const mapped = Math.round(5 + (p * 0.55));
-                        setProgress(mapped);
-                        if (p % 20 === 0) addDebug(`AI Progress: ${p}%`);
-                    }, relationshipType || 'ex'), // 🕊️ Pasar tipo de relación
-                    timeoutPromise
-                ]);
-
-                addDebug('✅ analyzePersonality completado');
-            } catch (analyzeError: any) {
-                addDebug(`❌ ERROR: ${analyzeError.message}`);
-                console.error('[handleAnalyze] ❌ analyzePersonality FAILED:', analyzeError);
-                throw new Error(`${analyzeError.message || 'Error de conexión. Verifica tu internet e intenta de nuevo.'}`);
-
-            }
-
-            await forceProgressUpdate(65);
-
-            // Find the sender name that matches exName
-            const senderCounts = new Map<string, number>();
-            parsedMessages.forEach(msg => {
-                senderCounts.set(msg.sender, (senderCounts.get(msg.sender) || 0) + 1);
-            });
-
-            // Find the ex sender name (matching exName)
-            const exNameLower = exName.toLowerCase().trim();
-            const exSenderName = Array.from(senderCounts.keys()).find(name => {
-                const nameLower = name.toLowerCase().trim();
-                return nameLower === exNameLower ||
-                    nameLower.includes(exNameLower) ||
-                    exNameLower.includes(nameLower);
-            }) || exName;
-
-            // Find the user's name (the OTHER participant, not the ex)
-            const allParticipants = Array.from(senderCounts.keys());
-            const detectedUserName = allParticipants.find(name =>
-                name.toLowerCase().trim() !== exSenderName.toLowerCase().trim()
-            ) || 'Usuario';
-
-            console.log('[handleAnalyze] 👤 Detected user name:', detectedUserName);
-
-            const profileData: any = {
-                id: `local_${Date.now()}`,
-                exName,
-                userName: detectedUserName, // NEW: Save user's name for personalization
-                profile,
-                messageCount: parsedMessages.length,
-                createdAt: new Date().toISOString(),
-            };
-
-            // Stage 2: Generate Master Prompt (65-95%)
-            await forceProgressUpdate(70);
-            try {
-                console.log('[handleAnalyze] Generating master prompt...');
-                console.log('[handleAnalyze] exSenderName:', exSenderName, 'exName:', exName);
-
-                const masterPromptResult = await generateMasterPrompt(
-                    parsedMessages,
-                    exSenderName,  // Correct: sender name from chat
-                    exName,        // Correct: display name
-                    (p, s, t) => {
-                        // p is 0-100, map to 70-95%
-                        setProgress(Math.round(70 + (p * 0.25)));
-                        console.log(`[MasterPrompt Progress] ${p}% - ${s}`);
-                    }
-                );
-                profileData.tokenCount = masterPromptResult.tokenCount;
-                profileData.masterPrompt = masterPromptResult.masterPrompt;
-                console.log('[handleAnalyze] Master prompt generated:', masterPromptResult.tokenCount, 'tokens');
-            } catch (err: any) {
-                console.error('[handleAnalyze] Master prompt failed:', err);
-                // Continue without master prompt - basic analysis still works
-            }
-
-            // Stage 3: Save profile (95-100%)
-            console.log('[handleAnalyze] Saving profile...');
-            await forceProgressUpdate(96);
-            setParsedMessages([]);
-
-            // Get current user ID for cloud sync - defined here so it's in scope for reminder check
-            const { data: { user } } = await supabase.auth.getUser();
-            const userId = user?.id;
-            console.log('[handleAnalyze] User ID for sync:', userId || 'guest');
-
-            try {
-                console.log('[handleAnalyze] Profile data keys:', Object.keys(profileData));
-                console.log('[handleAnalyze] Profile has masterPrompt:', !!profileData.masterPrompt);
-
-                // Check if we're updating an existing profile
-                const updateProfileId = (window as any).__updateProfileId;
-
-                if (updateProfileId && userId) {
-                    // UPDATE existing profile
-                    console.log('[handleAnalyze] 🔄 Updating existing profile:', updateProfileId);
-
-                    await supabase
-                        .from('ex_profiles')
-                        .update({
-                            profile_data: profileData.profile,
-                            message_count: profileData.messageCount,
-                            updated_at: new Date().toISOString()
-                        })
-                        .eq('id', updateProfileId)
-                        .eq('user_id', userId);
-
-                    // Clean up flag
-                    delete (window as any).__updateProfileId;
-                    console.log('[handleAnalyze] ✅ Profile updated successfully');
-                } else {
-                    // CREATE new profile
-                    await saveProfile(profileData, userId);
-                    console.log('[handleAnalyze] ✅ Profile saved (local + cloud)');
-                }
-
-            } catch (saveError: any) {
-                console.error('[handleAnalyze] ❌ Save error:', saveError);
-                // Try to save at least the basic profile locally
-                try {
-                    await storage.setItem('exSimulator_currentProfile', JSON.stringify(profileData));
-                    const existingProfiles = await storage.getItem('exSimulator_allProfiles');
-                    const profiles = JSON.parse(existingProfiles || '[]');
-                    profiles.push(profileData);
-                    await storage.setItem('exSimulator_allProfiles', JSON.stringify(profiles));
-                    console.log('[handleAnalyze] ⚠️ Saved locally only due to cloud error');
-                } catch (e) {
-                    console.error('[handleAnalyze] ❌❌ Even local save failed:', e);
-                }
-            }
-
-            setProgress(100);
-            console.log('[handleAnalyze] 🎉 ANALYSIS COMPLETE! Setting step to complete...');
-            setStep('complete');
-            console.log('[handleAnalyze] Checking if should show registration reminder...');
-
-            // Show registration reminder for guest users
-            if (!userId) {
-                console.log('[handleAnalyze] Guest user - showing registration reminder');
-                setShowRegistrationReminder(true);
-                // Don't auto-redirect for guests - let them see the reminder
-            } else {
-                console.log('[handleAnalyze] Logged in user - redirecting to home...');
-                setTimeout(() => router.replace('/(tabs)' as any), 1500);
-            }
-
-        } catch (error: any) {
-            console.error('[handleAnalyze] Analysis failed:', error);
-
-            // Friendly error messages
-            let errorMsg = error.message || 'Ocurrió un error inesperado.';
-            let title = '❌ Error en el análisis';
-
-            if (errorMsg.includes('No se pudo identificar') || errorMsg.includes('Participantes detectados')) {
-                title = '👤 Nombre no encontrado';
-                errorMsg = `${errorMsg}\n\n💡 Tip: Usa el nombre EXACTO como aparece en el chat exportado.`;
-            } else if (errorMsg.includes('JSON') || errorMsg.includes('parse')) {
-                title = '🔄 Error de procesamiento';
-                errorMsg = 'Hubo un problema procesando el archivo. Intenta de nuevo.';
-            } else if (errorMsg.includes('timeout') || errorMsg.includes('TIMEOUT')) {
-                title = '⏱️ Tiempo agotado';
-                errorMsg = 'El análisis tardó demasiado. Intenta con un archivo más pequeño.';
-            }
-
-            Alert.alert(title, errorMsg);
-            setStep('preview');
-        } finally {
-            setAnalyzing(false);
-        }
+        router.push('/tools/ex-simulator/analysis');
     };
 
     const handleBack = () => {
         if (step === 'preview') {
             setStep('upload');
-            return;
-        }
-        if (router.canGoBack()) {
+        } else if (step === 'upload') {
             router.back();
-        } else {
-            router.replace('/(tabs)');
         }
     };
+
+    // Validation is now handled in analysis.tsx with progress display
 
     if (step === 'guide') {
         return <ExportGuide onClose={() => setStep('upload')} onBack={() => router.replace('/(tabs)')} />;
@@ -984,19 +920,34 @@ export default function ImportChat() {
                             {/* Fallback manual input if detection fails or users wants to override */}
                             <TouchableOpacity
                                 style={{ marginTop: 16, padding: 10, alignItems: 'center' }}
-                                onPress={() => {
-                                    Alert.prompt('Ingresar nombre manual', 'Escribe el nombre EXACTO de la persona a simular:', (name) => {
-                                        if (name) {
-                                            setExName(name);
-                                            setUserRole(null);
-                                        }
-                                    });
-                                }}
+                                onPress={() => setShowManualInput(!showManualInput)}
                             >
                                 <Text style={{ color: '#666', fontSize: 12, textDecorationLine: 'underline' }}>
                                     ¿No aparecen los nombres correctos? Ingresar manualmente
                                 </Text>
                             </TouchableOpacity>
+
+                            {showManualInput && (
+                                <View style={{ marginTop: 12, backgroundColor: 'rgba(168, 85, 247, 0.1)', borderRadius: 12, padding: 16 }}>
+                                    <Text style={{ color: '#fff', fontSize: 14, marginBottom: 8 }}>Escribe el nombre exacto:</Text>
+                                    <TextInput
+                                        style={{
+                                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                            borderRadius: 8,
+                                            padding: 12,
+                                            color: '#fff',
+                                            fontSize: 16,
+                                            borderWidth: 1,
+                                            borderColor: '#a855f7'
+                                        }}
+                                        placeholder="ej: María García"
+                                        placeholderTextColor="#666"
+                                        value={exName}
+                                        onChangeText={setExName}
+                                        autoCapitalize="words"
+                                    />
+                                </View>
+                            )}
 
                             {exName && (
                                 <View style={styles.confirmationBox}>
@@ -1015,6 +966,21 @@ export default function ImportChat() {
                                     </Text>
 
                                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+                                        {/* Pareja Actual */}
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.relationTypeButton,
+                                                relationshipType === 'partner' && styles.relationTypeButtonActive
+                                            ]}
+                                            onPress={() => setRelationshipType('partner')}
+                                        >
+                                            <Text style={styles.relationTypeEmoji}>❤️</Text>
+                                            <Text style={[
+                                                styles.relationTypeText,
+                                                relationshipType === 'partner' && styles.relationTypeTextActive
+                                            ]}>Pareja</Text>
+                                        </TouchableOpacity>
+
                                         {/* Ex-Pareja */}
                                         <TouchableOpacity
                                             style={[
@@ -1097,12 +1063,21 @@ export default function ImportChat() {
                         </View>
 
                         <TouchableOpacity
-                            style={[styles.primaryButton, (!exName || !relationshipType) && styles.disabledButton]}
-                            disabled={!exName || !relationshipType}
+                            style={[
+                                styles.primaryButton,
+                                (isAnalyzing || !exName || !relationshipType) && styles.disabledButton // Use global isAnalyzing
+                            ]}
+                            disabled={isAnalyzing || !exName || !relationshipType} // Use global isAnalyzing
                             onPress={handleAnalyze}
                         >
-                            <Brain color="#fff" size={20} style={{ marginRight: 8 }} />
-                            <Text style={styles.primaryButtonText}>Comenzar Análisis IA</Text>
+                            {isAnalyzing ? (
+                                <ActivityIndicator color="#000" />
+                            ) : (
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Brain color="#000" size={20} style={{ marginRight: 8 }} />
+                                    <Text style={styles.primaryButtonText}>Comenzar Análisis IA</Text>
+                                </View>
+                            )}
                         </TouchableOpacity>
                     </View>
                 )}
@@ -1421,29 +1396,102 @@ const styles = StyleSheet.create({
         paddingHorizontal: 32,
     },
     loadingIcon: {
-        width: 96,
-        height: 96,
-        borderRadius: 48,
-        backgroundColor: '#1c1c1e',
-        alignItems: 'center',
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: '#1a1a1a',
         justifyContent: 'center',
-        marginBottom: 24,
-        alignSelf: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        alignItems: 'center',
+        marginBottom: 32,
+        shadowColor: '#7c3aed',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 16,
+        elevation: 8,
+        borderWidth: 2,
+        borderColor: '#2a2a2a',
     },
     loadingTitle: {
+        fontSize: 28,
+        fontWeight: '700',
         color: '#fff',
-        fontSize: 30,
-        fontWeight: '900',
         marginBottom: 8,
-        textAlign: 'center',
+        letterSpacing: 0.5,
     },
     loadingSubtitle: {
-        color: '#9ca3af',
-        textAlign: 'center',
-        fontWeight: '500',
+        fontSize: 15,
+        color: 'rgba(255,255,255,0.6)',
         marginBottom: 40,
+        letterSpacing: 0.3,
+    },
+    progressBarContainer: {
+        width: '100%',
+        height: 6,
+        backgroundColor: '#1a1a1a',
+        borderRadius: 3,
+        overflow: 'hidden',
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: '#2a2a2a',
+    },
+    progressBar: {
+        height: '100%',
+        backgroundColor: '#10b981',
+        borderRadius: 3,
+        shadowColor: '#10b981',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.6,
+        shadowRadius: 8,
+    },
+    progressText: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#10b981',
+        marginBottom: 32,
+        letterSpacing: 0.5,
+    },
+    stepsList: {
+        width: '100%',
+        marginTop: 8,
+    },
+    stepItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        marginBottom: 8,
+        backgroundColor: '#1a1a1a',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#2a2a2a',
+    },
+    stepCheckmark: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: '#10b981',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 14,
+        shadowColor: '#10b981',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.4,
+        shadowRadius: 4,
+    },
+    stepText: {
+        flex: 1,
+        fontSize: 15,
+        color: '#fff',
+        fontWeight: '500',
+        letterSpacing: 0.2,
+    },
+    brandingText: {
+        position: 'absolute',
+        bottom: 40,
+        fontSize: 13,
+        color: 'rgba(124, 58, 237, 0.6)',
+        fontWeight: '600',
+        letterSpacing: 1,
     },
     stagesCard: {
         backgroundColor: '#1c1c1e',

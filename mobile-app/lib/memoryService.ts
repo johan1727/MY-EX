@@ -235,7 +235,7 @@ export async function extractAndSaveFacts(
     if (messages.length < 5) return; // Need enough context
 
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         // Take last 30 messages for analysis
         const recentMsgs = messages.slice(-30).map(m =>
@@ -368,7 +368,7 @@ export async function generateSessionSummary(
     if (messages.length < 10) return '';
 
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         const allMsgs = messages.map(m =>
             `${m.role === 'user' ? 'Usuario' : exName}: ${m.content}`

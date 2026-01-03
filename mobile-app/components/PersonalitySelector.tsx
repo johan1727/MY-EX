@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Heart, Smile, Frown, Calendar } from 'lucide-react-native';
+import { storage } from '../lib/storage';
 
 interface PersonalityPhase {
     id: string;
@@ -31,7 +32,7 @@ export default function PersonalitySelector({ profileData, onSelect }: Props) {
     // Detect phases from analysis
     const phases: PersonalityPhase[] = detectPhases(profileData);
 
-    const handleSelect = (phaseId: string) => {
+    const handleSelect = async (phaseId: string) => {
         setSelectedPhase(phaseId);
 
         // Save selection to profile
@@ -39,7 +40,7 @@ export default function PersonalitySelector({ profileData, onSelect }: Props) {
             ...profileData,
             selectedPhase: phaseId
         };
-        localStorage.setItem('exSimulator_currentProfile', JSON.stringify(updatedProfile));
+        await storage.setItem('exSimulator_currentProfile', JSON.stringify(updatedProfile));
 
         // Callback
         onSelect(phaseId);

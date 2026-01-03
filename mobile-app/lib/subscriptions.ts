@@ -40,11 +40,11 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         color: '#9ca3af',
         features: [
             'Explora REMI gratis',
-            '20 mensajes cada 8 horas',
+            '20 mensajes cada 3 horas',
             'Una prueba del simulador'
         ],
         limits: {
-            dailyTokens: 4000,
+            dailyTokens: 18000,
             messageDecoder: 3,
             moodJournal: true,
             analytics: 'none',
@@ -63,23 +63,23 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Explorer',
         color: '#06b6d4',
         features: [
-            '750 mensajes cada 8 horas',
+            '~160 mensajes cada 3 horas',
             'Crea múltiples perfiles de ex',
-            'Decodificador ilimitado',
+            'Decodificador avanzado',
             'Bóveda de secretos privada',
             'Exporta tu diario emocional'
         ],
         limits: {
-            dailyTokens: 120000,
-            messageDecoder: 75,
+            dailyTokens: 150000,
+            messageDecoder: 50,
             moodJournal: true,
             analytics: 'weekly',
             panicButton: 'advanced',
             notifications: 75,
             vault: true,
             exportDiary: true,
-            simulatorAnalyses: 150,
-            simulatorChatMessages: -1
+            simulatorAnalyses: 50,
+            simulatorChatMessages: 100
         }
     },
     [SubscriptionTier.WARRIOR]: {
@@ -89,22 +89,22 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Warrior',
         color: '#3b82f6',
         features: [
-            '1,500 mensajes cada 8 horas',
+            '~400 mensajes cada 3 horas',
             'Uso extendido sin interrupciones',
             'Respuestas más largas y detalladas',
             'Análisis diario de tu progreso'
         ],
         limits: {
-            dailyTokens: 150000,
-            messageDecoder: -1,
+            dailyTokens: 400000,
+            messageDecoder: 200,
             moodJournal: true,
             analytics: 'weekly',
             panicButton: 'advanced',
-            notifications: 75,
+            notifications: 200,
             vault: true,
             exportDiary: true,
-            simulatorAnalyses: -1,
-            simulatorChatMessages: -1
+            simulatorAnalyses: 200,
+            simulatorChatMessages: 500
         }
     },
     [SubscriptionTier.PHOENIX]: {
@@ -114,15 +114,15 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Phoenix',
         color: '#ec4899',
         features: [
-            '✨ Sin límites de mensajes',
+            '✨ Uso virtualmente ilimitado',
             'Coaching personalizado con IA avanzada',
             'Análisis de capturas de pantalla',
             'Predicciones de comportamiento',
             'Soporte VIP prioritario 24/7'
         ],
         limits: {
-            dailyTokens: -1,
-            messageDecoder: -1,
+            dailyTokens: 2000000,
+            messageDecoder: 1000,
             moodJournal: true,
             analytics: 'daily',
             panicButton: 'advanced',
@@ -132,8 +132,8 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
             coachingSessions: true,
             prioritySupport: true,
             earlyAccess: true,
-            simulatorAnalyses: -1,
-            simulatorChatMessages: -1
+            simulatorAnalyses: 1000,
+            simulatorChatMessages: 2000
         }
     }
 };

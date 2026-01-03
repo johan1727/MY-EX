@@ -145,7 +145,7 @@ export default function CoachScreen() {
         }
 
         try {
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
             const context = updatedMessages.slice(-6).map(m =>
                 `${m.role === 'user' ? 'Usuario' : 'Coach'}: ${m.content}${m.image ? ' [imagen]' : ''}`

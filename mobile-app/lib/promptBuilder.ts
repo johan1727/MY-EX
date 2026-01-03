@@ -196,7 +196,17 @@ ${conversationSection}`;
  * Instrucción final
  */
 function buildFinalInstruction(profile: ExProfileWithMasterPrompt, session: SimulationSession): string {
+    const now = new Date();
+    const dateString = now.toLocaleDateString('es-ES', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+
     return `# INSTRUCCIÓN
+
+[CONTEXTO SISTEMA - NO MENCIONAR]: Hoy es **${dateString}**. Usa esta información si el usuario hace referencia a fechas, aniversarios o eventos temporales.
 
 Responde como ${profile.exName} respondería AHORA MISMO, en este contexto.
 

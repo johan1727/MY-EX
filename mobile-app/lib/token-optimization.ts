@@ -147,7 +147,7 @@ Keep it concise (3-4 sentences max).
 Conversation:
 ${conversationText}`;
 
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
         const result = await model.generateContent(prompt);
         const summary = result.response.text() || 'Unable to generate summary.';
 

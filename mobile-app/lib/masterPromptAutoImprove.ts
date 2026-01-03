@@ -7,6 +7,7 @@
 
 import { supabase } from './supabase';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { storage } from './storage';
 
 // ===============================================
 // TIPOS
@@ -36,14 +37,15 @@ export interface MasterPromptUpdate {
 const CORRECTIONS_KEY = 'ex_simulator_corrections_';
 
 /**
- * Guarda una corrección del usuario en localStorage
+ * Guarda una corrección del usuario en storage + Supabase con análisis IA
+ * Works on both web (localStorage) and native (AsyncStorage)
  */
-export function saveUserCorrection(
+export async function saveUserCorrection(
     profileId: string,
     correction: Omit<UserCorrection, 'id' | 'timestamp'>
-): void {
+): Promise<void> {
     const key = CORRECTIONS_KEY + profileId;
-    const existingStr = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+    const existingStr = await storage.getItem(key);
     const existing: UserCorrection[] = existingStr ? JSON.parse(existingStr) : [];
 
     const newCorrection: UserCorrection = {
@@ -52,33 +54,130 @@ export function saveUserCorrection(
         timestamp: new Date().toISOString()
     };
 
-    // Mantener máximo 20 correcciones
+    // Mantener máximo 20 correcciones localmente
     const updated = [...existing, newCorrection].slice(-20);
+    await storage.setItem(key, JSON.stringify(updated));
 
-    if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(key, JSON.stringify(updated));
-    }
+    console.log('[AutoMejora] ✅ Corrección guardada localmente:', newCorrection.category);
 
-    console.log('[AutoMejora] ✅ Corrección guardada:', newCorrection.category);
+    // Sync to Supabase with AI analysis (background, non-blocking)
+    syncCorrectionToSupabase(profileId, newCorrection).catch(err =>
+        console.log('[AutoMejora] ⚠️ Supabase sync failed:', err)
+    );
 }
 
 /**
- * Obtiene todas las correcciones pendientes
+ * Sincroniza una corrección a Supabase con análisis de IA
  */
-export function getPendingCorrections(profileId: string): UserCorrection[] {
+async function syncCorrectionToSupabase(
+    profileId: string,
+    correction: UserCorrection
+): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        console.log('[AutoMejora] No user logged in, skipping Supabase sync');
+        return;
+    }
+
+    // Analyze correction with AI
+    const aiAnalysis = await analyzeCorrection(correction);
+
+    const { error } = await supabase
+        .from('user_corrections')
+        .insert({
+            user_id: user.id,
+            profile_id: profileId,
+            category: correction.category,
+            original_response: correction.originalResponse,
+            user_feedback: correction.userFeedback,
+            corrected_behavior: correction.correctedBehavior || null,
+            ai_analysis: aiAnalysis
+        });
+
+    if (error) {
+        console.error('[AutoMejora] Supabase insert error:', error);
+        return;
+    }
+
+    console.log('[AutoMejora] ✅ Corrección sincronizada a Supabase');
+}
+
+/**
+ * Analiza una corrección con IA para entender el problema y sugerir mejoras
+ */
+async function analyzeCorrection(correction: UserCorrection): Promise<{
+    understood_issue: string;
+    improvement_applied: string;
+    confidence: number;
+    pattern_detected: string;
+}> {
+    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+
+    if (!apiKey) {
+        return {
+            understood_issue: correction.userFeedback,
+            improvement_applied: 'Pendiente de revisión',
+            confidence: 0.5,
+            pattern_detected: correction.category
+        };
+    }
+
+    try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+        const prompt = `Analiza esta corrección de usuario a una simulación de ex-pareja:
+
+CATEGORÍA: ${correction.category}
+RESPUESTA DE LA IA: "${correction.originalResponse}"
+FEEDBACK DEL USUARIO: "${correction.userFeedback}"
+COMPORTAMIENTO CORRECTO: "${correction.correctedBehavior || 'No especificado'}"
+
+Responde SOLO con JSON:
+{
+    "understood_issue": "explicación breve del problema detectado",
+    "improvement_applied": "cómo se debe ajustar el comportamiento de la simulación",
+    "confidence": 0.0-1.0,
+    "pattern_detected": "patrón general si existe (ej: 'demasiado formal', 'falta de emojis', 'tono incorrecto')"
+}`;
+
+        const response = await model.generateContent(prompt);
+        const text = response.response.text();
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+        }
+    } catch (e: any) {
+        console.log('[AutoMejora] AI analysis failed:', e?.message);
+    }
+
+    return {
+        understood_issue: correction.userFeedback,
+        improvement_applied: 'Ajustar según feedback',
+        confidence: 0.5,
+        pattern_detected: correction.category
+    };
+}
+
+
+/**
+ * Obtiene todas las correcciones pendientes
+ * Works on both web (localStorage) and native (AsyncStorage)
+ */
+export async function getPendingCorrections(profileId: string): Promise<UserCorrection[]> {
     const key = CORRECTIONS_KEY + profileId;
-    const existingStr = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+    const existingStr = await storage.getItem(key);
     return existingStr ? JSON.parse(existingStr) : [];
 }
 
 /**
  * Limpia las correcciones después de aplicarlas
+ * Works on both web (localStorage) and native (AsyncStorage)
  */
-export function clearCorrections(profileId: string): void {
+export async function clearCorrections(profileId: string): Promise<void> {
     const key = CORRECTIONS_KEY + profileId;
-    if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem(key);
-    }
+    await storage.removeItem(key);
 }
 
 // ===============================================
@@ -87,16 +186,18 @@ export function clearCorrections(profileId: string): void {
 
 /**
  * Actualiza el Master Prompt basándose en las correcciones del usuario
- * Se llama cuando hay 5+ correcciones acumuladas
+ * NUEVO: Ahora también analiza patrones conversacionales y se activa con 3+ correcciones
  */
 export async function updateMasterPromptWithCorrections(
     profileId: string,
-    currentMasterPrompt: string
+    currentMasterPrompt: string,
+    recentConversation?: { user: string; ex: string }[] // NUEVO: Conversation context
 ): Promise<MasterPromptUpdate | null> {
-    const corrections = getPendingCorrections(profileId);
+    const corrections = await getPendingCorrections(profileId);
 
-    if (corrections.length < 5) {
-        console.log('[AutoMejora] No hay suficientes correcciones (${corrections.length}/5)');
+    // CAMBIO: 3+ correcciones (antes 5)
+    if (corrections.length < 3) {
+        console.log(`[AutoMejora] No hay suficientes correcciones (${corrections.length}/3)`);
         return null;
     }
 
@@ -108,56 +209,86 @@ export async function updateMasterPromptWithCorrections(
 
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        // UPGRADE: Gemini 2.0 Flash (más rápido y mejor)
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
         // Construir resumen de correcciones
-        const correctionsSummary = corrections.map(c =>
-            `- Categoría: ${c.category}
-   IA dijo: "${c.originalResponse.substring(0, 100)}..."
+        const correctionsSummary = corrections.map((c, i) =>
+            `${i + 1}. Categoría: ${c.category}
+   IA dijo: "${c.originalResponse.substring(0, 150)}..."
    Usuario: "${c.userFeedback}"
    Correcto: "${c.correctedBehavior || 'No especificado'}"`
         ).join('\n\n');
 
-        const prompt = `Eres un experto en ajustar prompts de simulación de personalidad.
+        // NUEVO: Agregar contexto conversacional si existe
+        let conversationContext = '';
+        if (recentConversation && recentConversation.length > 0) {
+            conversationContext = `\n\nCONTEXTO CONVERSACIONAL RECIENTE (últimos ${recentConversation.length} mensajes):
+${recentConversation.map(msg => `Usuario: ${msg.user}\nEx: ${msg.ex}`).join('\n---\n')}
+
+ANÁLISIS REQUERIDO:
+- ¿El tono de la IA es consistente con el Master Prompt?
+- ¿Hay patrones que el prompt no está capturando?
+- ¿El usuario parece frustrado con algo específico?`;
+        }
+
+        const prompt = `Eres un experto en ajustar prompts de simulación de personalidad con IA avanzada.
 
 MASTER PROMPT ACTUAL:
 ${currentMasterPrompt}
 
 CORRECCIONES DEL USUARIO (lo que la simulación hizo mal):
 ${correctionsSummary}
+${conversationContext}
 
 Tu tarea:
 1. Analiza cada corrección y entiende qué patrones la IA está haciendo mal
-2. Modifica el Master Prompt para corregir estos errores
-3. Mantén el estilo y formato del prompt original
-4. Agrega reglas específicas para evitar los errores detectados
+2. Identifica si hay inconsistencias entre el Master Prompt y el comportamiento real esperado
+3. Modifica el Master Prompt para corregir estos errores DE FORMA ESPECÍFICA
+4. Mantén el estilo y formato del prompt original
+5. Agrega reglas MUY ESPECÍFICAS para evitar los errores detectados
+
+REGLAS CRÍTICAS:
+- Si el usuario dice "ella no diría eso" → Agrega ejemplos DE LO QUE SÍ DIRÍA
+- Si el error es de tono → Especifica EXACTAMENTE qué tono usar en qué situación
+- Si el error es de vocabulario → Lista palabras PROHIBIDAS y palabras REQUERIDAS
+- NO hagas cambios genéricos, sé QUIRÚRGICO
 
 Responde con JSON:
 {
-    "updatedPrompt": "El nuevo Master Prompt completo...",
+    "updatedPrompt": "El nuevo Master Prompt completo mejorado...",
     "changesApplied": [
-        "Agregada regla: no usar 'jajaja' cuando está molesta",
-        "Corregido: el tono ahora es más seco cuando ignoran mensajes"
-    ]
+        "Agregada regla específica: 'Cuando el usuario la ignora, responde con 'ok.' (punto incluido) después de 2+ horas, no con 'jajaja''",
+        "Vocabulario prohibido: ['osea', 'tipo'] (nunca los usa). Vocabulario requerido: ['ntp', 'ajá', 'sip']",
+        "Tono corregido: Al hablar de su ex anterior, siempre menciona que 'fue lo mejor que le pasó' (sarcasmo)"
+    ],
+    "detectedPatterns": [
+        "La IA es demasiado amigable cuando debería estar molesta",
+        "Falta el uso de puntos suspensivos (...) que ella usa cuando está pensando"
+    ],
+    "confidence": 0.0-1.0
 }`;
 
+        console.log('[AutoMejora] 🤖 Enviando prompt a IA para análisis...');
         const response = await model.generateContent(prompt);
         const responseText = response.response.text();
 
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
-            throw new Error('No JSON found');
+            throw new Error('No JSON found in AI response');
         }
 
         const result = JSON.parse(jsonMatch[0]);
 
         // Limpiar correcciones aplicadas
-        clearCorrections(profileId);
+        await clearCorrections(profileId);
 
         // Guardar nuevo Master Prompt en Supabase
         await saveMasterPromptUpdate(profileId, result.updatedPrompt, corrections.length);
 
         console.log('[AutoMejora] ✅ Master Prompt actualizado con', result.changesApplied?.length || 0, 'cambios');
+        console.log('[AutoMejora] 📊 Confidence:', result.confidence);
+        console.log('[AutoMejora] 🔍 Patrones detectados:', result.detectedPatterns);
 
         return {
             originalPrompt: currentMasterPrompt,
@@ -296,5 +427,138 @@ export function modifyFactsByMemory(
         }
     }
 
+
     return fact;
 }
+
+// ===============================================
+// 🤖 ANÁLISIS PROACTIVO CON IA
+// ===============================================
+
+/**
+ * NUEVA FUNCIÓN: Analiza conversación cada 10 mensajes para detectar patrones
+ * y mejorar el Master Prompt automáticamente SIN esperar correcciones del usuario
+ */
+export async function analyzeConversationPatterns(
+    profileId: string,
+    currentMasterPrompt: string,
+    conversation: { user: string; ex: string; timestamp: string }[]
+): Promise<{
+    needsUpdate: boolean;
+    suggestedChanges?: string[];
+    detectedIssues?: string[];
+    confidence?: number;
+} | null> {
+    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    if (!apiKey || conversation.length < 10) {
+        return null;
+    }
+
+    try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+
+        // Tomar últimos 20 mensajes para análisis
+        const recentConvo = conversation.slice(-20);
+        const convoText = recentConvo.map((msg, i) =>
+            `[${i + 1}] Usuario: ${msg.user}\n    Ex: ${msg.ex}`
+        ).join('\n');
+
+        const prompt = `Eres un experto en análisis de personalidad simulada con IA.
+
+MASTER PROMPT ACTUAL:
+${currentMasterPrompt.substring(0, 3000)} ${currentMasterPrompt.length > 3000 ? '... (truncado)' : ''}
+
+CONVERSACIÓN RECIENTE (últimos ${recentConvo.length} mensajes):
+${convoText}
+
+Tu tarea:
+Analiza si la IA está simulando **CONSISTENTEMENTE** el comportamiento descrito en el Master Prompt.
+
+PREGUNTAS CRÍTICAS:
+1. ¿El tono emocional es consistente con lo descrito?
+2. ¿Usa las palabras/frases que debería usar?
+3. ¿Hay patrones de comportamiento que el prompt NO está capturando?
+4. ¿La IA parece "genérica" en lugar de personalizada?
+5. ¿Hay inconsistencias evidentes?
+
+REGLAS:
+- Si TODO está bien → needsUpdate: false
+- Si hay 2+ problemas menores → needsUpdate: true
+- Si hay 1 problema grave (ej: tono completamente equivocado) → needsUpdate: true
+- SÉ **CONSERVADOR**: Solo sugerir cambios si es REALMENTE necesario
+
+Responde con JSON:
+{
+    "needsUpdate": true/false,
+    "detectedIssues": [
+        "La IA usa 'jajaja' pero en el Master Prompt dice que usa 'jaja' (sin repetición)",
+        "El tono es demasiado formal, debería ser más casual"
+    ],
+    "suggestedChanges": [
+        "Cambiar 'risa: jajaja' por 'risa: jaja (2-3 veces máximo)'",
+        "Agregar: 'Tono: casual, nunca formal. Ejemplo: ntp, sip, aja'"
+    ],
+    "confidence": 0.0-1.0
+}`;
+
+        console.log('[AutoMejora] 🔍 Analizando conversación proactivamente...');
+        const response = await model.generateContent(prompt);
+        const responseText = response.response.text();
+
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            console.log('[AutoMejora] ⚠️ No JSON en respuesta de IA');
+            return null;
+        }
+
+        const result = JSON.parse(jsonMatch[0]);
+
+        if (result.needsUpdate) {
+            console.log('[AutoMejora] ⚠️ Análisis detectó', result.detectedIssues?.length || 0, 'problemas');
+            console.log('[AutoMejora] 💡 Confianza:', result.confidence);
+
+            // Auto-guardar como correcciones "sintéticas" si confidence > 0.7
+            if (result.confidence > 0.7 && result.detectedIssues) {
+                for (const issue of result.detectedIssues.slice(0, 2)) { // Max 2
+                    await saveUserCorrection(profileId, {
+                        originalResponse: '(Auto-detectado por IA)',
+                        userFeedback: issue,
+                        correctedBehavior: result.suggestedChanges?.[0] || 'Ver análisis',
+                        category: 'personality'
+                    });
+                }
+                console.log('[AutoMejora] ✅ Correcciones sintéticas guardadas');
+            }
+        } else {
+            console.log('[AutoMejora] ✅ Conversación consistente con Master Prompt');
+        }
+
+        return result;
+
+    } catch (e: any) {
+        console.error('[AutoMejora] Error en análisis proactivo:', e?.message);
+        return null;
+    }
+}
+
+/**
+ * Trigger automático: Llama cada 10 mensajes
+ */
+export async function shouldTriggerProactiveAnalysis(
+    profileId: string,
+    messageCount: number
+): Promise<boolean> {
+    // Trigger cada 10 mensajes
+    if (messageCount % 10 !== 0) return false;
+
+    // No analizar si ya hay correcciones pendientes (evitar duplicados)
+    const pending = await getPendingCorrections(profileId);
+    if (pending.length >= 3) {
+        console.log('[AutoMejora] 🔄 Ya hay correcciones pendientes, saltando análisis proactivo');
+        return false;
+    }
+
+    return true;
+}
+

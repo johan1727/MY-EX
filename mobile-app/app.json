@@ -72,13 +72,13 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png",
       "bundler": "metro",
       "backgroundColor": "#0a0a0a",
       "splash": {
         "image": "./assets/splash.png",
         "resizeMode": "contain",
-        "backgroundColor": "#0a0a0a"
+        "backgroundColor": "#0a0a0a",
+        "favicon": "./assets/favicon.png"
       }
     },
     "plugins": [
