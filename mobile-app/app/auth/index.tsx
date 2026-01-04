@@ -317,26 +317,13 @@ export default function AuthScreen() {
         <View style={styles.container}>
             <StatusBar style="light" />
 
-            {/* Animated Background */}
-            <LinearGradient
-                colors={['#0f0f23', '#1a1a3e', '#0f0f23']}
-                style={StyleSheet.absoluteFill}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-            />
+            {/* Solid Dark Background */}
+            <View style={styles.darkBackground} />
 
-            {/* Decorative circles */}
-            <Animated.View style={[styles.decorCircle1, { transform: [{ scale: pulseAnim }] }]}>
+            {/* Subtle Purple Glow */}
+            <Animated.View style={[styles.decorGlow, { transform: [{ scale: pulseAnim }] }]}>
                 <LinearGradient
-                    colors={['rgba(139, 92, 246, 0.3)', 'transparent']}
-                    style={StyleSheet.absoluteFill}
-                    start={{ x: 0.5, y: 0 }}
-                    end={{ x: 0.5, y: 1 }}
-                />
-            </Animated.View>
-            <Animated.View style={[styles.decorCircle2, { transform: [{ scale: pulseAnim }] }]}>
-                <LinearGradient
-                    colors={['rgba(59, 130, 246, 0.2)', 'transparent']}
+                    colors={['rgba(124, 58, 237, 0.15)', 'transparent']}
                     style={StyleSheet.absoluteFill}
                     start={{ x: 0.5, y: 0 }}
                     end={{ x: 0.5, y: 1 }}
@@ -369,10 +356,9 @@ export default function AuthScreen() {
                             }
                         ]}
                     >
-                        {/* Logo/Brand */}
                         <Animated.View style={[styles.logoContainer, { transform: [{ scale: pulseAnim }] }]}>
                             <LinearGradient
-                                colors={['#8b5cf6', '#6366f1', '#3b82f6']}
+                                colors={['#7c3aed', '#a855f7', '#8b5cf6']}
                                 style={styles.logoGradient}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
@@ -582,22 +568,17 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         paddingVertical: 60,
     },
-    decorCircle1: {
-        position: 'absolute',
-        top: -100,
-        right: -100,
-        width: 300,
-        height: 300,
-        borderRadius: 150,
-        overflow: 'hidden',
+    darkBackground: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: '#0a0a0a',
     },
-    decorCircle2: {
+    decorGlow: {
         position: 'absolute',
-        bottom: -50,
-        left: -100,
-        width: 250,
-        height: 250,
-        borderRadius: 125,
+        top: -150,
+        alignSelf: 'center',
+        width: 400,
+        height: 400,
+        borderRadius: 200,
         overflow: 'hidden',
     },
     backButton: {
