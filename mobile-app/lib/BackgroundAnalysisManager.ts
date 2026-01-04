@@ -197,7 +197,7 @@ export class BackgroundAnalysisManager {
             try {
                 const { GoogleGenerativeAI } = await import('@google/generative-ai');
                 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
                 entities = await extractEntities(messages, exName, model);
                 console.log('[BackgroundAnalysis] Extracted', entities.length, 'entities');
@@ -212,7 +212,7 @@ export class BackgroundAnalysisManager {
             try {
                 const { GoogleGenerativeAI } = await import('@google/generative-ai');
                 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
                 defensiveTopics = await detectDefensiveTopics(messages, exName, exSenderName, model);
                 console.log('[BackgroundAnalysis] Found', defensiveTopics.length, 'defensive topics');
@@ -227,7 +227,7 @@ export class BackgroundAnalysisManager {
             try {
                 const { GoogleGenerativeAI } = await import('@google/generative-ai');
                 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
                 jealousyTriggers = await detectJealousyTriggers(messages, exName, exSenderName, model);
                 console.log('[BackgroundAnalysis] Found', jealousyTriggers.length, 'jealousy triggers');
@@ -242,7 +242,7 @@ export class BackgroundAnalysisManager {
             try {
                 const { GoogleGenerativeAI } = await import('@google/generative-ai');
                 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
                 nicknameEvolution = await detectNicknameEvolution(messages, exName, model);
                 console.log('[BackgroundAnalysis] Tracked', nicknameEvolution.length, 'nickname changes');
@@ -257,7 +257,7 @@ export class BackgroundAnalysisManager {
             try {
                 const { GoogleGenerativeAI } = await import('@google/generative-ai');
                 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
                 topConflicts = await detectTopConflicts(messages, exName, model);
                 console.log('[BackgroundAnalysis] Found', topConflicts.length, 'recurring conflicts');

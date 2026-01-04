@@ -341,30 +341,39 @@ RESPONDE:`;
                         </View>
                     )}
                     <View style={styles.inputContainer}>
-                        {/* Image picker button */}
-                        <TouchableOpacity
-                            style={styles.imageButton}
-                            onPress={pickImage}
-                        >
-                            <ImageIcon size={22} color="#9ca3af" />
-                        </TouchableOpacity>
-                        <TextInput
-                            style={styles.input}
-                            value={inputText}
-                            onChangeText={setInputText}
-                            placeholder="¿Cómo te sientes hoy?"
-                            placeholderTextColor="#6b7280"
-                            multiline
-                            maxLength={1000}
-                            editable={isPremium || remainingMessages > 0}
-                        />
-                        <TouchableOpacity
-                            style={[styles.sendButton, ((!inputText.trim() && !selectedImage) || (!isPremium && remainingMessages === 0)) && styles.sendButtonDisabled]}
-                            onPress={sendMessage}
-                            disabled={(!inputText.trim() && !selectedImage) || isTyping || (!isPremium && remainingMessages === 0)}
-                        >
-                            <Send size={18} color={(inputText.trim() || selectedImage) && (isPremium || remainingMessages > 0) ? '#000' : '#6b7280'} />
-                        </TouchableOpacity>
+                        <View style={styles.geminiInputWrapper}>
+                            {/* Image picker button */}
+                            <TouchableOpacity
+                                style={styles.inputActionButton}
+                                onPress={pickImage}
+                            >
+                                <ImageIcon size={22} color="#888" />
+                            </TouchableOpacity>
+
+                            {/* Text Input */}
+                            <TextInput
+                                style={styles.geminiInput}
+                                value={inputText}
+                                onChangeText={setInputText}
+                                placeholder="¿Cómo te sientes hoy?"
+                                placeholderTextColor="#666"
+                                multiline
+                                maxLength={1000}
+                                editable={isPremium || remainingMessages > 0}
+                            />
+
+                            {/* Send Button */}
+                            <TouchableOpacity
+                                style={[
+                                    styles.geminiSendButton,
+                                    ((inputText.trim() || selectedImage) && (isPremium || remainingMessages > 0)) && styles.geminiSendButtonActive
+                                ]}
+                                onPress={sendMessage}
+                                disabled={(!inputText.trim() && !selectedImage) || isTyping || (!isPremium && remainingMessages === 0)}
+                            >
+                                <Send size={18} color={(inputText.trim() || selectedImage) && (isPremium || remainingMessages > 0) ? '#fff' : '#555'} />
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </SafeAreaView>
             </KeyboardAvoidingView>
@@ -582,6 +591,46 @@ const styles = StyleSheet.create({
     imageButton: {
         padding: 8,
         marginRight: 4,
+    },
+    // Gemini-style input styles
+    geminiInputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        backgroundColor: '#1a1a2e',
+        borderRadius: 28,
+        paddingHorizontal: 8,
+        paddingVertical: 8,
+        borderWidth: 1,
+        borderColor: '#333',
+        gap: 8,
+    },
+    inputActionButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'transparent',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    geminiInput: {
+        flex: 1,
+        color: '#fff',
+        fontSize: 16,
+        maxHeight: 120,
+        paddingVertical: 10,
+        paddingHorizontal: 4,
+        lineHeight: 22,
+    },
+    geminiSendButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'transparent',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    geminiSendButtonActive: {
+        backgroundColor: '#7c3aed',
     },
     messageImage: {
         width: '100%',
