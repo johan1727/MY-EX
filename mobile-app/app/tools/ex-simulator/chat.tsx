@@ -767,6 +767,17 @@ INSTRUCCIONES DE MEMORIA (MUY IMPORTANTE):
                     )}
                 </ScrollView>
 
+                {/* Message Preview - Shows while typing */}
+                {inputText.trim() && (
+                    <View style={styles.messagePreviewContainer}>
+                        <View style={styles.messagePreviewBubble}>
+                            <Text style={styles.messagePreviewText} numberOfLines={3}>
+                                {inputText}
+                            </Text>
+                        </View>
+                    </View>
+                )}
+
                 {/* Input - Gemini Style */}
                 <View style={styles.inputContainer}>
                     <View style={styles.geminiInputWrapper}>
@@ -1130,6 +1141,29 @@ const styles = StyleSheet.create({
     },
     geminiSendButtonActive: {
         backgroundColor: '#7c3aed',
+    },
+    messagePreviewContainer: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        backgroundColor: '#0a0a0a',
+        borderTopWidth: 1,
+        borderTopColor: '#1f1f1f',
+    },
+    messagePreviewBubble: {
+        alignSelf: 'flex-end',
+        backgroundColor: 'rgba(124, 58, 237, 0.3)',
+        maxWidth: '75%',
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 18,
+        borderBottomRightRadius: 4,
+        borderWidth: 1,
+        borderColor: 'rgba(124, 58, 237, 0.5)',
+    },
+    messagePreviewText: {
+        color: '#e5e7eb',
+        fontSize: 14,
+        lineHeight: 20,
     },
     messageCounter: {
         color: 'rgba(255,255,255,0.5)',
