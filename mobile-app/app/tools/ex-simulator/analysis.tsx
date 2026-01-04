@@ -66,9 +66,9 @@ export default function AnalysisScreen() {
                         setIsAnalyzing(false);
                         setProfile(state.result);
 
-                        // Navigate to chat after completion
+                        // Navigate to dashboard after completion
                         setTimeout(() => {
-                            router.push('/tools/ex-simulator/chat');
+                            router.replace('/(tabs)' as any);
                         }, 2000);
                     }
 

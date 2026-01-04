@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Modal, Alert } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Modal, Alert, KeyboardAvoidingView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -8,7 +8,7 @@ import { loadMasterPrompt } from '../../../lib/masterPromptSupabase';
 import { storage } from '../../../lib/storage';
 import { supabase } from '../../../lib/supabase';
 import { checkProhibitedContent } from '../../../lib/contentModeration';
-import { ArrowLeft, Send, Sparkles } from 'lucide-react-native';
+import { ArrowLeft, Send, Sparkles, ImageIcon } from 'lucide-react-native';
 import { useSubscription } from '../../../lib/SubscriptionContext';
 import UpgradeBanner from '../../../components/UpgradeBanner';
 import {
@@ -84,8 +84,10 @@ export default function ExSimulatorChat() {
     // NEW: Advanced features state
     const [selectedPhase, setSelectedPhase] = useState<'honeymoon' | 'stable' | 'crisis' | 'breakup'>('stable');
 
-    // FREE USER LIMITS - SURVIVOR tier (Supabase)
-    const FREE_MESSAGE_LIMIT = 30; // simulator_chat_messages for survivor
+    // FREE USER LIMITS - SURVIVOR tier with cooldown
+    const FREE_MESSAGE_LIMIT = 15; // 15 mensajes por periodo
+    const MESSAGE_COOLDOWN_HOURS = 3; // Cada 3 horas se resetea
+    const DAILY_FREE_LIMIT = 45; // 45 mensajes máximo por día
     const userMessageCount = messages.filter(m => m.role === 'user').length;
 
     useEffect(() => {
@@ -486,13 +488,25 @@ ${conversationMemory}
             }
 
             if (profileData.masterPrompt) {
-                // Use last 20 messages for context
-                const recentContext = newMessages.slice(-20).map(m =>
+                // Use last 80 messages for context (increased from 20 for better memory)
+                const recentContext = newMessages.slice(-80).map(m =>
                     `${m.role === 'user' ? userName : profileData.exName}: ${m.content}`
                 ).join('\n');
 
-                // Full context: Master prompt + Facts + Past summaries + RAG + Memory + Recent + Modifiers
-                systemPrompt = `${profileData.masterPrompt}\n${factsContext}\n${pastSummaries}\n${ragContext}\n${memoryContext}\nCONTEXTO RECIENTE:\n${recentContext}\n\nMENSAJE ACTUAL: "${currentInput}"\n${promptModifier}\n\nRESPONDE (sin poner tu nombre antes):`;
+                // MEMORY INSTRUCTIONS - Critical for remembering conversation
+                const memoryInstructions = `
+═══════════════════════════════════════════════
+INSTRUCCIONES DE MEMORIA (MUY IMPORTANTE):
+- RECUERDA TODO lo que el usuario ha mencionado en esta conversación
+- Si el usuario habla de algo (ej: "Nicolas Maduro", "Instagram", "ennig") y luego lo menciona de nuevo, DEBES recordarlo y conectar los temas
+- NO ignores información previa - siempre mantén el hilo de la conversación
+- Si no entiendes algo que el usuario dice, PREGUNTA para clarificar en lugar de cambiar de tema
+- Conecta temas relacionados (ej: si hablaron de Instagram y luego dicen "ennig", probablemente se refieren a algo relacionado)
+═══════════════════════════════════════════════
+`;
+
+                // Full context: Master prompt + Memory Instructions + Facts + Past summaries + RAG + Memory + Recent + Modifiers
+                systemPrompt = `${profileData.masterPrompt}\n${memoryInstructions}\n${factsContext}\n${pastSummaries}\n${ragContext}\n${memoryContext}\nCONTEXTO RECIENTE:\n${recentContext}\n\nMENSAJE ACTUAL: "${currentInput}"\n${promptModifier}\n\nRESPONDE (sin poner tu nombre antes):`;
             } else {
                 systemPrompt = buildEnhancedPrompt(profileData, userName, currentInput, messages) + promptModifier;
             }
@@ -677,173 +691,191 @@ ${conversationMemory}
     }
 
     return (
-        <SafeAreaView style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.push('/tools/ex-simulator')} style={styles.backButton}>
-                    <ArrowLeft size={24} color="white" />
-                </TouchableOpacity>
-                <View style={styles.headerCenter}>
-                    <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>{profileData.exName[0].toUpperCase()}</Text>
-                    </View>
-                    <View style={styles.headerInfo}>
-                        <Text style={styles.headerName}>{profileData.exName}</Text>
-                        <Text style={styles.headerStatus}>
-                            {isTyping ? 'Escribiendo...' : 'En línea'}
-                        </Text>
+        <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+            keyboardVerticalOffset={0}
+        >
+            <SafeAreaView style={styles.container}>
+                {/* Header */}
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => router.push('/tools/ex-simulator')} style={styles.backButton}>
+                        <ArrowLeft size={24} color="white" />
+                    </TouchableOpacity>
+                    <View style={styles.headerCenter}>
+                        <View style={styles.avatar}>
+                            <Text style={styles.avatarText}>{profileData.exName[0].toUpperCase()}</Text>
+                        </View>
+                        <View style={styles.headerInfo}>
+                            <Text style={styles.headerName}>{profileData.exName}</Text>
+                            <Text style={styles.headerStatus}>
+                                {isTyping ? 'Escribiendo...' : 'En línea'}
+                            </Text>
 
+                        </View>
                     </View>
+                    {/* Premium Upgrade Banner - only for free users */}
+                    {!isPremium && <UpgradeBanner variant="minimal" />}
                 </View>
-                {/* Premium Upgrade Banner - only for free users */}
-                {!isPremium && <UpgradeBanner variant="minimal" />}
-            </View>
 
-            {/* Messages */}
-            <ScrollView
-                ref={scrollViewRef}
-                style={styles.messagesContainer}
-                contentContainerStyle={styles.messagesContent}
-                showsVerticalScrollIndicator={false}
-            >
-                {messages.map((msg, idx) => (
-                    <View
-                        key={idx}
-                        style={[
-                            styles.messageRow,
-                            msg.role === 'user' ? styles.messageRowUser : styles.messageRowAssistant
-                        ]}
-                    >
-                        {msg.role === 'assistant' && (
+                {/* Messages */}
+                <ScrollView
+                    ref={scrollViewRef}
+                    style={styles.messagesContainer}
+                    contentContainerStyle={styles.messagesContent}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {messages.map((msg, idx) => (
+                        <View
+                            key={idx}
+                            style={[
+                                styles.messageRow,
+                                msg.role === 'user' ? styles.messageRowUser : styles.messageRowAssistant
+                            ]}
+                        >
+                            {msg.role === 'assistant' && (
+                                <View style={styles.messageAvatar}>
+                                    <Text style={styles.messageAvatarText}>{profileData.exName[0]}</Text>
+                                </View>
+                            )}
+                            <View
+                                style={[
+                                    styles.messageBubble,
+                                    msg.role === 'user' ? styles.userBubble : styles.assistantBubble
+                                ]}
+                            >
+                                <Text style={styles.messageText}>
+                                    {msg.content}
+                                </Text>
+                                <Text style={styles.messageTime}>
+                                    {msg.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                    {msg.role === 'user' && msg.seen && ' • Leído'}
+                                </Text>
+                            </View>
+                        </View>
+                    ))}
+
+                    {isTyping && (
+                        <View style={[styles.messageRow, styles.messageRowAssistant]}>
                             <View style={styles.messageAvatar}>
                                 <Text style={styles.messageAvatarText}>{profileData.exName[0]}</Text>
                             </View>
-                        )}
-                        <View
-                            style={[
-                                styles.messageBubble,
-                                msg.role === 'user' ? styles.userBubble : styles.assistantBubble
-                            ]}
+                            <View style={styles.typingBubble}>
+                                <Text style={styles.typingText}>...</Text>
+                            </View>
+                        </View>
+                    )}
+                </ScrollView>
+
+                {/* Input - Gemini Style */}
+                <View style={styles.inputContainer}>
+                    <View style={styles.geminiInputWrapper}>
+                        {/* Image Button (placeholder for future functionality) */}
+                        <TouchableOpacity
+                            style={styles.inputActionButton}
+                            onPress={() => Alert.alert('Próximamente', 'La función de imágenes estará disponible pronto')}
                         >
-                            <Text style={styles.messageText}>
-                                {msg.content}
-                            </Text>
-                            <Text style={styles.messageTime}>
-                                {msg.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                                {msg.role === 'user' && msg.seen && ' • Leído'}
-                            </Text>
-                        </View>
-                    </View>
-                ))}
+                            <ImageIcon size={22} color="#888" />
+                        </TouchableOpacity>
 
-                {isTyping && (
-                    <View style={[styles.messageRow, styles.messageRowAssistant]}>
-                        <View style={styles.messageAvatar}>
-                            <Text style={styles.messageAvatarText}>{profileData.exName[0]}</Text>
-                        </View>
-                        <View style={styles.typingBubble}>
-                            <Text style={styles.typingText}>...</Text>
-                        </View>
-                    </View>
-                )}
-            </ScrollView>
+                        {/* Text Input */}
+                        <TextInput
+                            style={styles.geminiInput}
+                            placeholder="Mensaje..."
+                            placeholderTextColor="#666"
+                            value={inputText}
+                            onChangeText={setInputText}
+                            onSubmitEditing={sendMessage}
+                            editable={!isTyping}
+                            multiline
+                            maxLength={2000}
+                        />
 
-            {/* Input */}
-            <View style={styles.inputContainer}>
-                <View style={styles.inputWrapper}>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Escribe un mensaje..."
-                        placeholderTextColor="#666"
-                        value={inputText}
-                        onChangeText={setInputText}
-                        onSubmitEditing={sendMessage}
-                        editable={!isTyping}
-                        multiline
-                    />
-                    {/* Send Button */}
-                    {inputText.trim() && (
+                        {/* Send Button - always visible but styled differently when empty */}
                         <TouchableOpacity
                             onPress={sendMessage}
-                            disabled={isTyping}
-                            style={styles.sendButton}
+                            disabled={isTyping || !inputText.trim()}
+                            style={[
+                                styles.geminiSendButton,
+                                inputText.trim() && styles.geminiSendButtonActive
+                            ]}
                         >
-                            <Send size={20} color="white" />
+                            <Send size={20} color={inputText.trim() ? "#fff" : "#555"} />
                         </TouchableOpacity>
-                    )}
+                    </View>
                 </View>
-            </View>
 
-            {/* LOGIN RECOMMENDATION MODAL */}
-            <Modal
-                visible={showLoginModal}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowLoginModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalIcon}>
-                            <Sparkles size={40} color="#a855f7" />
+                {/* LOGIN RECOMMENDATION MODAL */}
+                <Modal
+                    visible={showLoginModal}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowLoginModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
+                            <View style={styles.modalIcon}>
+                                <Sparkles size={40} color="#a855f7" />
+                            </View>
+                            <Text style={styles.modalTitle}>¡Guarda tu conversación!</Text>
+                            <Text style={styles.modalText}>
+                                Crea una cuenta para que tu simulación y análisis se guarden automáticamente.
+                                Sin cuenta, podrías perder tus datos.
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.modalPrimaryBtn}
+                                onPress={() => {
+                                    setShowLoginModal(false);
+                                    router.push('/auth');
+                                }}
+                            >
+                                <Text style={styles.modalPrimaryText}>Crear cuenta / Iniciar sesión</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.modalSecondaryBtn}
+                                onPress={() => setShowLoginModal(false)}
+                            >
+                                <Text style={styles.modalSecondaryText}>Continuar sin guardar</Text>
+                            </TouchableOpacity>
                         </View>
-                        <Text style={styles.modalTitle}>¡Guarda tu conversación!</Text>
-                        <Text style={styles.modalText}>
-                            Crea una cuenta para que tu simulación y análisis se guarden automáticamente.
-                            Sin cuenta, podrías perder tus datos.
-                        </Text>
-                        <TouchableOpacity
-                            style={styles.modalPrimaryBtn}
-                            onPress={() => {
-                                setShowLoginModal(false);
-                                router.push('/auth');
-                            }}
-                        >
-                            <Text style={styles.modalPrimaryText}>Crear cuenta / Iniciar sesión</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.modalSecondaryBtn}
-                            onPress={() => setShowLoginModal(false)}
-                        >
-                            <Text style={styles.modalSecondaryText}>Continuar sin guardar</Text>
-                        </TouchableOpacity>
                     </View>
-                </View>
-            </Modal>
+                </Modal>
 
-            {/* UPGRADE MODAL - When free messages run out */}
-            <Modal
-                visible={showUpgradeModal}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowUpgradeModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.upgradeEmoji}>🔥</Text>
-                        <Text style={styles.modalTitle}>Has llegado al límite</Text>
-                        <Text style={styles.modalText}>
-                            Has enviado {FREE_MESSAGE_LIMIT} mensajes en esta simulación.
-                            Para continuar chateando sin límites, actualiza a Premium.
-                        </Text>
-                        <TouchableOpacity
-                            style={styles.modalPrimaryBtn}
-                            onPress={() => {
-                                setShowUpgradeModal(false);
-                                router.push('/paywall');
-                            }}
-                        >
-                            <Text style={styles.modalPrimaryText}>Ver planes Premium</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.modalSecondaryBtn}
-                            onPress={() => setShowUpgradeModal(false)}
-                        >
-                            <Text style={styles.modalSecondaryText}>Quizás después</Text>
-                        </TouchableOpacity>
+                {/* UPGRADE MODAL - When free messages run out */}
+                <Modal
+                    visible={showUpgradeModal}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowUpgradeModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
+                            <Text style={styles.upgradeEmoji}>🔥</Text>
+                            <Text style={styles.modalTitle}>Has llegado al límite</Text>
+                            <Text style={styles.modalText}>
+                                Has enviado {FREE_MESSAGE_LIMIT} mensajes en esta simulación.
+                                Para continuar chateando sin límites, actualiza a Premium.
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.modalPrimaryBtn}
+                                onPress={() => {
+                                    setShowUpgradeModal(false);
+                                    router.push('/paywall');
+                                }}
+                            >
+                                <Text style={styles.modalPrimaryText}>Ver planes Premium</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.modalSecondaryBtn}
+                                onPress={() => setShowUpgradeModal(false)}
+                            >
+                                <Text style={styles.modalSecondaryText}>Quizás después</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                </View>
-            </Modal>
-        </SafeAreaView>
+                </Modal>
+            </SafeAreaView>
+        </KeyboardAvoidingView>
     );
 }
 
@@ -1058,6 +1090,46 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.4,
         shadowRadius: 6,
         elevation: 3,
+    },
+    // Gemini-style input styles
+    geminiInputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        backgroundColor: '#1a1a2e',
+        borderRadius: 28,
+        paddingHorizontal: 8,
+        paddingVertical: 8,
+        borderWidth: 1,
+        borderColor: '#333',
+        gap: 8,
+    },
+    inputActionButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'transparent',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    geminiInput: {
+        flex: 1,
+        color: '#fff',
+        fontSize: 16,
+        maxHeight: 120,
+        paddingVertical: 10,
+        paddingHorizontal: 4,
+        lineHeight: 22,
+    },
+    geminiSendButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'transparent',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    geminiSendButtonActive: {
+        backgroundColor: '#7c3aed',
     },
     messageCounter: {
         color: 'rgba(255,255,255,0.5)',
