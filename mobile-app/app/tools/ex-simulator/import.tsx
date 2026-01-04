@@ -814,49 +814,17 @@ export default function ImportChat() {
                         </View>
 
                         <TouchableOpacity
-                            onPress={() => setImportType('text')}
-                            style={[styles.textOption, importType === 'text' && styles.textOptionActive]}
+                            onPress={handleFileUpload}
+                            style={styles.uploadArea}
                         >
-                            <View style={[styles.textOptionIcon, importType === 'text' && styles.textOptionIconActive]}>
-                                <FileText size={20} color={importType === 'text' ? '#3b82f6' : 'white'} />
+                            <View style={styles.uploadIcon}>
+                                <Upload size={24} color="white" />
                             </View>
-                            <View style={styles.textOptionContent}>
-                                <Text style={styles.textOptionTitle}>Pegar Texto Manualmente</Text>
-                                <Text style={styles.textOptionSubtitle}>Mejor para fragmentos o historiales cortos</Text>
-                            </View>
-                            {importType === 'text' && <View style={styles.textOptionDot} />}
+                            <Text style={styles.uploadTitle}>Subir Archivo .txt</Text>
+                            <Text style={styles.uploadSubtitle}>
+                                Soporta historiales completos (10k - 200k+ msgs). Analizamos todo automáticamente.
+                            </Text>
                         </TouchableOpacity>
-
-                        {importType === 'text' ? (
-                            <View style={styles.textInputSection}>
-                                <View style={styles.textAreaContainer}>
-                                    <TextInput
-                                        style={styles.textArea}
-                                        multiline
-                                        placeholder="Pega la conversación aquí..."
-                                        placeholderTextColor="#666"
-                                        value={rawText}
-                                        onChangeText={setRawText}
-                                    />
-                                </View>
-                                <TouchableOpacity onPress={handleTextPaste} style={styles.primaryButton}>
-                                    <Text style={styles.primaryButtonText}>Procesar Texto</Text>
-                                </TouchableOpacity>
-                            </View>
-                        ) : (
-                            <TouchableOpacity
-                                onPress={handleFileUpload}
-                                style={styles.uploadArea}
-                            >
-                                <View style={styles.uploadIcon}>
-                                    <Upload size={24} color="white" />
-                                </View>
-                                <Text style={styles.uploadTitle}>Subir Archivo .txt</Text>
-                                <Text style={styles.uploadSubtitle}>
-                                    Soporta historiales completos (10k - 200k+ msgs). Analizamos todo automáticamente.
-                                </Text>
-                            </TouchableOpacity>
-                        )}
                     </>
                 )}
 
