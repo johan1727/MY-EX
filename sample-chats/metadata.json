@@ -1,0 +1,29 @@
+{
+    "WhatsApp Chat with Ivan Primo.txt": {
+        "type": "family",
+        "relationship": "cousin",
+        "participants": {
+            "user": "Jhonatan",
+            "other": "Ivan Primo"
+        },
+        "notes": "Primo, gym bros, videojuegos, charla casual."
+    },
+    "WhatsApp Chat with Marian.txt": {
+        "type": "ex-partner",
+        "relationship": "ex-girlfriend",
+        "participants": {
+            "user": "Jhonatan",
+            "other": "Marian"
+        },
+        "notes": "Ex pareja, coqueteo inicial, ruptura."
+    },
+    "WhatsApp Chat with Luzesona.txt": {
+        "type": "friend",
+        "relationship": "best-friend",
+        "participants": {
+            "user": "Jhonatan",
+            "other": "Luzesona"
+        },
+        "notes": "Mejor amiga, escuela, tareas, platónico."
+    }
+}

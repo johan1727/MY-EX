@@ -27,6 +27,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { storage } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { BackgroundAnalysisManager, type AnalysisState } from '@/lib/BackgroundAnalysisManager';
+import { validateRelationshipType, formatValidationMessage } from '@/lib/relationshipTypeValidator';
 
 export default function AnalysisScreen() {
     const router = useRouter();
@@ -66,10 +67,10 @@ export default function AnalysisScreen() {
                         setIsAnalyzing(false);
                         setProfile(state.result);
 
-                        // Navigate to dashboard after completion
+                        // Navigate to chat after completion
                         setTimeout(() => {
-                            router.replace('/(tabs)' as any);
-                        }, 2000);
+                            router.replace('/');
+                        }, 1000); // 1 second for state to settle
                     }
 
                     if (state.status === 'error') {
@@ -78,13 +79,48 @@ export default function AnalysisScreen() {
                     }
                 });
 
-                // Start the analysis
-                await BackgroundAnalysisManager.startAnalysis(
-                    profileId,
-                    parsedMessages,
-                    exName,
-                    relationshipType || 'ex'
-                );
+                // ✨ VALIDATE RELATIONSHIP TYPE BEFORE ANALYSIS
+                const validation = validateRelationshipType(parsedMessages, relationshipType || 'ex', exName);
+                console.log('[Analysis] Validation result:', validation);
+
+                if (!validation.isValid && validation.detectedType !== 'unknown') {
+                    // Show warning and ask for confirmation
+                    Alert.alert(
+                        '⚠️ Tipo de Relación Dudoso',
+                        formatValidationMessage(validation) + '\n\n¿Continuar de todos modos?',
+                        [
+                            {
+                                text: 'Cancelar',
+                                style: 'cancel',
+                                onPress: () => {
+                                    setIsAnalyzing(false);
+                                    setLoading(false);
+                                    router.back();
+                                }
+                            },
+                            {
+                                text: 'Continuar',
+                                onPress: async () => {
+                                    // Start the analysis anyway
+                                    await BackgroundAnalysisManager.startAnalysis(
+                                        profileId,
+                                        parsedMessages,
+                                        exName,
+                                        relationshipType || 'ex'
+                                    );
+                                }
+                            }
+                        ]
+                    );
+                } else {
+                    // Validation passed or unknown - start analysis
+                    await BackgroundAnalysisManager.startAnalysis(
+                        profileId,
+                        parsedMessages,
+                        exName,
+                        relationshipType || 'ex'
+                    );
+                }
 
                 return;
             }
@@ -957,7 +993,7 @@ export default function AnalysisScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0a0a0a',
+        backgroundColor: '#000000',
     },
     loadingContainer: {
         flex: 1,
@@ -965,7 +1001,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     headerSafe: {
-        backgroundColor: '#0a0a0a',
+        backgroundColor: '#000000',
     },
     header: {
         flexDirection: 'row',
@@ -974,7 +1010,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.1)',
+        borderBottomColor: '#333',
     },
     backButton: {
         padding: 8,
@@ -1298,12 +1334,12 @@ const styles = StyleSheet.create({
     },
     // Simple card styles for summary sections
     simpleCard: {
-        backgroundColor: '#1a1a2e',
+        backgroundColor: '#1A1A1A',
         borderRadius: 12,
         padding: 16,
         marginBottom: 12,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: '#333',
     },
     simpleCardHeader: {
         flexDirection: 'row',

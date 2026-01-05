@@ -1,48 +1,29 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
     View,
     Text,
     TouchableOpacity,
     StyleSheet,
-    TextInput,
-    Modal,
-    Alert,
-    Share,
 } from 'react-native';
 import {
     Menu,
-    Search,
-    MoreVertical,
-    Star,
-    Download,
-    Palette,
-    X,
-    ChevronLeft,
 } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { haptics } from '@/lib/haptics';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Crown } from 'lucide-react-native';
 
-interface Message {
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp: Date;
-    starred?: boolean;
-}
+export type ChatTheme = 'default' | 'dark' | 'purple' | 'blue' | 'green';
 
 interface ChatHeaderProps {
     exName: string;
     messageCount?: number;
     onMenuPress: () => void;
-    onSearch: (query: string) => void;
-    onExportChat: () => void;
-    onThemeChange: (theme: ChatTheme) => void;
-    currentTheme: ChatTheme;
-    isSearching: boolean;
-    setIsSearching: (val: boolean) => void;
+    isPremium?: boolean;
+    onUpgradePress?: () => void;
+    // Legacy props kept for compatibility but unused
+    currentTheme?: ChatTheme;
 }
-
-export type ChatTheme = 'default' | 'dark' | 'purple' | 'blue' | 'green';
 
 export const CHAT_THEMES: Record<ChatTheme, {
     bg: string;
@@ -55,12 +36,12 @@ export const CHAT_THEMES: Record<ChatTheme, {
     textEx: string;
 }> = {
     default: {
-        bg: '#212121',
-        bubble: '#2F2F2F',
-        name: 'Premium Dark',
-        background: ['#000000', '#1a1a1a'],
-        bubbleUser: '#262626',
-        bubbleEx: '#1f1f1f',
+        bg: '#000000',
+        bubble: '#1C1C1E',
+        name: 'Premium Black',
+        background: ['#000000', '#121212'],
+        bubbleUser: '#2C2C2E',
+        bubbleEx: '#1C1C1E',
         textUser: '#FFFFFF',
         textEx: '#E5E5E5',
     },
@@ -108,186 +89,68 @@ export const CHAT_THEMES: Record<ChatTheme, {
 
 export default function ChatHeader({
     exName = 'Ex',
-    messageCount,
     onMenuPress,
-    onSearch,
-    onExportChat,
-    onThemeChange,
-    currentTheme,
-    isSearching,
-    setIsSearching,
+    isPremium = false,
+    onUpgradePress
 }: ChatHeaderProps) {
-    const [searchQuery, setSearchQuery] = useState('');
-    const [showOptions, setShowOptions] = useState(false);
-    const [showThemes, setShowThemes] = useState(false);
+    return (
+        <BlurView intensity={80} tint="dark" style={styles.header}>
+            <TouchableOpacity
+                onPress={() => {
+                    haptics.impact(haptics.ImpactFeedbackStyle.Light);
+                    onMenuPress();
+                }}
+                style={styles.menuButton}
+            >
+                <Menu size={24} color="#ECECEC" />
+            </TouchableOpacity>
 
-    const handleSearch = (text: string) => {
-        setSearchQuery(text);
-        onSearch(text);
-    };
+            <TouchableOpacity
+                style={styles.profileInfo}
+                onPress={() => {
+                    haptics.impact(haptics.ImpactFeedbackStyle.Light);
+                    onMenuPress();
+                }}
+            >
+                <LinearGradient
+                    colors={['#404040', '#171717']}
+                    style={styles.avatar}
+                >
+                    <Text style={styles.avatarText}>
+                        {(exName || 'E').charAt(0).toUpperCase()}
+                    </Text>
+                </LinearGradient>
+                <View style={styles.nameContainer}>
+                    <Text style={styles.name}>{exName}</Text>
+                    <Text style={styles.status}>
+                        en línea
+                    </Text>
+                </View>
+            </TouchableOpacity>
 
-    const handleExport = async () => {
-        setShowOptions(false);
-        onExportChat();
-    };
-
-    if (isSearching) {
-        return (
-            <View style={styles.searchHeader}>
-                <TouchableOpacity onPress={() => {
-                    setIsSearching(false);
-                    setSearchQuery('');
-                    onSearch('');
-                }}>
-                    <ChevronLeft size={24} color="#ECECEC" />
-                </TouchableOpacity>
-                <TextInput
-                    style={styles.searchInput}
-                    value={searchQuery}
-                    onChangeText={handleSearch}
-                    placeholder="Buscar mensajes..."
-                    placeholderTextColor="#6b7280"
-                    autoFocus
-                />
-                {searchQuery.length > 0 && (
-                    <TouchableOpacity onPress={() => {
-                        setSearchQuery('');
-                        onSearch('');
-                    }}>
-                        <X size={20} color="#9ca3af" />
+            <View style={styles.actions}>
+                {/* Small Premium Button - Only shows if NOT premium */}
+                {!isPremium && (
+                    <TouchableOpacity
+                        style={styles.premiumButtonSmall}
+                        onPress={() => {
+                            haptics.impact(haptics.ImpactFeedbackStyle.Medium);
+                            onUpgradePress?.();
+                        }}
+                    >
+                        <LinearGradient
+                            colors={['#a855f7', '#6366f1']}
+                            style={styles.premiumGradient}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                        >
+                            <Crown size={14} color="#fff" />
+                            <Text style={styles.premiumTextSmall}>PRO</Text>
+                        </LinearGradient>
                     </TouchableOpacity>
                 )}
             </View>
-        );
-    }
-
-    return (
-        <>
-            <BlurView intensity={80} tint="dark" style={styles.header}>
-                <TouchableOpacity
-                    onPress={() => {
-                        haptics.impact(haptics.ImpactFeedbackStyle.Light);
-                        onMenuPress();
-                    }}
-                    style={styles.menuButton}
-                >
-                    <Menu size={24} color="#ECECEC" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.profileInfo}
-                    onPress={() => {
-                        haptics.impact(haptics.ImpactFeedbackStyle.Light);
-                        onMenuPress();
-                    }}
-                >
-                    <LinearGradient
-                        colors={['#404040', '#171717']} // Premium Grayscale Gradient
-                        style={styles.avatar}
-                    >
-                        <Text style={styles.avatarText}>
-                            {(exName || 'E').charAt(0).toUpperCase()}
-                        </Text>
-                    </LinearGradient>
-                    <View style={styles.nameContainer}>
-                        <Text style={styles.name}>{exName}</Text>
-                        <Text style={styles.status}>
-                            en línea
-                        </Text>
-                    </View>
-                </TouchableOpacity>
-
-                <View style={styles.actions}>
-                    <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => {
-                            haptics.impact(haptics.ImpactFeedbackStyle.Light);
-                            setIsSearching(true);
-                        }}
-                    >
-                        <Search size={22} color="#ECECEC" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => {
-                            haptics.impact(haptics.ImpactFeedbackStyle.Light);
-                            setShowOptions(true);
-                        }}
-                    >
-                        <MoreVertical size={22} color="#ECECEC" />
-                    </TouchableOpacity>
-                </View>
-            </BlurView>
-
-            {/* Options Modal */}
-            <Modal visible={showOptions} transparent animationType="fade">
-                <TouchableOpacity
-                    style={styles.optionsOverlay}
-                    activeOpacity={1}
-                    onPress={() => setShowOptions(false)}
-                >
-                    <View style={styles.optionsMenu}>
-                        <TouchableOpacity
-                            style={styles.optionItem}
-                            onPress={() => {
-                                setShowOptions(false);
-                                setShowThemes(true);
-                            }}
-                        >
-                            <Palette size={20} color="#ECECEC" />
-                            <Text style={styles.optionText}>Cambiar tema</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.optionItem}
-                            onPress={handleExport}
-                        >
-                            <Download size={20} color="#22c55e" />
-                            <Text style={styles.optionText}>Exportar chat</Text>
-                        </TouchableOpacity>
-                    </View>
-                </TouchableOpacity>
-            </Modal>
-
-            {/* Theme Selector Modal */}
-            <Modal visible={showThemes} transparent animationType="slide">
-                <View style={styles.themeOverlay}>
-                    <View style={styles.themeModal}>
-                        <View style={styles.themeHeader}>
-                            <Text style={styles.themeTitle}>Temas de Chat</Text>
-                            <TouchableOpacity onPress={() => setShowThemes(false)}>
-                                <X size={24} color="#9ca3af" />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.themesGrid}>
-                            {(Object.keys(CHAT_THEMES) as ChatTheme[]).map((themeKey) => (
-                                <TouchableOpacity
-                                    key={themeKey}
-                                    style={[
-                                        styles.themeOption,
-                                        { backgroundColor: CHAT_THEMES[themeKey].bg },
-                                        currentTheme === themeKey && styles.themeSelected,
-                                    ]}
-                                    onPress={() => {
-                                        onThemeChange(themeKey);
-                                        setShowThemes(false);
-                                    }}
-                                >
-                                    <View style={[
-                                        styles.themeBubble,
-                                        { backgroundColor: CHAT_THEMES[themeKey].bubble }
-                                    ]} />
-                                    <Text style={styles.themeName}>
-                                        {CHAT_THEMES[themeKey].name}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-        </>
+        </BlurView>
     );
 }
 
@@ -454,5 +317,24 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#ECECEC',
         fontWeight: '500',
+    },
+    premiumButtonSmall: {
+        marginRight: 8,
+    },
+    premiumGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 12,
+        gap: 4,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    premiumTextSmall: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 0.5,
     },
 });

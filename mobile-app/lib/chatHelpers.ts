@@ -151,8 +151,13 @@ export function buildEnhancedPrompt(
     userMessage: string,
     conversationHistory: any[]
 ): string {
-    const profile = profileData.profile;
-    const samples = profileData.messageSamples;
+    // Defensive checks
+    if (!profileData) {
+        return `Eres una persona en un chat. Responde de forma natural y breve al mensaje: "${userMessage}"`;
+    }
+
+    const profile = profileData.profile || {};
+    const samples = profileData.messageSamples || {};
 
     // Select 20-30 random examples from ex's messages
     const exampleCount = 25;
@@ -223,12 +228,12 @@ INSTRUCCION CRITICA: Responde EXACTAMENTE como lo harías tú en WhatsApp real.
     };
 
     return `IDENTIDAD Y CONTEXTO:
-Eres ${profileData.exName}. ${getRelationshipDescription()}
+Eres ${profileData.exName || 'Ex'}. ${getRelationshipDescription()}
 
 PERSONALIDAD:
-- Estilo de comunicación: ${profile.communicationStyle || 'mixta'}
-- Tipo de apego: ${profile.attachmentStyle || 'seguro'}
-- Tono emocional: ${profile.emotionalTone || 'variable'}
+- Estilo de comunicación: ${profile?.communicationStyle || 'mixta'}
+- Tipo de apego: ${profile?.attachmentStyle || 'seguro'}
+- Tono emocional: ${profile?.emotionalTone || 'variable'}
 
 ${examplesSection}
 

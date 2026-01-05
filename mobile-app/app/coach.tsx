@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Send, Heart, Sparkles, Crown, Image as ImageIcon, X } from 'lucide-react-native';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { storage } from '../lib/storage';
+import UpgradeBanner from '../components/UpgradeBanner';
 import { useSubscription } from '@/lib/SubscriptionContext';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
@@ -212,7 +213,13 @@ RESPONDE:`;
                         <ArrowLeft size={22} color="#9ca3af" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Coach IA</Text>
-                    <View style={styles.headerSpacer} />
+                    {isPremium ? (
+                        <View style={styles.headerSpacer} />
+                    ) : (
+                        <View style={styles.headerRight}>
+                            <UpgradeBanner variant="header" />
+                        </View>
+                    )}
                 </View>
             </SafeAreaView>
 
@@ -264,7 +271,7 @@ RESPONDE:`;
                         >
                             {msg.role === 'assistant' && (
                                 <View style={styles.avatarSmall}>
-                                    <Sparkles size={14} color="#ec4899" />
+                                    <Sparkles size={14} color="#a855f7" />
                                 </View>
                             )}
                             <View style={[
@@ -294,7 +301,7 @@ RESPONDE:`;
                     {isTyping && (
                         <View style={[styles.messageRow, styles.assistantRow]}>
                             <View style={styles.avatarSmall}>
-                                <Sparkles size={14} color="#ec4899" />
+                                <Sparkles size={14} color="#a855f7" />
                             </View>
                             <View style={[styles.messageBubble, styles.assistantBubble]}>
                                 <Text style={styles.typingDots}>...</Text>
@@ -342,7 +349,7 @@ RESPONDE:`;
                     )}
 
                     {/* Message Preview - Shows while typing */}
-                    {inputText.trim() && (
+                    {inputText.trim() !== '' && (
                         <View style={styles.messagePreviewContainer}>
                             <View style={styles.messagePreviewBubble}>
                                 <Text style={styles.messagePreviewText} numberOfLines={3}>
@@ -353,39 +360,30 @@ RESPONDE:`;
                     )}
 
                     <View style={styles.inputContainer}>
-                        <View style={styles.geminiInputWrapper}>
-                            {/* Image picker button */}
-                            <TouchableOpacity
-                                style={styles.inputActionButton}
-                                onPress={pickImage}
-                            >
-                                <ImageIcon size={22} color="#888" />
-                            </TouchableOpacity>
-
-                            {/* Text Input */}
-                            <TextInput
-                                style={styles.geminiInput}
-                                value={inputText}
-                                onChangeText={setInputText}
-                                placeholder="¿Cómo te sientes hoy?"
-                                placeholderTextColor="#666"
-                                multiline
-                                maxLength={1000}
-                                editable={isPremium || remainingMessages > 0}
-                            />
-
-                            {/* Send Button */}
-                            <TouchableOpacity
-                                style={[
-                                    styles.geminiSendButton,
-                                    ((inputText.trim() || selectedImage) && (isPremium || remainingMessages > 0)) && styles.geminiSendButtonActive
-                                ]}
-                                onPress={sendMessage}
-                                disabled={(!inputText.trim() && !selectedImage) || isTyping || (!isPremium && remainingMessages === 0)}
-                            >
-                                <Send size={18} color={(inputText.trim() || selectedImage) && (isPremium || remainingMessages > 0) ? '#fff' : '#555'} />
-                            </TouchableOpacity>
-                        </View>
+                        {/* Image picker button */}
+                        <TouchableOpacity
+                            style={styles.imageButton}
+                            onPress={pickImage}
+                        >
+                            <ImageIcon size={22} color="#9ca3af" />
+                        </TouchableOpacity>
+                        <TextInput
+                            style={styles.input}
+                            value={inputText}
+                            onChangeText={setInputText}
+                            placeholder="¿Cómo te sientes hoy?"
+                            placeholderTextColor="#6b7280"
+                            multiline
+                            maxLength={1000}
+                            editable={isPremium || remainingMessages > 0}
+                        />
+                        <TouchableOpacity
+                            style={[styles.sendButton, ((!inputText.trim() && !selectedImage) || (!isPremium && remainingMessages === 0)) && styles.sendButtonDisabled]}
+                            onPress={sendMessage}
+                            disabled={(!inputText.trim() && !selectedImage) || isTyping || (!isPremium && remainingMessages === 0)}
+                        >
+                            <Send size={18} color={(inputText.trim() || selectedImage) && (isPremium || remainingMessages > 0) ? '#000' : '#6b7280'} />
+                        </TouchableOpacity>
                     </View>
                 </SafeAreaView>
             </KeyboardAvoidingView>
@@ -396,10 +394,12 @@ RESPONDE:`;
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#171717',
+        backgroundColor: '#000000',
     },
     headerSafe: {
-        backgroundColor: '#171717',
+        backgroundColor: '#000000',
+        borderBottomWidth: 1,
+        borderBottomColor: '#333',
     },
     header: {
         flexDirection: 'row',
@@ -410,14 +410,21 @@ const styles = StyleSheet.create({
     },
     backButton: {
         padding: 8,
+        borderRadius: 12,
+        backgroundColor: '#1A1A1A',
     },
     headerTitle: {
-        fontSize: 16,
-        fontWeight: '500',
+        fontSize: 17,
+        fontWeight: '600',
         color: '#fff',
+        letterSpacing: 0.5,
     },
     headerSpacer: {
         width: 40,
+    },
+    headerRight: {
+        alignItems: 'flex-end',
+        justifyContent: 'center',
     },
     chatContainer: {
         flex: 1,
@@ -427,26 +434,26 @@ const styles = StyleSheet.create({
     },
     messagesContent: {
         padding: 16,
-        paddingBottom: 8,
+        paddingBottom: 20,
     },
     emptyChat: {
         alignItems: 'center',
-        paddingTop: 60,
+        paddingTop: 80,
     },
     emptyChatIcon: {
         width: 64,
         height: 64,
         borderRadius: 32,
-        backgroundColor: 'rgba(168, 85, 247, 0.2)',
+        backgroundColor: 'rgba(236, 72, 153, 0.1)',
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: 20,
-        borderWidth: 2,
-        borderColor: 'rgba(168, 85, 247, 0.3)',
+        borderWidth: 1,
+        borderColor: 'rgba(236, 72, 153, 0.2)',
     },
     emptyChatTitle: {
         fontSize: 20,
-        fontWeight: '700',
+        fontWeight: 'bold',
         color: '#fff',
         marginBottom: 8,
     },
@@ -455,20 +462,21 @@ const styles = StyleSheet.create({
         color: '#9ca3af',
         textAlign: 'center',
         paddingHorizontal: 40,
-        marginBottom: 32,
+        marginBottom: 40,
         lineHeight: 22,
     },
     suggestionsContainer: {
         width: '100%',
-        gap: 10,
+        gap: 12,
+        paddingHorizontal: 20,
     },
     suggestion: {
-        backgroundColor: 'rgba(124, 58, 237, 0.1)',
+        backgroundColor: '#1A1A1A',
         paddingVertical: 14,
-        paddingHorizontal: 18,
+        paddingHorizontal: 16,
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: 'rgba(168, 85, 247, 0.3)',
+        borderColor: '#333',
     },
     suggestionText: {
         color: '#d1d5db',
@@ -478,7 +486,7 @@ const styles = StyleSheet.create({
     },
     messageRow: {
         flexDirection: 'row',
-        marginBottom: 12,
+        marginBottom: 16,
         maxWidth: '85%',
     },
     userRow: {
@@ -488,193 +496,171 @@ const styles = StyleSheet.create({
         alignSelf: 'flex-start',
     },
     avatarSmall: {
-        width: 30,
-        height: 30,
-        borderRadius: 15,
-        backgroundColor: 'rgba(168, 85, 247, 0.2)',
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: 'rgba(236, 72, 153, 0.1)',
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: 8,
+        marginRight: 10,
         marginTop: 2,
         borderWidth: 1,
-        borderColor: 'rgba(168, 85, 247, 0.3)',
+        borderColor: 'rgba(236, 72, 153, 0.2)',
     },
     messageBubble: {
         paddingVertical: 12,
         paddingHorizontal: 16,
-        borderRadius: 18,
+        borderRadius: 20,
     },
     userBubble: {
-        backgroundColor: '#7c3aed',
+        backgroundColor: '#2A2A2A',
+        borderBottomRightRadius: 4,
     },
     assistantBubble: {
-        backgroundColor: '#2a2a2e',
+        backgroundColor: '#1A1A1A',
+        borderBottomLeftRadius: 4,
         borderWidth: 1,
-        borderColor: 'rgba(124, 58, 237, 0.2)',
+        borderColor: '#333',
     },
     messageText: {
-        fontSize: 15,
-        lineHeight: 21,
+        fontSize: 16,
+        lineHeight: 24,
     },
     userText: {
         color: '#fff',
     },
     assistantText: {
-        color: '#e5e7eb',
+        color: '#f3f4f6',
     },
     typingDots: {
-        color: '#6b7280',
+        color: '#9ca3af',
         fontSize: 16,
+        letterSpacing: 2,
     },
     limitBanner: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: 'rgba(245, 158, 11, 0.15)',
-        paddingVertical: 10,
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        paddingVertical: 12,
         paddingHorizontal: 16,
         borderTopWidth: 1,
-        borderTopColor: 'rgba(245, 158, 11, 0.3)',
+        borderTopColor: 'rgba(245, 158, 11, 0.2)',
     },
     limitBannerContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 10,
     },
     limitBannerText: {
-        color: '#f59e0b',
+        color: '#fbbf24',
         fontSize: 13,
+        fontWeight: '500',
     },
     limitBannerBtn: {
-        backgroundColor: '#f59e0b',
+        backgroundColor: 'rgba(245, 158, 11, 0.2)',
         paddingVertical: 6,
         paddingHorizontal: 12,
-        borderRadius: 6,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(245, 158, 11, 0.3)',
     },
     limitBannerBtnText: {
-        color: '#000',
+        color: '#fbbf24',
         fontSize: 12,
-        fontWeight: '600',
+        fontWeight: 'bold',
     },
     inputSafe: {
-        backgroundColor: '#171717',
+        backgroundColor: '#000000',
+        borderTopWidth: 1,
+        borderTopColor: '#333',
     },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'flex-end',
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        gap: 8,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 10,
     },
     input: {
         flex: 1,
-        backgroundColor: '#2a2a2a',
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        fontSize: 15,
+        backgroundColor: '#2A2A2A',
+        borderRadius: 20,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        fontSize: 16,
         color: '#fff',
         maxHeight: 100,
+        borderWidth: 1,
+        borderColor: '#333',
     },
     sendButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         backgroundColor: '#fff',
         alignItems: 'center',
         justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 4,
     },
     sendButtonDisabled: {
-        backgroundColor: '#2a2a2a',
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        shadowOpacity: 0,
+        elevation: 0,
     },
-    // Image related styles
     imagePreviewContainer: {
         paddingHorizontal: 16,
-        paddingTop: 8,
+        paddingTop: 12,
+        paddingBottom: 4,
     },
     imagePreview: {
-        width: 80,
-        height: 80,
-        borderRadius: 8,
+        width: 100,
+        height: 100,
+        borderRadius: 12,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.2)',
     },
     removeImageButton: {
         position: 'absolute',
-        top: 4,
-        left: 76,
+        top: 8,
+        left: 104,
         backgroundColor: '#ef4444',
-        borderRadius: 10,
-        padding: 4,
+        borderRadius: 12,
+        padding: 6,
+        borderWidth: 1,
+        borderColor: '#fff',
     },
     imageButton: {
-        padding: 8,
-        marginRight: 4,
-    },
-    // Gemini-style input styles
-    geminiInputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        backgroundColor: '#1a1a2e',
-        borderRadius: 28,
-        paddingHorizontal: 8,
-        paddingVertical: 8,
-        borderWidth: 1,
-        borderColor: '#333',
-        gap: 8,
-    },
-    inputActionButton: {
-        width: 40,
-        height: 40,
+        padding: 10,
         borderRadius: 20,
-        backgroundColor: 'transparent',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    geminiInput: {
-        flex: 1,
-        color: '#fff',
-        fontSize: 16,
-        maxHeight: 120,
-        paddingVertical: 10,
-        paddingHorizontal: 4,
-        lineHeight: 22,
-    },
-    geminiSendButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'transparent',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    geminiSendButtonActive: {
-        backgroundColor: '#7c3aed',
+        backgroundColor: '#1A1A1A',
     },
     messageImage: {
         width: '100%',
-        maxWidth: 180,
-        height: 150,
-        borderRadius: 10,
-        marginBottom: 4,
+        maxWidth: 220,
+        height: 180,
+        borderRadius: 14,
+        marginBottom: 6,
     },
     messagePreviewContainer: {
-        paddingHorizontal: 16,
+        paddingHorizontal: 20,
         paddingVertical: 8,
-        backgroundColor: '#0a0a0a',
-        borderTopWidth: 1,
-        borderTopColor: '#1f1f1f',
+        backgroundColor: 'transparent',
     },
     messagePreviewBubble: {
         alignSelf: 'flex-end',
-        backgroundColor: 'rgba(124, 58, 237, 0.3)',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
         maxWidth: '75%',
-        paddingHorizontal: 14,
+        paddingHorizontal: 16,
         paddingVertical: 10,
-        borderRadius: 18,
+        borderRadius: 20,
         borderBottomRightRadius: 4,
         borderWidth: 1,
-        borderColor: 'rgba(124, 58, 237, 0.5)',
+        borderColor: 'rgba(255, 255, 255, 0.2)',
     },
     messagePreviewText: {
         color: '#e5e7eb',

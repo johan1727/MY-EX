@@ -203,6 +203,10 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             await loadOfferings();
         } catch (e) {
             console.error('Error initializing RevenueCat:', e);
+            // On web, we don't want to block the app if RevenueCat fails
+            if (Platform.OS === 'web') {
+                console.log('[Subscription] RevenueCat failed on web (expected), continuing...');
+            }
         } finally {
             setIsLoading(false);
         }

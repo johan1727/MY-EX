@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Switch, ScrollView, Alert, Platform, StyleSheet, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Bell, Smartphone, Shield, FileText, Trash2, ChevronRight, Globe, Moon, Download, Cookie, Check } from 'lucide-react-native';
+import { ArrowLeft, Bell, Smartphone, Shield, FileText, Trash2, ChevronRight, Globe, Moon, Download, Cookie, Check, Database } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { storage } from '../lib/storage';
 
 const LANGUAGES = [
     { code: 'es', label: 'Español' },
@@ -65,7 +66,7 @@ export default function PreferencesScreen() {
             try {
                 // In a real app, this would call an API to delete user data
                 await supabase.auth.signOut();
-                router.replace('/onboarding');
+                router.replace('/welcome');
             } catch (e) {
                 if (Platform.OS === 'web') {
                     alert('No se pudo eliminar la cuenta. Intenta de nuevo.');
@@ -220,6 +221,43 @@ export default function PreferencesScreen() {
                         isDestructive
                         onPress={handleDeleteAccount}
                     />
+                    <SettingRow
+                        icon={Database}
+                        label="Borrar Caché Local"
+                        isDestructive
+                        onPress={() => {
+                            Alert.alert(
+                                '⚠️ Borrar Caché',
+                                'Esto eliminará TODOS los perfiles y conversaciones guardadas localmente en este dispositivo.\n\n' +
+                                '✓ Útil si la app no funciona correctamente\n' +
+                                '✓ No afecta tu cuenta ni datos en la nube\n' +
+                                '✗ Perderás perfiles no sincronizados\n\n' +
+                                '¿Continuar?',
+                                [
+                                    { text: 'Cancelar', style: 'cancel' },
+                                    {
+                                        text: 'Borrar Caché',
+                                        style: 'destructive',
+                                        onPress: async () => {
+                                            try {
+                                                await storage.clear();
+                                                Alert.alert(
+                                                    '✓ Caché Borrado',
+                                                    'Todos los datos locales han sido eliminados. La app se reiniciará.',
+                                                    [{
+                                                        text: 'OK',
+                                                        onPress: () => router.replace('/tools/ex-simulator/import')
+                                                    }]
+                                                );
+                                            } catch (error) {
+                                                Alert.alert('Error', 'No se pudo borrar el caché. Intenta de nuevo.');
+                                            }
+                                        }
+                                    }
+                                ]
+                            );
+                        }}
+                    />
                 </SettingGroup>
 
                 <View style={styles.footer}>
@@ -281,7 +319,7 @@ const styles = StyleSheet.create({
         paddingBottom: 16,
         backgroundColor: '#000',
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
+        borderBottomColor: '#333',
     },
     backButton: {
         padding: 8,
@@ -315,7 +353,7 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         marginHorizontal: 16,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
+        borderColor: '#333',
         overflow: 'hidden',
     },
     settingRow: {
@@ -324,7 +362,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
+        borderBottomColor: '#333',
     },
     rowLeft: {
         flexDirection: 'row',

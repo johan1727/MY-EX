@@ -105,7 +105,7 @@ export default function RootLayout() {
             storage.setItem('exSimulator_navigateToProfile', profileId);
 
             // Navigate to chat immediately
-            router.push(`/tools/ex-simulator/chat`);
+            router.push(`/(tabs)`);
         });
 
         return () => unsubscribe();
@@ -196,15 +196,10 @@ export default function RootLayout() {
     const checkOnboardingStatus = async () => {
         if (!session?.user) return;
 
-        const { data } = await supabase
-            .from('profiles')
-            .select('goal')
-            .eq('id', session.user.id)
-            .single();
+        // Ensure we don't navigate too fast
+        if (!authRedirectDone.current) return;
 
-        if (!data?.goal) {
-            router.replace('/onboarding-extended');
-        } else {
+        if (segments[0] !== '(tabs)') {
             router.replace('/(tabs)');
         }
     };
@@ -231,8 +226,6 @@ export default function RootLayout() {
                         <Stack.Screen name="welcome" />
                         <Stack.Screen name="auth" />
                         <Stack.Screen name="auth/callback" />
-                        <Stack.Screen name="onboarding" />
-                        <Stack.Screen name="onboarding-extended" />
                         <Stack.Screen name="(tabs)" />
                         <Stack.Screen name="tools/decoder" />
                         <Stack.Screen name="tools/panic" />
@@ -240,7 +233,6 @@ export default function RootLayout() {
                         <Stack.Screen name="tools/ex-simulator/import" />
                         <Stack.Screen name="tools/journal" />
                         <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
-                        <Stack.Screen name="security-setup" />
                     </Stack>
                     <ShareIntentModal
                         visible={showShareModal}
@@ -257,3 +249,4 @@ export default function RootLayout() {
         </AnalysisProvider>
     );
 }
+

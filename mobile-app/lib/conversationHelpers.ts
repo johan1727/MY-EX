@@ -1,4 +1,6 @@
 import { ParsedMessage } from './exSimulator';
+import { storage } from './storage';
+
 
 /**
  * Extrae información contextual de los mensajes para mejorar realismo
@@ -186,4 +188,48 @@ export function extractConversationContext(
             keyFacts: extractKeyFacts(messages)
         }
     };
+}
+
+// FUNCIONES FALTANTES PARA GESTIÓN DE CONVERSACIONES
+
+export async function loadConversations() {
+    try {
+        const keys = await storage.getAllKeys();
+        const profileKeys = keys.filter(k => k.startsWith('exSimulator_profile_') && k !== 'exSimulator_currentProfile');
+
+        if (profileKeys.length === 0) return [];
+
+        const profiles = await storage.multiGet(profileKeys);
+
+        return profiles
+            .map(([_, value]) => value ? JSON.parse(value) : null)
+            .filter(p => p !== null)
+            .map(p => ({
+                id: p.id,
+                name: p.exName || 'Ex',
+                exName: p.exName,
+                descriptor: p.profile?.attachmentStyle || 'Desconocido',
+                timestamp: p.createdAt || new Date().toISOString()
+            }))
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    } catch (e) {
+        console.error('Error loading conversations:', e);
+        return [];
+    }
+}
+
+export async function setCurrentSimulation(id: string) {
+    try {
+        const profileKey = `exSimulator_profile_${id}`;
+        const profileJson = await storage.getItem(profileKey);
+
+        if (profileJson) {
+            await storage.setItem('exSimulator_currentProfile', profileJson);
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.error('Error setting current simulation:', e);
+        return false;
+    }
 }

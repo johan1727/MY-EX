@@ -18,14 +18,6 @@ export default function TabLayout() {
                 }}
             />
 
-            {/* All other screens hidden */}
-            <Tabs.Screen name="chat" options={{ href: null }} />
-            <Tabs.Screen name="dashboard" options={{ href: null }} />
-            <Tabs.Screen name="profile" options={{ href: null }} />
-            <Tabs.Screen name="tools" options={{ href: null }} />
-            <Tabs.Screen name="ex-chat" options={{ href: null }} />
-            <Tabs.Screen name="progress" options={{ href: null }} />
-            <Tabs.Screen name="memories" options={{ href: null }} />
         </Tabs>
     );
 }

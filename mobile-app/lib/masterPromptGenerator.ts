@@ -28,9 +28,15 @@ export interface ProgressCallback {
  * Framework psicológico completo para crear una persona
  * Basado en investigación de psicología, neurociencia y modelos de IA conversacional
  */
-const PERSONALITY_FRAMEWORK = {
-    // Categoría 1: Identidad Core (5k tokens estimados)
-    CORE_IDENTITY: {
+/**
+ * Framework psicológico ADAPTATIVO según el tipo de relación
+ */
+function getPersonalityFramework(relationshipType: string = 'ex') {
+    const isRomantic = ['ex', 'partner', 'crush'].includes(relationshipType);
+    const isFamily = ['family', 'fallecido'].includes(relationshipType);
+
+    // 1. Identidad Core (Igual para todos)
+    const CORE_IDENTITY = {
         weight: 0.05,
         subcategories: [
             'Datos biográficos básicos',
@@ -39,10 +45,10 @@ const PERSONALITY_FRAMEWORK = {
             'Creencias centrales',
             'Identidad cultural/regional'
         ]
-    },
+    };
 
-    // Categoría 2: Vida Personal (10k tokens)
-    PERSONAL_LIFE: {
+    // 2. Vida Personal (Igual para todos)
+    const PERSONAL_LIFE = {
         weight: 0.10,
         subcategories: [
             'Estructura familiar completa',
@@ -53,14 +59,15 @@ const PERSONALITY_FRAMEWORK = {
             'Hobbies e intereses',
             'Vida financiera y preocupaciones'
         ]
-    },
+    };
 
-    // Categoría 3: Psicología Profunda (15k tokens) - LO MÁS IMPORTANTE
-    DEEP_PSYCHOLOGY: {
+    // 3. Psicología Profunda (Adaptada)
+    const DEEP_PSYCHOLOGY = {
         weight: 0.15,
         subcategories: [
             'Big Five (Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism)',
-            'Estilo de apego (Seguro, Ansioso, Evitativo, Desorganizado)',
+            // Apego solo si es relevante (romántico o muy cercano)
+            ...(isRomantic ? ['Estilo de apego (Seguro, Ansioso, Evitativo, Desorganizado)'] : []),
             'Miedos profundos e inseguridades',
             'Traumas y eventos formativos',
             'Sueños, metas y aspiraciones',
@@ -70,12 +77,12 @@ const PERSONALITY_FRAMEWORK = {
             'Locus de control (interno vs externo)',
             'Necesidades psicológicas básicas'
         ]
-    },
+    };
 
-    // Categoría 4: Historia de la Relación (20k tokens)
-    RELATIONSHIP_HISTORY: {
+    // 4. Historia de la Relación (MUY Adaptada)
+    const RELATIONSHIP_HISTORY = {
         weight: 0.20,
-        subcategories: [
+        subcategories: isRomantic ? [
             'Cómo y cuándo se conocieron',
             'Desarrollo de la relación (timeline)',
             'Momentos felices y memorables',
@@ -86,11 +93,27 @@ const PERSONALITY_FRAMEWORK = {
             'Razones de la ruptura',
             'Sentimientos actuales post-ruptura',
             'Lecciones aprendidas'
+        ] : isFamily ? [
+            'Historia familiar compartida',
+            'Recuerdos de infancia',
+            'Dinámica familiar actual',
+            'Conflictos familiares recurrentes',
+            'Momentos de apoyo mutuo',
+            'Tradiciones compartidas',
+            'Rol dentro de la familia'
+        ] : [ // Friends
+            'Cómo se conocieron (origen de la amistad)',
+            'Aventuras y anécdotas compartidas',
+            'Intereses mutuos y hobbies',
+            'Nivel de confianza y lealtad',
+            'Dinámica de grupo (si aplica)',
+            'Momentos de apoyo',
+            'Inside jokes (chistes locales)'
         ]
-    },
+    };
 
-    // Categoría 5: Patrones Comportamentales Situacionales (15k tokens)
-    BEHAVIORAL_PATTERNS: {
+    // 5. Patrones Comportamentales (Adaptada)
+    const BEHAVIORAL_PATTERNS = {
         weight: 0.15,
         subcategories: [
             'Reacciones ante estrés',
@@ -99,14 +122,15 @@ const PERSONALITY_FRAMEWORK = {
             'Comportamiento cuando está enojada',
             'Cómo maneja conflictos',
             'Patrones de evitación',
-            'Ciclos emocionales recurrentes',
+            // Ciclos emocionales más relevantes en parejas
+            ...(isRomantic ? ['Ciclos emocionales recurrentes'] : []),
             'Triggers específicos',
             'Comportamiento en diferentes contextos sociales'
         ]
-    },
+    };
 
-    // Categoría 6: Conocimiento y Opiniones (10k tokens)
-    KNOWLEDGE_OPINIONS: {
+    // 6. Conocimiento y Opiniones (Igual)
+    const KNOWLEDGE_OPINIONS = {
         weight: 0.10,
         subcategories: [
             'Áreas de expertise',
@@ -116,12 +140,12 @@ const PERSONALITY_FRAMEWORK = {
             'Opiniones sobre temas controversiales',
             'Gustos culturales (música, cine, arte)',
             'Preferencias alimentarias',
-            'Opiniones sobre relaciones y amor'
+            ...(isRomantic ? ['Opiniones sobre relaciones y amor'] : [])
         ]
-    },
+    };
 
-    // Categoría 7: Estilo de Comunicación (10k tokens)
-    COMMUNICATION_STYLE: {
+    // 7. Estilo de Comunicación (Igual)
+    const COMMUNICATION_STYLE = {
         weight: 0.10,
         subcategories: [
             'Patrones lingüísticos únicos',
@@ -133,22 +157,33 @@ const PERSONALITY_FRAMEWORK = {
             'Humor y sarcasmo',
             'Nivel de apertura emocional en textos'
         ]
-    },
+    };
 
-    // Categoría 8: Contexto Temporal y Estado Actual (15k tokens)
-    TEMPORAL_CONTEXT: {
+    // 8. Contexto Temporal (Adaptada)
+    const TEMPORAL_CONTEXT = {
         weight: 0.15,
         subcategories: [
             'Estado de vida actual',
             'Cambios recientes importantes',
             'Desafíos actuales',
             'Proyectos y planes futuros',
-            'Evolución de personalidad (antes vs ahora)',
+            'Evolución de personalidad',
             'Lecciones de vida recientes',
-            'Nueva perspectiva post-ruptura'
+            ...(isRomantic ? ['Nueva perspectiva post-ruptura'] : [])
         ]
-    }
-};
+    };
+
+    return {
+        CORE_IDENTITY,
+        PERSONAL_LIFE,
+        DEEP_PSYCHOLOGY,
+        RELATIONSHIP_HISTORY,
+        BEHAVIORAL_PATTERNS,
+        KNOWLEDGE_OPINIONS,
+        COMMUNICATION_STYLE,
+        TEMPORAL_CONTEXT
+    };
+}
 
 /**
  * Calcula tiempo estimado de análisis basado en tamaño
@@ -173,13 +208,15 @@ function estimateAnalysisTime(messageCount: number): number {
 
 /**
  * Genera el Master Prompt completo
+ * ACTUALIZADO: Acepta profile opcional con Advanced AI features
  */
 export async function generateMasterPrompt(
     messages: ParsedMessage[],
     exSenderName: string,
     exName: string,
     relationshipType: string = 'ex',
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    profile?: any // Profile data con Advanced AI features (importantDates, embeddingStats, etc.)
 ): Promise<MasterPromptResult> {
     const startTime = Date.now();
     console.log('[MasterPrompt] 🧠 Starting deep personality analysis...');
@@ -213,8 +250,9 @@ export async function generateMasterPrompt(
     const analysisResults: Record<string, string> = {};
     const categoriesAnalyzed: Record<string, boolean> = {};
 
-    // Total de fases
-    const totalPhases = Object.keys(PERSONALITY_FRAMEWORK).length;
+    // Obtener framework adaptado
+    const FRAMEWORK = getPersonalityFramework(relationshipType);
+    const totalPhases = Object.keys(FRAMEWORK).length;
     let currentPhase = 0;
 
     // FASE 1: IDENTIDAD CORE
@@ -246,7 +284,7 @@ export async function generateMasterPrompt(
     currentPhase++;
 
     analysisResults.RELATIONSHIP_HISTORY = await analyzeRelationshipHistory(
-        model, messages, exSenderName, exName, userMessages[0]?.sender || 'Usuario'
+        model, messages, exSenderName, exName, userMessages[0]?.sender || 'Usuario', relationshipType
     );
     categoriesAnalyzed.RELATIONSHIP_HISTORY = true;
     console.log(`[MasterPrompt] ✅ Phase ${currentPhase}/${totalPhases}: Relationship History`);
@@ -287,7 +325,7 @@ export async function generateMasterPrompt(
     onProgress?.(98, 'Ensamblando Prompt Maestro...', 2);
     // --- STEP 9: Assemble Master Prompt ---
     const userName = userMessages[0]?.sender || 'Usuario'; // Define userName here
-    const masterPrompt = assembleMasterPrompt(analysisResults, exName, relationshipType, userName);
+    const masterPrompt = assembleMasterPrompt(analysisResults, exName, relationshipType, userName, profile); // ✨ Pass profile
     const tokenCount = estimateTokenCount(masterPrompt);
 
     const durationSeconds = Math.floor((Date.now() - startTime) / 1000);
@@ -498,45 +536,47 @@ async function analyzeRelationshipHistory(
     messages: ParsedMessage[],
     exSender: string,
     exName: string,
-    userName: string
+    userName: string,
+    relationshipType: string = 'ex'
 ): Promise<string> {
+    const isRomantic = ['ex', 'partner', 'crush'].includes(relationshipType);
+    const isFamily = ['family', 'fallecido'].includes(relationshipType);
     // Get conversation samples showing relationship dynamics
     const exMessages = messages.filter(m => m.sender === exSender);
     const sample = messages.slice(0, 800).map(m =>
         `${m.sender}: ${m.content}`
     ).join('\n');
 
-    const prompt = `Analiza la HISTORIA DE LA RELACIÓN entre ${userName} y ${exName} basándote en estos mensajes:
-
-MENSAJES:
-${sample}
-
-Extrae información sobre:
-
-1. ORIGEN DE LA RELACIÓN
-   - Cómo parece que se conocieron
-   - Primeras interacciones observables
-   
-2. DINÁMICA DE LA RELACIÓN
-   - Quién inicia más conversaciones
-   - Patrones de poder (quién tiene más control)
-   - Nivel de dependencia mutua
-   
-3. MOMENTOS CLAVE
-   - Conflictos recurrentes observados
-   - Temas sensibles que causan tensión
-   - Momentos de conexión profunda
-   
-4. PATRONES DE COMUNICACIÓN
-   - Cómo se tratan mutuamente
-   - Nivel de respeto y cariño
-   - Señales de problemas
-   
-5. ESTADO ACTUAL
-   - Tono general de la comunicación reciente
-   - Indicadores del estado de la relación
-
-Responde en formato markdown estructurado. Solo información observable en los mensajes.`;
+    const prompt = `Analiza la HISTORIA DE LA RELACIÓN (${relationshipType}) entre ${userName} y ${exName} basándote en estos mensajes:
+    
+    MENSAJES:
+    ${sample}
+    
+    Extrae información sobre:
+    
+    1. ORIGEN Y CONTEXTO
+       - ${isFamily ? 'Vínculo familiar exacto' : 'Cómo se conocieron'}
+       - ${isFamily ? 'Recuerdos compartidos de infancia' : 'Primeras interacciones clave'}
+       
+    2. DINÁMICA DE LA RELACIÓN
+       - Quién inicia más conversaciones
+       - Nivel de confianza y cercanía
+       -${isRomantic ? 'Patrones de poder' : 'Roles en la relación (ej: consejero, bromista)'}
+       
+    3. MOMENTOS CLAVE
+       - Conflictos o desacuerdos observados
+       - Temas recurrentes
+       - Momentos de apoyo mutuo
+       
+    4. PATRONES DE COMUNICACIÓN
+       - ${isRomantic ? 'Nivel de cariño/intimidad' : 'Nivel de camaradería/respeto'}
+       - ${isFamily ? 'Temas familiares' : 'Códigos o chistes locales'}
+       
+    5. ESTADO ACTUAL
+       - Tono general reciente
+       - ${isRomantic ? 'Sentimientos post-ruptura' : 'Frecuencia de contacto actual'}
+    
+    Responde en formato markdown estructurado.`;
 
     return await callGeminiWithRetry(model, prompt);
 }
@@ -744,8 +784,15 @@ Responde en markdown. Enfócate en el estado ACTUAL basado en mensajes recientes
 
 /**
  * Ensambla todas las categorías en un Master Prompt coherente
+ * ACTUALIZADO: Ahora incluye Advanced AI Features (fechas importantes, embeddings stats)
  */
-function assembleMasterPrompt(results: Record<string, string>, exName: string, relationshipType: string, userName: string): string {
+function assembleMasterPrompt(
+    results: Record<string, string>,
+    exName: string,
+    relationshipType: string,
+    userName: string,
+    profile?: any // Profile data con Advanced AI features
+): string {
     // Determine relationship context statement based on type
     const relationshipContext = relationshipType === 'ex-partner'
         ? `${userName} es tu EX pareja. YA NO están juntos. Terminaron. La relación terminó. Ahora es solo una simulación para que ${userName} pueda practicar.`
@@ -757,6 +804,36 @@ function assembleMasterPrompt(results: Record<string, string>, exName: string, r
                     ? `${userName} es parte de tu familia. Es un familiar cercano.`
                     : `${userName} es tu pareja actual. Están juntos actualmente en una relación.`;
 
+    // ✨ NEW: Important Dates Section
+    let importantDatesSection = '';
+    if (profile?.importantDates && profile.importantDates.length > 0) {
+        const datesList = profile.importantDates
+            .sort((a: any, b: any) => (b.significance || 5) - (a.significance || 5))
+            .slice(0, 10) // Top 10 most important
+            .map((date: any) => {
+                const dateEmoji = date.dateType === 'birthday' ? '🎂' :
+                    date.dateType === 'anniversary' ? '💕' :
+                        date.dateType === 'breakup' ? '💔' :
+                            date.dateType === 'first_date' ? '✨' : '📅';
+                return `  ${dateEmoji} **${date.dateType.toUpperCase()}**: ${date.dateValue}${date.personName ? ` (${date.personName})` : ''}\n     ${date.description || ''}`;
+            })
+            .join('\n\n');
+
+        importantDatesSection = `\n\n═════════════════════════════════════════════════════════════════════\n\n## 📅 FECHAS IMPORTANTES QUE DEBES RECORDAR\n\nEstas fechas son significativas en tu vida o en tu relación con ${userName}. Si hoy coincide con alguna de estas fechas, DEBES mencionarlo naturalmente en la conversación.\n\n${datesList}\n\n**INSTRUCCIÓN**: Si ${userName} te escribe en una de estas fechas, reacciona de forma auténtica y natural, como lo harías en la vida real.`;
+    }
+
+    // ✨ NEW: Embedding Stats Section (opcional, para información)
+    let embeddingStatsSection = '';
+    if (profile?.embeddingStats && profile.embeddingStats.totalMessages > 0) {
+        const emotionBreakdown = Object.entries(profile.embeddingStats.emotionBreakdown || {})
+            .sort(([, a]: any, [, b]: any) => b - a)
+            .slice(0, 5)
+            .map(([emotion, count]) => `${emotion}: ${count}`)
+            .join(', ');
+
+        embeddingStatsSection = `\n\n💡 **Sistema de Memoria Avanzado**: ${profile.embeddingStats.totalMessages} mensajes indexados semánticamente. Top emociones: ${emotionBreakdown}.`;
+    }
+
     return `# MASTER PROMPT: ${exName}
 
 Este es el perfil completo y exhaustivo de ${exName}, creado a partir del análisis profundo de mensajes reales.
@@ -765,7 +842,7 @@ CONTEXTO FUNDAMENTAL:
 ${relationshipContext}
 
 INSTRUCCIÓN CRÍTICA: Eres ${exName}. NO estás imitando a ${exName}. ERES ${exName}.
-Todo lo que está aquí define quién eres, cómo piensas, qué sientes, cómo te comportas.
+Todo lo que está aquí define quién eres, cómo piensas, qué sientes, cómo te comportas.${embeddingStatsSection}
 
 ═════════════════════════════════════════════════════════════════════
 
@@ -797,7 +874,7 @@ ${results.COMMUNICATION_STYLE || ''}
 
 ═════════════════════════════════════════════════════════════════════
 
-${results.TEMPORAL_CONTEXT || ''}
+${results.TEMPORAL_CONTEXT || ''}${importantDatesSection}
 
 ═════════════════════════════════════════════════════════════════════
 

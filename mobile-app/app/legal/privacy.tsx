@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
         paddingBottom: 16,
         backgroundColor: '#000',
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.1)',
+        borderBottomColor: '#333',
     },
     backButton: {
         padding: 8,
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         padding: 20,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: '#333',
         marginBottom: 20,
     },
     updateText: {

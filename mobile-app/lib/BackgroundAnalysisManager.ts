@@ -265,14 +265,150 @@ export class BackgroundAnalysisManager {
                 console.error('[BackgroundAnalysis] Top conflicts detection failed:', confErr);
             }
 
+            // CHECKPOINT 3.96: Activity Peaks Analysis (NEW)
+            await onProgress(94.2, '📊 Analizando picos de actividad...');
+
+            let activityPeaks = null;
+            try {
+                const { analyzeActivityPeaks } = await import('./activityAnalyzer');
+                activityPeaks = analyzeActivityPeaks(messages);
+                console.log('[BackgroundAnalysis] Found', activityPeaks.hottestDays.length, 'hot days,',
+                    activityPeaks.coldestDays.length, 'cold periods');
+            } catch (actErr) {
+                console.error('[BackgroundAnalysis] Activity analysis failed:', actErr);
+            }
+
+            // CHECKPOINT 3.97: Conflict Detection (NEW)
+            await onProgress(94.4, '⚔️ Detectando conflictos detallados...');
+
+            let conflictAnalysis = null;
+            try {
+                const { detectConflicts } = await import('./conflictDetector');
+                conflictAnalysis = detectConflicts(messages, exName);
+                console.log('[BackgroundAnalysis] Detected', conflictAnalysis.conflictMoments.length, 'conflict moments');
+            } catch (conflErr) {
+                console.error('[BackgroundAnalysis] Conflict detection failed:', conflErr);
+            }
+
+            // CHECKPOINT 3.98: Relationship Preset (NEW)
+            await onProgress(94.6, '🎭 Aplicando predisposición por tipo de relación...');
+
+            let relationshipPreset = null;
+            try {
+                const { getRelationshipPreset, buildEnhancedAIInstructions } = await import('./relationshipPresets');
+                relationshipPreset = getRelationshipPreset(relationshipType);
+                console.log('[BackgroundAnalysis] Applied preset for:', relationshipType);
+            } catch (presetErr) {
+                console.error('[BackgroundAnalysis] Relationship preset failed:', presetErr);
+            }
+
+            // Get user early for embeddings and dates
+            const { data: { user } } = await (await import('./supabase')).supabase.auth.getUser();
+
+            // CHECKPOINT 3.99: Date Extraction (NEW - Advanced AI)
+            await onProgress(94.8, '📅 Extrayendo fechas importantes...');
+
+            let importantDates = [];
+            try {
+                const { extractImportantDates, saveImportantDates } = await import('./dateExtractor');
+                importantDates = extractImportantDates(messages, exName, detectedUserName, relationshipType);
+                console.log('[BackgroundAnalysis] Extracted', importantDates.length, 'important dates');
+
+                // Guardar en Supabase
+                if (importantDates.length > 0 && user?.id) {
+                    await saveImportantDates(importantDates, profileId, user.id);
+                }
+            } catch (dateErr) {
+                console.error('[BackgroundAnalysis] Date extraction failed:', dateErr);
+            }
+
+            // CHECKPOINT 4.01: Vector Embeddings (NEW - Advanced AI)
+            await onProgress(95.5, '🧠 Creando embeddings semánticos...');
+
+            let embeddingStats = null;
+            try {
+                const { embedMessages, getEmbeddingStats } = await import('./vectorRAG');
+
+                // Solo crear embeddings si hay mensajes y usuario autenticado
+                if (messages.length > 0 && user?.id) {
+                    await embedMessages(
+                        messages,
+                        profileId,
+                        user.id,
+                        (current, total) => {
+                            const percent = 95.5 + ((current / total) * 2); // 95.5% a 97.5%
+                            onProgress(percent, `🧠 Embeddings: ${current}/${total}...`);
+                        }
+                    );
+
+                    embeddingStats = await getEmbeddingStats(profileId);
+                    console.log('[BackgroundAnalysis] Created', embeddingStats.totalMessages, 'embeddings');
+                }
+            } catch (embErr) {
+                console.error('[BackgroundAnalysis] Embedding creation failed:', embErr);
+            }
+
+            // CHECKPOINT 4.02: Emotional Memories (NEW - Advanced AI)
+            await onProgress(97.8, '💭 Analizando memorias emocionales...');
+
+            let emotionalMemories = [];
+            try {
+                const { createEmotionalMemories } = await import('./emotionalRAG');
+
+                // Crear memorias emocionales con progress tracking
+                if (messages.length >= 20 && user?.id) {
+                    emotionalMemories = await createEmotionalMemories(
+                        messages,
+                        profileId,
+                        user.id,
+                        (current, total) => {
+                            const percent = 97.8 + ((current / total) * 0.4); // 97.8% a 98.2%
+                            onProgress(percent, `💭 Memorias: ${current}/${total}...`);
+                        }
+                    );
+                    console.log('[BackgroundAnalysis] Created', emotionalMemories.length, 'emotional memories');
+                }
+            } catch (memErr) {
+                console.error('[BackgroundAnalysis] Emotional memories failed:', memErr);
+            }
+
+            // ✨ CHECKPOINT 4.03: Regenerate Master Prompt with Advanced AI Features
+            await onProgress(98.2, '🎯 Regenerando Master Prompt con IA Avanzada...');
+
+            // Now that we have important dates and embedding stats, regenerate the master prompt
+            if (importantDates.length > 0 || embeddingStats?.totalMessages) {
+                try {
+                    const tempProfile = {
+                        importantDates,
+                        embeddingStats
+                    };
+
+                    masterPromptResult = await generateMasterPrompt(
+                        messages, // Usa sanitized messages
+                        exSenderName,
+                        exName,
+                        relationshipType,
+                        (p, s, t) => {
+                            const mapped = Math.round(98.2 + (p * 0.005)); // Map 0-100 to 98.2-98.7%
+                            onProgress(mapped, s);
+                        },
+                        tempProfile // ✨ Pass profile with AI features
+                    );
+
+                    console.log('[BackgroundAnalysis] ✅ Master prompt regenerated with AI features');
+                } catch (err) {
+                    console.error('[BackgroundAnalysis] Master prompt regeneration failed:', err);
+                }
+            }
+
             // CHECKPOINT 4: Analyze messaging pattern
-            await onProgress(94, '💬 Analizando patrón de mensajes...');
+            await onProgress(98.8, '💬 Analizando patrón de mensajes...');
 
             const messagingPattern = detectMessagingPattern(messages, exSenderName);
             console.log('[BackgroundAnalysis] Messaging pattern:', messagingPattern.style);
 
             // CHECKPOINT 5: Build final profile
-            await onProgress(96, '💾 Guardando perfil...');
+            await onProgress(99.5, '💾 Guardando perfil...');
 
             const profileData = {
                 id: profileId,
@@ -281,11 +417,16 @@ export class BackgroundAnalysisManager {
                 relationshipType,
                 profile: {
                     ...profile,
-                    messagingPattern, // Feature #2
-                    defensiveTopics,  // Feature #4
-                    jealousyTriggers, // Feature #5
-                    nicknameEvolution, // Feature #6
-                    topConflicts      // Feature #7
+                    messagingPattern,     // Feature #2
+                    defensiveTopics,      // Feature #4
+                    jealousyTriggers,     // Feature #5
+                    nicknameEvolution,    // Feature #6
+                    topConflicts,         // Feature #7
+                    activityPeaks,        // Feature #8 (NEW)
+                    conflictAnalysis,     // Feature #9 (NEW)
+                    relationshipPreset,   // Feature #10 (NEW)
+                    importantDates,       // Feature #11 (Advanced AI)
+                    embeddingStats,       // Feature #12 (Advanced AI)
                 },
                 messageCount: messages.length,
                 createdAt: new Date().toISOString(),
@@ -301,7 +442,6 @@ export class BackgroundAnalysisManager {
                 hasMasterPrompt: !!profileData.masterPrompt
             });
 
-            const { data: { user } } = await (await import('./supabase')).supabase.auth.getUser();
             const saved = await saveProfile(profileData as any, user?.id || undefined);
 
             console.log('[BackgroundAnalysis] Profile saved successfully:', {

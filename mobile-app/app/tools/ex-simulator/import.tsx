@@ -813,6 +813,8 @@ export default function ImportChat() {
                             </TouchableOpacity>
                         </View>
 
+                        {/* Old Paste Option Removed as requested */}
+
                         <TouchableOpacity
                             onPress={handleFileUpload}
                             style={styles.uploadArea}
@@ -1058,27 +1060,27 @@ export default function ImportChat() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#050505',
+        backgroundColor: '#000000',
     },
     header: {
         paddingTop: 48,
         paddingHorizontal: 24,
         paddingBottom: 24,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
+        borderBottomColor: '#333',
         flexDirection: 'row',
         alignItems: 'center',
     },
     backButton: {
         width: 40,
         height: 40,
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: '#1A1A1A',
         borderRadius: 20,
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 16,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: '#333',
     },
     headerTitle: {
         color: '#fff',
