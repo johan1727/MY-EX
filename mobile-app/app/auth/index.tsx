@@ -52,52 +52,90 @@ export default function AuthScreen() {
     useEffect(() => {
         // Handle OAuth callback for web
         const handleOAuthCallback = async () => {
-            if (hasNavigated) return;
-
-            if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hash) {
-                try {
-                    const hashParams = new URLSearchParams(window.location.hash.substring(1));
-                    const accessToken = hashParams.get('access_token');
-                    const refreshToken = hashParams.get('refresh_token');
-                    const errorCode = hashParams.get('error_code');
-                    const errorDescription = hashParams.get('error_description');
-
-                    if (errorCode || errorDescription) {
-                        setErrorMsg(`Error: ${errorDescription || errorCode}`);
-                        return;
-                    }
-
-                    if (accessToken) {
-                        const { data, error } = await supabase.auth.setSession({
-                            access_token: accessToken,
-                            refresh_token: refreshToken || '',
-                        });
-
-                        if (!error && data.session) {
-                            window.history.replaceState(null, '', window.location.pathname);
-                            setHasNavigated(true);
-                            router.replace('/welcome-confirmation');
-                            return;
-                        }
-                    }
-                } catch (error: any) {
-                    setErrorMsg('Error procesando login: ' + error.message);
-                }
+            if (hasNavigated) {
+                console.log('[Auth] Already navigated, skipping');
+                return;
             }
 
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session && !hasNavigated) {
+            // First check for existing session
+            const { data: { session: existingSession } } = await supabase.auth.getSession();
+            if (existingSession && !hasNavigated) {
+                console.log('[Auth] ✅ Found existing session, navigating');
                 setHasNavigated(true);
                 router.replace('/welcome-confirmation');
+                return;
+            }
+
+            if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                // Check if we're coming back from OAuth
+                const hashParams = new URLSearchParams(window.location.hash.substring(1));
+                const searchParams = new URLSearchParams(window.location.search);
+
+                const accessToken = hashParams.get('access_token') || searchParams.get('access_token');
+                const refreshToken = hashParams.get('refresh_token') || searchParams.get('refresh_token');
+                const errorCode = hashParams.get('error_code') || searchParams.get('error_code');
+                const errorDescription = hashParams.get('error_description') || searchParams.get('error_description');
+
+                console.log('[Auth] Checking OAuth callback:', {
+                    hasToken: !!accessToken,
+                    hasError: !!errorCode,
+                    hash: window.location.hash.substring(0, 50),
+                    search: window.location.search.substring(0, 50)
+                });
+
+                if (errorCode || errorDescription) {
+                    console.error('[Auth] OAuth error:', errorDescription || errorCode);
+                    setErrorMsg(`Error: ${errorDescription || errorCode}`);
+                    window.history.replaceState(null, '', window.location.pathname);
+                    return;
+                }
+
+                if (accessToken && refreshToken) {
+                    try {
+                        console.log('[Auth] Setting session from OAuth tokens');
+                        const { data, error } = await supabase.auth.setSession({
+                            access_token: accessToken,
+                            refresh_token: refreshToken,
+                        });
+
+                        if (error) {
+                            console.error('[Auth] Session error:', error);
+                            setErrorMsg('Error al iniciar sesión: ' + error.message);
+                            window.history.replaceState(null, '', window.location.pathname);
+                            return;
+                        }
+
+                        if (data.session) {
+                            console.log('[Auth] ✅ Session set successfully');
+                            // Clean URL
+                            window.history.replaceState(null, '', window.location.pathname);
+                            setHasNavigated(true);
+
+                            // Small delay to ensure session is fully set
+                            setTimeout(() => {
+                                router.replace('/welcome-confirmation');
+                            }, 100);
+                            return;
+                        }
+                    } catch (error: any) {
+                        console.error('[Auth] Catch error:', error);
+                        setErrorMsg('Error procesando login: ' + error.message);
+                        window.history.replaceState(null, '', window.location.pathname);
+                    }
+                }
             }
         };
 
         handleOAuthCallback();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            console.log('[Auth] Auth state changed:', event, !!session);
             if (event === 'SIGNED_IN' && session && !hasNavigated) {
+                console.log('[Auth] ✅ Sign in event, navigating');
                 setHasNavigated(true);
-                router.replace('/welcome-confirmation');
+                setTimeout(() => {
+                    router.replace('/welcome-confirmation');
+                }, 100);
             }
         });
 
