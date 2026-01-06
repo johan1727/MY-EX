@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
     View,
     Text,
@@ -6,9 +6,11 @@ import {
     ScrollView,
     TouchableOpacity,
     ActivityIndicator,
-    Alert,
+    Modal,
+    Animated,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -22,6 +24,9 @@ import {
     Lightbulb,
     Zap,
     Trash2,
+    X,
+    HelpCircle,
+    LogOut,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { storage } from '@/lib/storage';
@@ -39,9 +44,43 @@ export default function AnalysisScreen() {
     const [analysisState, setAnalysisState] = useState<AnalysisState | null>(null);
     const [analysisLogs, setAnalysisLogs] = useState<string[]>([]);
 
-    useEffect(() => {
-        checkForAnalysisOrProfile();
-    }, []);
+    // Animated progress for smooth bar
+    const animatedProgress = useRef(new Animated.Value(0)).current;
+    const [validationWarning, setValidationWarning] = useState<any>(null);
+
+    // Custom Alert State
+    interface AlertConfig {
+        visible: boolean;
+        title: string;
+        message: string;
+        buttons?: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' | 'confirm' }[];
+        type?: 'success' | 'error' | 'info' | 'warning';
+    }
+    const [customAlert, setCustomAlert] = useState<AlertConfig>({ visible: false, title: '', message: '' });
+
+    const showAlert = (title: string, message: string, buttons?: AlertConfig['buttons'], type: AlertConfig['type'] = 'info') => {
+        setCustomAlert({
+            visible: true,
+            title,
+            message,
+            buttons,
+            type
+        });
+    };
+
+    const closeAlert = () => {
+        setCustomAlert(prev => ({ ...prev, visible: false }));
+    };
+
+
+    // Use focus effect to check for data whenever the screen comes into focus
+    // This is critical because router.push might rely on existing mounted component
+    useFocusEffect(
+        useCallback(() => {
+            console.log('[AnalysisScreen] Screen focused, checking for data...');
+            checkForAnalysisOrProfile();
+        }, [])
+    );
 
     const checkForAnalysisOrProfile = async () => {
         try {
@@ -65,7 +104,11 @@ export default function AnalysisScreen() {
 
                     if (state.status === 'completed') {
                         setIsAnalyzing(false);
-                        setProfile(state.result);
+                        // Flatten the result so UI can access properties directly
+                        const finalProfile = state.result;
+                        // Fix for type error: explicitly cast or check property existence if needed
+                        const profileData = (finalProfile as any).profile || finalProfile;
+                        setProfile(profileData ? { ...finalProfile, ...profileData } : finalProfile);
 
                         // Navigate to chat after completion
                         setTimeout(() => {
@@ -75,7 +118,7 @@ export default function AnalysisScreen() {
 
                     if (state.status === 'error') {
                         setIsAnalyzing(false);
-                        Alert.alert('Error', state.error || 'Error en el análisis');
+                        showAlert('Error', state.error || 'Error en el análisis', [{ text: 'OK' }], 'error');
                     }
                 });
 
@@ -84,34 +127,26 @@ export default function AnalysisScreen() {
                 console.log('[Analysis] Validation result:', validation);
 
                 if (!validation.isValid && validation.detectedType !== 'unknown') {
-                    // Show warning and ask for confirmation
-                    Alert.alert(
-                        '⚠️ Tipo de Relación Dudoso',
-                        formatValidationMessage(validation) + '\n\n¿Continuar de todos modos?',
-                        [
-                            {
-                                text: 'Cancelar',
-                                style: 'cancel',
-                                onPress: () => {
-                                    setIsAnalyzing(false);
-                                    setLoading(false);
-                                    router.back();
-                                }
-                            },
-                            {
-                                text: 'Continuar',
-                                onPress: async () => {
-                                    // Start the analysis anyway
-                                    await BackgroundAnalysisManager.startAnalysis(
-                                        profileId,
-                                        parsedMessages,
-                                        exName,
-                                        relationshipType || 'ex'
-                                    );
-                                }
-                            }
-                        ]
-                    );
+                    // Show custom warning UI instead of Alert (safer for Web)
+                    setValidationWarning({
+                        validation,
+                        onConfirm: async () => {
+                            setValidationWarning(null); // Clear warning
+                            // Start the analysis
+                            await BackgroundAnalysisManager.startAnalysis(
+                                profileId,
+                                parsedMessages,
+                                exName,
+                                relationshipType || 'ex'
+                            );
+                        },
+                        onCancel: () => {
+                            setIsAnalyzing(false);
+                            setLoading(false);
+                            setValidationWarning(null);
+                            router.back();
+                        }
+                    });
                 } else {
                     // Validation passed or unknown - start analysis
                     await BackgroundAnalysisManager.startAnalysis(
@@ -128,11 +163,14 @@ export default function AnalysisScreen() {
             // No new analysis - try to load existing profile
             let stored = await storage.getItem('analysis_view_profile');
             if (stored) {
-                setProfile(JSON.parse(stored));
+                const parsed = JSON.parse(stored);
+                // Flatten: merge inner profile properties to top level
+                setProfile(parsed.profile ? { ...parsed, ...parsed.profile } : parsed);
             } else {
                 stored = await storage.getItem('exSimulator_currentProfile');
                 if (stored) {
-                    setProfile(JSON.parse(stored));
+                    const parsed = JSON.parse(stored);
+                    setProfile(parsed.profile ? { ...parsed, ...parsed.profile } : parsed);
                 }
             }
         } catch (error) {
@@ -153,17 +191,88 @@ export default function AnalysisScreen() {
         );
     }
 
+    // === VALIDATION WARNING (Anti-Crash for Web) ===
+    if (validationWarning) {
+        return (
+            <View style={styles.container}>
+                <StatusBar style="light" />
+                <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+                    <View style={{
+                        width: 80, height: 80, borderRadius: 40,
+                        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                        alignItems: 'center', justifyContent: 'center', marginBottom: 24
+                    }}>
+                        <AlertTriangle size={40} color="#ef4444" />
+                    </View>
+
+                    <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' }}>
+                        ⚠️ Tipo de Relación Dudoso
+                    </Text>
+
+                    <View style={{ backgroundColor: '#1a1a1a', padding: 16, borderRadius: 12, width: '100%', marginBottom: 32 }}>
+                        <Text style={{ color: '#d1d5db', fontSize: 16, lineHeight: 24, textAlign: 'center' }}>
+                            {formatValidationMessage(validationWarning.validation)}
+                        </Text>
+                        <Text style={{ color: '#9ca3af', fontSize: 14, marginTop: 16, textAlign: 'center' }}>
+                            ¿Quieres continuar de todos modos?
+                        </Text>
+                    </View>
+
+                    <View style={{ width: '100%', gap: 12 }}>
+                        <TouchableOpacity
+                            onPress={validationWarning.onConfirm}
+                            style={{
+                                backgroundColor: '#7c3aed',
+                                padding: 16,
+                                borderRadius: 12,
+                                alignItems: 'center'
+                            }}
+                        >
+                            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>
+                                Continuar Análisis
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            onPress={validationWarning.onCancel}
+                            style={{
+                                backgroundColor: 'transparent',
+                                padding: 16,
+                                borderRadius: 12,
+                                alignItems: 'center',
+                                borderWidth: 1,
+                                borderColor: '#374151'
+                            }}
+                        >
+                            <Text style={{ color: '#9ca3af', fontSize: 16 }}>
+                                Cancelar y Corregir
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </SafeAreaView>
+            </View>
+        );
+    }
+
     // === ANALYSIS IN PROGRESS SCREEN ===
     if (isAnalyzing && analysisState) {
         const progress = analysisState.progress || 0;
         const currentPhase = analysisState.currentPhase || 'personality';
 
+        // Animate progress smoothly
+        Animated.timing(animatedProgress, {
+            toValue: progress,
+            duration: 500,
+            useNativeDriver: false,
+        }).start();
+
         const phases = [
-            { id: 'personality', label: 'Iniciando análisis...', done: progress > 5 },
-            { id: 'personality', label: 'Analizando psicología...', done: progress > 30 },
-            { id: 'master_prompt', label: 'Generando sistema maestro...', done: progress > 75 },
+            { id: 'init', label: 'Iniciando análisis...', done: progress > 5 },
+            { id: 'psych', label: 'Analizando psicología...', done: progress > 30 },
+            { id: 'prompt', label: 'Generando sistema maestro...', done: progress > 75 },
             { id: 'saving', label: 'Guardando perfil...', done: progress > 90 },
         ];
+
 
         return (
             <View style={styles.container}>
@@ -183,15 +292,18 @@ export default function AnalysisScreen() {
                         Analizando
                     </Text>
                     <Text style={{ color: '#9ca3af', fontSize: 14, marginBottom: 24 }}>
-                        Esto puede tomar hasta 2 minutos...
+                        Esto puede tomar hasta 5 minutos...
                     </Text>
 
-                    {/* Progress Bar */}
+                    {/* Progress Bar - Animated for smooth transitions */}
                     <View style={{ width: '100%', marginBottom: 8 }}>
-                        <View style={{ height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
-                            <View style={{
+                        <View style={{ height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' }}>
+                            <Animated.View style={{
                                 height: '100%',
-                                width: `${progress}%`,
+                                width: animatedProgress.interpolate({
+                                    inputRange: [0, 100],
+                                    outputRange: ['0%', '100%'],
+                                }),
                                 backgroundColor: '#22c55e',
                                 borderRadius: 4
                             }} />
@@ -283,14 +395,15 @@ export default function AnalysisScreen() {
                         .eq('id', profile.supabaseId || profile.id);
                 }
 
-                Alert.alert(
+                showAlert(
                     '✅ Perfil eliminado',
                     'El perfil corrupto ha sido eliminado. Ahora puedes crear uno nuevo.',
-                    [{ text: 'Aceptar', onPress: () => router.replace('/tools/ex-simulator/import') }]
+                    [{ text: 'Aceptar', onPress: () => { closeAlert(); router.replace('/tools/ex-simulator/import'); } }],
+                    'success'
                 );
             } catch (error) {
                 console.error('Error deleting profile:', error);
-                Alert.alert('Error', 'No se pudo eliminar el perfil. Intenta de nuevo.');
+                showAlert('Error', 'No se pudo eliminar el perfil. Intenta de nuevo.', [{ text: 'OK' }], 'error');
             }
         };
 
@@ -345,50 +458,56 @@ export default function AnalysisScreen() {
         );
     }
 
-    // Big Five
+    // --- DATA EXTRACTION (Consistent use of analysisData) ---
+    // Extract nested data safely with defaults
     const bigFive = analysisData.bigFive || {};
-
-    // Attachment
     const attachment = analysisData.attachment || {};
-
-    // Love Language
     const loveLanguage = analysisData.loveLanguage || {};
-
-    // Emotional Intelligence
     const eq = analysisData.emotionalIntelligence || {};
-
-    // Triggers
     const triggers = analysisData.triggers || {};
-
-    // Linguistics
     const linguistics = analysisData.linguistics || {};
-
-    // Relationship Dynamics
     const dynamics = analysisData.relationshipDynamics || {};
     const intimateDetails = analysisData.intimateDetails || {};
     const valuesAlignment = analysisData.valuesAlignment || {};
     const topicsOfInterest = analysisData.topicsOfInterest || [];
     const quirks = analysisData.quirks || [];
-
-    // Red Flags
     const redFlags = analysisData.redFlags || [];
 
-    // Premium Data
+    // Premium / Deep Analysis Data
     const linguisticAnalysis = analysisData.linguisticAnalysis || {};
     const relationshipPsychology = analysisData.relationshipPsychology || {};
+    const psychologicalXRay = analysisData.psychologicalXRay || relationshipPsychology.psychologicalXRay || {};
 
-    // Communication style (can be in different places)
+    // Helper: Determine Communication Style
+    // Order of preference: 
+    // 1. Explicit communicationStyle field
+    // 2. linguistics.overallStyle
+    // 3. communication.style nested object
     const communicationStyle = analysisData.communicationStyle ||
         linguistics.overallStyle ||
         (analysisData.communication && analysisData.communication.style) ||
         'No disponible';
 
-    // Helper to safely get score from potentially complex object
+    // Helper: Determine Emotional Pattern
+    // Order of preference:
+    // 1. eq.emotionalRange
+    // 2. inferred from dominantPartner boolean
+    const emotionalPattern = eq.emotionalRange || (dynamics.dominantPartner ? 'variable' : 'estable');
+
+    // Helper: Safely get score (number) from value that might be number or object
     const getScore = (val: any): number => {
-        if (typeof val === 'number') return val;
-        if (val && typeof val === 'object' && typeof val.score === 'number') return val.score;
-        return 5;
+        let score: number;
+        if (typeof val === 'number') {
+            score = val;
+        } else if (val && typeof val === 'object' && typeof val.score === 'number') {
+            score = val.score;
+        } else {
+            score = 5; // Default fallback
+        }
+        // CRITICAL: Validate NaN before returning
+        return isNaN(score) ? 0 : score;
     };
+
 
     // Helper to render a score bar
     const ScoreBar = ({ label, score, color }: { label: string; score: number; color: string }) => (
@@ -468,12 +587,13 @@ export default function AnalysisScreen() {
                         </Text>
                     </View>
                     <Text style={styles.simpleCardValue}>
-                        {eq.emotionalRange || (dynamics.dominantPartner ? 'variable' : 'estable')}
+                        {emotionalPattern}
                     </Text>
                 </View>
 
                 {/* === NEW: RADIOGRAFÍA PSICOLÓGICA (Gottman + Apego) === */}
-                {analysisData.psychologicalXRay && (
+                {/* Check psychologicalXRay for data availability */}
+                {(psychologicalXRay.fourHorsemen || psychologicalXRay.attachmentStyle) && (
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
                             <Zap size={20} color="#f59e0b" />
@@ -483,45 +603,47 @@ export default function AnalysisScreen() {
                         </View>
 
                         {/* Los 4 Jinetes (Gottman) */}
-                        <View style={styles.card}>
-                            <Text style={styles.cardSubtitle}>
-                                Los 4 Jinetes (Escala de Toxicidad)
-                            </Text>
-                            <ScoreBar
-                                label="⚔️ Crítica (Ataques)"
-                                score={(analysisData.psychologicalXRay.fourHorsemen?.criticism || 0) / 10}
-                                color="#f59e0b"
-                            />
-                            <ScoreBar
-                                label="🙄 Desprecio (El peor)"
-                                score={(analysisData.psychologicalXRay.fourHorsemen?.contempt || 0) / 10}
-                                color="#ef4444"
-                            />
-                            <ScoreBar
-                                label="🛡️ Defensividad"
-                                score={(analysisData.psychologicalXRay.fourHorsemen?.defensiveness || 0) / 10}
-                                color="#60a5fa"
-                            />
-                            <ScoreBar
-                                label="🧱 Indiferencia (Muro)"
-                                score={(analysisData.psychologicalXRay.fourHorsemen?.stonewalling || 0) / 10}
-                                color="#9ca3af"
-                            />
-                        </View>
+                        {psychologicalXRay.fourHorsemen && (
+                            <View style={styles.card}>
+                                <Text style={styles.cardSubtitle}>
+                                    Los 4 Jinetes (Escala de Toxicidad)
+                                </Text>
+                                <ScoreBar
+                                    label="⚔️ Crítica (Ataques)"
+                                    score={getScore(psychologicalXRay.fourHorsemen?.criticism?.score || psychologicalXRay.fourHorsemen?.criticism)}
+                                    color="#f59e0b"
+                                />
+                                <ScoreBar
+                                    label="🙄 Desprecio (El peor)"
+                                    score={getScore(psychologicalXRay.fourHorsemen?.contempt?.score || psychologicalXRay.fourHorsemen?.contempt)}
+                                    color="#ef4444"
+                                />
+                                <ScoreBar
+                                    label="🛡️ Defensividad"
+                                    score={getScore(psychologicalXRay.fourHorsemen?.defensiveness?.score || psychologicalXRay.fourHorsemen?.defensiveness)}
+                                    color="#60a5fa"
+                                />
+                                <ScoreBar
+                                    label="🧱 Indiferencia (Muro)"
+                                    score={getScore(psychologicalXRay.fourHorsemen?.stonewalling?.score || psychologicalXRay.fourHorsemen?.stonewalling)}
+                                    color="#9ca3af"
+                                />
+                            </View>
+                        )}
 
                         {/* Estilo de Apego */}
-                        {analysisData.psychologicalXRay.attachmentStyle && (
+                        {psychologicalXRay.attachmentStyle && (
                             <View style={[styles.card, { marginTop: 12 }]}>
                                 <Text style={styles.cardSubtitle}>Estilo de Apego Detectado</Text>
                                 <View style={styles.highlightBox}>
                                     <Text style={[styles.highlightValue, { color: '#f59e0b', fontSize: 20 }]}>
-                                        {analysisData.psychologicalXRay.attachmentStyle.type?.toUpperCase()}
+                                        {psychologicalXRay.attachmentStyle.type?.toUpperCase()}
                                     </Text>
                                     <Text style={styles.subInfo}>
-                                        Confianza del análisis: {analysisData.psychologicalXRay.attachmentStyle.confidence}%
+                                        Confianza del análisis: {psychologicalXRay.attachmentStyle.confidence}%
                                     </Text>
                                 </View>
-                                {analysisData.psychologicalXRay.attachmentStyle.manifestations?.map((m: any, i: number) => (
+                                {psychologicalXRay.attachmentStyle.manifestations?.map((m: any, i: number) => (
                                     <View key={i} style={styles.rowItem}>
                                         <View style={styles.bullet} />
                                         <Text style={styles.rowText}>
@@ -986,6 +1108,66 @@ export default function AnalysisScreen() {
 
                 <View style={{ height: 40 }} />
             </ScrollView>
+
+            {/* Custom Alert Modal */}
+            <Modal
+                transparent
+                visible={customAlert.visible}
+                animationType="fade"
+                onRequestClose={closeAlert}
+            >
+                <View style={styles.alertOverlay}>
+                    <View style={styles.alertBox}>
+                        <View style={[
+                            styles.alertIconContainer,
+                            customAlert.type === 'error' ? { backgroundColor: 'rgba(239, 68, 68, 0.1)' } :
+                                customAlert.type === 'warning' ? { backgroundColor: 'rgba(245, 158, 11, 0.1)' } :
+                                    customAlert.type === 'success' ? { backgroundColor: 'rgba(34, 197, 94, 0.1)' } :
+                                        { backgroundColor: 'rgba(59, 130, 246, 0.1)' }
+                        ]}>
+                            {customAlert.type === 'error' && <X size={32} color="#ef4444" />}
+                            {customAlert.type === 'warning' && <LogOut size={32} color="#f59e0b" />}
+                            {customAlert.type === 'success' && <Sparkles size={32} color="#22c55e" />}
+                            {customAlert.type === 'info' && <HelpCircle size={32} color="#3b82f6" />}
+                        </View>
+                        <Text style={styles.alertTitle}>{customAlert.title}</Text>
+                        <Text style={styles.alertMessage}>
+                            {customAlert.message}
+                        </Text>
+                        <View style={styles.alertButtons}>
+                            {!customAlert.buttons || customAlert.buttons.length === 0 ? (
+                                <TouchableOpacity
+                                    style={[styles.alertButton, styles.alertButtonPrimary]}
+                                    onPress={closeAlert}
+                                >
+                                    <Text style={styles.alertButtonText}>OK</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                customAlert.buttons.map((btn, idx) => (
+                                    <TouchableOpacity
+                                        key={idx}
+                                        style={[
+                                            styles.alertButton,
+                                            btn.style === 'cancel' ? styles.alertButtonCancel :
+                                                btn.style === 'destructive' ? styles.alertButtonDestructive :
+                                                    styles.alertButtonPrimary
+                                        ]}
+                                        onPress={() => {
+                                            if (btn.onPress) btn.onPress();
+                                            closeAlert(); // Close alert after button press
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.alertButtonText,
+                                            btn.style === 'destructive' && { color: '#ef4444' }
+                                        ]}>{btn.text}</Text>
+                                    </TouchableOpacity>
+                                ))
+                            )}
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -1407,5 +1589,77 @@ const styles = StyleSheet.create({
         fontSize: 14,
         lineHeight: 20,
         flex: 1,
+    },
+    // Custom Alert Styles
+    alertOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    alertBox: {
+        backgroundColor: '#1d1d1d',
+        borderRadius: 24,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#333',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    alertIconContainer: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    alertTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#fff',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    alertMessage: {
+        fontSize: 15,
+        color: '#9ca3af',
+        textAlign: 'center',
+        marginBottom: 24,
+        lineHeight: 22,
+    },
+    alertButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        width: '100%',
+    },
+    alertButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    alertButtonPrimary: {
+        backgroundColor: '#fff',
+    },
+    alertButtonCancel: {
+        backgroundColor: '#2d2d2d',
+    },
+    alertButtonDestructive: {
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    },
+    alertButtonText: {
+        fontWeight: '600',
+        fontSize: 15,
+        color: '#000',
     },
 });

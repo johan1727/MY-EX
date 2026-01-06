@@ -85,38 +85,111 @@ function analyzeContent(messages: ParsedMessage[]): ContentAnalysis {
     const allText = messages.map(m => m.content.toLowerCase()).join(' ');
 
     // Keywords románticos
+    // 1. ROMÁNTICO / EX-PAREJA (Amor, Conflicto, Ruptura, Nostalgia)
     const romanticKeywords = [
+        // Amor y Cariño Básico
         'te amo', 'te quiero', 'mi amor', 'amor mío', 'bebé', 'baby',
-        'cariño', 'mi vida', 'corazón', 'te extraño', 'te necesito',
-        'beso', 'besos', 'te deseo', 'novia', 'novio', 'salimos',
-        'pareja', 'relación', 'aniversario', 'primera cita', 'te ves hermosa',
-        'te ves guapo', 'sexy', 'atractivo', 'linda', 'guapo',
-        '❤️', '😍', '💕', '💖', '😘'
+        'cariño', 'mi vida', 'corazón', 'mami', 'papi', 'gordita', 'gordito',
+        'te extraño', 'te necesito', 'beso', 'besos', 'te deseo',
+        'novia', 'novio', 'esposa', 'esposo', 'pareja', 'relación',
+        'aniversario', 'mesiversario', 'primera cita', 'nuestro día',
+        'te ves hermosa', 'te ves guapo', 'sexy', 'atractivo', 'linda', 'guapo',
+        'preciosa', 'princesa', 'reina', 'rey',
+        // Emojis románticos
+        '❤️', '😍', '💕', '💖', '😘', '🥰', '💘', '💍',
+
+        // CONFLICTO Y RUPTURA (Crucial para Ex)
+        'terminamos', 'se acabó', 'esto no funciona', 'dame un tiempo',
+        'necesito espacio', 'ya no puedo más', 'me cansé', 'tóxico', 'tóxica',
+        'siempre lo mismo', 'ya no te creo', 'me mentiste', 'infiel', 'engaño',
+        'otra oportunidad', 'dame otra oportunidad', 'cambiar', 'te prometo',
+        'perdón', 'lo siento', 'me equivoqué', 'te fallé', 'fui un idiota',
+        'fui una estúpida', 'arrepentido', 'arrepentida', 'culpa',
+        'no eres tú soy yo', 'dejarlo así', 'cada quien por su lado',
+        'vete', 'lárgate', 'no me busques', 'bloquear', 'desbloquear',
+
+        // NOSTALGIA E INTENTOS DE VOLVER
+        'te extraño mucho', 'pienso en ti', 'lo nuestro', 'nuestra historia',
+        'recuerdas cuando', 'soñé contigo', 'te vi', 'me acordé de ti',
+        'aún te quiero', 'no te olvido', 'te sigo amando', 'imposible olvidarte',
+        'volver a intentar', 'empezar de cero', 'reconciliación', 'arreglar las cosas',
+        'podemos hablar', 'tenemos que hablar', 'te ruego', 'por favor',
+        'me haces falta', 'eres el amor de mi vida', 'nunca amé a nadie así',
+        'nadie como tú', 'mi ex', 'mi exnovio', 'mi exnovia'
     ];
 
-    // Keywords familiares
+    // 2. FAMILIA (Roles, Bendiciones, Formalidad)
     const familyKeywords = [
-        'primo', 'prima', 'tío', 'tía', 'hermano', 'hermana',
-        'mamá', 'papá', 'abuela', 'abuelo', 'sobrino', 'sobrina',
+        // Roles
+        'mamá', 'mami', 'madre', 'papá', 'papi', 'padre', 'mis papás', 'tus papás',
+        'hijo', 'hija', 'hijito', 'hijita', 'mi niño', 'mi niña',
+        'hermano', 'hermana', 'hermanito', 'hermanita', 'bro', 'sis', 'cuñado', 'cuñada',
+        'tío', 'tía', 'primo', 'prima', 'sobrino', 'sobrina',
+        'abuelo', 'abuela', 'nono', 'nona', 'yaya', 'tata', 'abue',
+        'suegra', 'suegro', 'nuera', 'yerno', 'padrino', 'madrina', 'ahijado',
         'familia', 'familiar', 'pariente', 'mi familia', 'nuestra familia',
-        'reunión familiar', 'casa de', 'mis papás', 'tus papás'
+        'grupo familiar', 'la familia',
+
+        // Frases Típicas / Bendiciones
+        'bendición', 'diós te bendiga', 'que diós te acompañe', 'con el favor de diós',
+        'bendiciones', 'amén', 'rezando por ti', 'orando', 'misa',
+        'mande', 'dígame', 'te calmas', 'cuídate mucho', 'avísame cuando llegues',
+        'ponte suéter', 'ya comiste', 'te guardé comida', 'voy al mercado',
+        'casa de mi mamá', 'casa de la abuela', 'reunión familiar', 'comida familiar',
+        'domingo familiar', 'cumpleaños de la tía', 'un abrazo', 'saludos a todos',
+        'los quiero', 'los extraño', 'orgullosa de ti', 'orgulloso de ti'
     ];
 
-    // Keywords de amistad
+    // 3. AMISTAD (Jerga, Planes, Fiesta, Apoyo)
     const friendKeywords = [
-        'amigo', 'amiga', 'compa', 'compadre', 'bro', 'brother',
-        'wey', 'wei', 'güey', 'carnal', 'mano', 'compare',
-        'nmms', 'no mames', 'qué pedo', 'salimos de fiesta',
-        'jajaja', 'jaja', 'haha', 'lol', 'xd',
-        'cheve', 'chelas', 'pistear', 'peda'
+        // Términos de trato (Jerga Variada)
+        'amigo', 'amiga', 'bestie', 'bff', 'compa', 'compadre', 'compadrito',
+        'bro', 'brother', 'mano', 'manito', 'carnal', 'cuante',
+        'wey', 'wei', 'güey', 'vato', 'morra', 'morro', // México
+        'parce', 'parcero', 'marica', 'huevón', 'mi llave', 'ñero', // Colombia
+        'boludo', 'boluda', 'che', 'pibe', 'piba', 'loco', 'loca', // Argentina
+        'tío', 'tía', 'colega', 'tronco', 'chaval', 'chavala', 'majo', // España
+        'pana', 'causa', 'yunta', 'pata', // Otros Latam
+
+        // Frases y Expresiones
+        'nmms', 'no mames', 'no manches', 'qué pedo', 'qué onda', 'quiubo',
+        'jaja', 'haha', 'jajaja', 'lol', 'xd', 'jajaj', // Risa (reintroducida controlada)
+        'chisme', 'cuéntame', 'no te creo', 'en serio?', 'neta?', 'posta?',
+        'qué fuerte', 'está cañón', 'qué heavy', 'salseo',
+
+        // Planes y Fiesta
+        'salimos', 'salir', 'fiesta', 'peda', 'rumba', 'joda', 'party', 'antro', 'boliche',
+        'cheve', 'chelas', 'birra', 'pola', 'tragos', 'copas', 'pistear', 'beber',
+        'plan', 'qué haces', 'jalas', 'te apuntas', 'saca el plan', 'vamos por unas',
+        'nos vemos', 'te paso a buscar', 'te caigo', 'caile', 'juntada', 'previa',
+        'cruda', 'resaca', 'guayabo',
+
+        // Apoyo Amistoso
+        'cuenta conmigo', 'estoy para ti', 'ánimo', 'tú puedes', 'eres la mejor',
+        'te quiero amiga', 'te quiero amigo', 'abrazo', 'crack', 'fiera', 'máquina'
     ];
 
-    // Keywords de persona fallecida
+    // 4. FALLECIDO (Duelo, Pésame, Recuerdo, Espiritual)
     const deceasedKeywords = [
-        'te extraño mucho', 'ojalá estuvieras', 'ya no estás',
-        'te fuiste', 'descansa en paz', 'rip', 'siempre te recordaré',
-        'me haces falta', 'desde que te fuiste', 'allá arriba',
-        'en el cielo', 'nunca te olvidaré'
+        // Duelo y Pésame
+        'descansa en paz', 'qepd', 'rip', 'dep', 'vuela alto',
+        'mi más sentido pésame', 'mis condolencias', 'te acompaño en el sentimiento',
+        'siento mucho tu pérdida', 'fuerza', 'resiliencia', 'luto', 'duelo',
+        'velorio', 'funeral', 'entierro', 'sepelio', 'misa', 'novenario',
+        'cenizas', 'tumba', 'cementerio', 'panteón',
+
+        // Nostalgia y Recuerdo
+        'te extraño mucho', 'te extraño tanto', 'me haces falta', 'vacío',
+        'ojalá estuvieras', 'ya no estás', 'te fuiste', 'tu partida', 'tu ausencia',
+        'desde que te fuiste', 'nunca te olvidaré', 'siempre te recordaré',
+        'te llevamos en el corazón', 'siempre presente', 'memoria', 'recuerdo',
+        'aniversario luctuoso', 'un año sin ti', 'meses sin ti',
+
+        // Espiritual / Cielo
+        'cielo', 'allá arriba', 'estás con diós', 'ángel', 'nuestro ángel',
+        'nos cuidas', 'nos proteges', 'un abrazo hasta el cielo',
+        'besos al cielo', 'estrella', 'brilla', 'luz', 'paz eterna',
+        'reencuentro', 'hasta pronto', 'nos volveremos a ver'
     ];
 
     // Contar ocurrencias

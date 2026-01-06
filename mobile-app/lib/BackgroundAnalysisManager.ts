@@ -18,6 +18,13 @@ import { detectJealousyTriggers } from './jealousyDetector';
 import { detectNicknameEvolution } from './nicknameEvolutionTracker';
 import { detectTopConflicts } from './topConflictsDetector';
 import type { ParsedMessage, ExProfile } from './exSimulator';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { analyzeActivityPeaks } from './activityAnalyzer';
+import { detectConflicts } from './conflictDetector';
+import { getRelationshipPreset, buildEnhancedAIInstructions } from './relationshipPresets';
+import { supabase } from './supabase';
+import { extractImportantDates, saveImportantDates } from './dateExtractor';
+import { embedMessages, getEmbeddingStats } from './vectorRAG';
 
 // ===============================================
 // TYPES
@@ -156,18 +163,21 @@ export class BackgroundAnalysisManager {
                 senderCounts.set(msg.sender, (senderCounts.get(msg.sender) || 0) + 1);
             });
 
-            const exNameLower = exName.toLowerCase().trim();
+            const exNameLower = (exName || '').toLowerCase().trim();
             const exSenderName = Array.from(senderCounts.keys()).find(name => {
+                if (!name) return false; // SAFETY: skip undefined/null names
                 const nameLower = name.toLowerCase().trim();
                 return nameLower === exNameLower ||
                     nameLower.includes(exNameLower) ||
                     exNameLower.includes(nameLower);
-            }) || exName;
+            }) || exName || 'Persona';
 
-            const allParticipants = Array.from(senderCounts.keys());
+
+            const allParticipants = Array.from(senderCounts.keys()).filter(n => n); // Filter out null/undefined
             const detectedUserName = allParticipants.find(name =>
-                name.toLowerCase().trim() !== exSenderName.toLowerCase().trim()
+                name && name.toLowerCase().trim() !== (exSenderName || '').toLowerCase().trim()
             ) || 'Usuario';
+
 
             console.log('[BackgroundAnalysis] Detected:', { exSenderName, detectedUserName });
 
@@ -195,7 +205,6 @@ export class BackgroundAnalysisManager {
 
             let entities = [];
             try {
-                const { GoogleGenerativeAI } = await import('@google/generative-ai');
                 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
                 const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
@@ -210,7 +219,6 @@ export class BackgroundAnalysisManager {
 
             let defensiveTopics = [];
             try {
-                const { GoogleGenerativeAI } = await import('@google/generative-ai');
                 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
                 const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
@@ -225,7 +233,6 @@ export class BackgroundAnalysisManager {
 
             let jealousyTriggers = [];
             try {
-                const { GoogleGenerativeAI } = await import('@google/generative-ai');
                 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
                 const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
@@ -240,7 +247,6 @@ export class BackgroundAnalysisManager {
 
             let nicknameEvolution = [];
             try {
-                const { GoogleGenerativeAI } = await import('@google/generative-ai');
                 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
                 const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
@@ -255,7 +261,6 @@ export class BackgroundAnalysisManager {
 
             let topConflicts = [];
             try {
-                const { GoogleGenerativeAI } = await import('@google/generative-ai');
                 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
                 const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
@@ -270,7 +275,6 @@ export class BackgroundAnalysisManager {
 
             let activityPeaks = null;
             try {
-                const { analyzeActivityPeaks } = await import('./activityAnalyzer');
                 activityPeaks = analyzeActivityPeaks(messages);
                 console.log('[BackgroundAnalysis] Found', activityPeaks.hottestDays.length, 'hot days,',
                     activityPeaks.coldestDays.length, 'cold periods');
@@ -283,7 +287,6 @@ export class BackgroundAnalysisManager {
 
             let conflictAnalysis = null;
             try {
-                const { detectConflicts } = await import('./conflictDetector');
                 conflictAnalysis = detectConflicts(messages, exName);
                 console.log('[BackgroundAnalysis] Detected', conflictAnalysis.conflictMoments.length, 'conflict moments');
             } catch (conflErr) {
@@ -295,7 +298,6 @@ export class BackgroundAnalysisManager {
 
             let relationshipPreset = null;
             try {
-                const { getRelationshipPreset, buildEnhancedAIInstructions } = await import('./relationshipPresets');
                 relationshipPreset = getRelationshipPreset(relationshipType);
                 console.log('[BackgroundAnalysis] Applied preset for:', relationshipType);
             } catch (presetErr) {
@@ -303,14 +305,13 @@ export class BackgroundAnalysisManager {
             }
 
             // Get user early for embeddings and dates
-            const { data: { user } } = await (await import('./supabase')).supabase.auth.getUser();
+            const { data: { user } } = await supabase.auth.getUser();
 
             // CHECKPOINT 3.99: Date Extraction (NEW - Advanced AI)
             await onProgress(94.8, '📅 Extrayendo fechas importantes...');
 
             let importantDates = [];
             try {
-                const { extractImportantDates, saveImportantDates } = await import('./dateExtractor');
                 importantDates = extractImportantDates(messages, exName, detectedUserName, relationshipType);
                 console.log('[BackgroundAnalysis] Extracted', importantDates.length, 'important dates');
 
@@ -327,7 +328,7 @@ export class BackgroundAnalysisManager {
 
             let embeddingStats = null;
             try {
-                const { embedMessages, getEmbeddingStats } = await import('./vectorRAG');
+
 
                 // Solo crear embeddings si hay mensajes y usuario autenticado
                 if (messages.length > 0 && user?.id) {

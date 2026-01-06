@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Modal, Alert, KeyboardAvoidingView, Image, Animated } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Modal, Alert, KeyboardAvoidingView, Image, Animated, Keyboard } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -166,7 +166,7 @@ export default function ExSimulatorChat() {
 
                 // Fallback to local if cloud empty
                 if (loadedMessages.length === 0) {
-                    const key = `exSimulator_conversation_${data.id} `;
+                    const key = `exSimulator_conversation_${data.id}`;
                     const localStored = await storage.getItem(key);
                     if (localStored) loadedMessages = JSON.parse(localStored);
                 }
@@ -176,7 +176,7 @@ export default function ExSimulatorChat() {
                 }
 
                 // Load local memory
-                const memoryKey = `exSimulator_memory_${data.id} `;
+                const memoryKey = `exSimulator_memory_${data.id}`;
                 const savedMemory = await storage.getItem(memoryKey);
                 if (savedMemory) setConversationMemory(savedMemory);
             }
@@ -189,7 +189,7 @@ export default function ExSimulatorChat() {
         if (!profileData) return;
 
         // Save to local storage (immediate)
-        const key = `exSimulator_conversation_${profileData.id} `;
+        const key = `exSimulator_conversation_${profileData.id}`;
         await storage.setItem(key, JSON.stringify(msgs));
 
         // Save to cloud (background, non-blocking)
@@ -266,7 +266,6 @@ export default function ExSimulatorChat() {
         }
     };
 
-    ```
     const generateMemorySummary = async (msgs: Message[]) => {
         // Temporarily disabled
         return;
@@ -304,7 +303,7 @@ export default function ExSimulatorChat() {
             const userMessage: Message = { role: 'user', content: currentInput, timestamp: new Date(), seen: true };
             const confirmMessage: Message = {
                 role: 'assistant',
-                content: saved ? `[OK] Lo recordaré: "${memoryCommand.fact}"` : `Entendido, lo tendré en cuenta.`,
+                content: saved ? `OK: Lo recordaré: "${memoryCommand.fact}"` : `Entendido, lo tendré en cuenta.`,
                 timestamp: new Date(),
                 seen: false
             };
@@ -344,7 +343,7 @@ export default function ExSimulatorChat() {
 
         try {
             let systemPrompt: string;
-            const memoryContext = conversationMemory ? `\n═══════════════════════════════════════════════\nMEMORIA DE CONVERSACIONES ANTERIORES: \n${ conversationMemory } \n═══════════════════════════════════════════════\n` : '';
+            const memoryContext = conversationMemory ? `\n═══════════════════════════════════════════════\nMEMORIA DE CONVERSACIONES ANTERIORES: \n${conversationMemory} \n═══════════════════════════════════════════════\n` : '';
             const factsContext = buildFactsContext(memoryFacts);
 
             let ragContext = '';
@@ -365,14 +364,14 @@ export default function ExSimulatorChat() {
             if (profileData.supabaseId) {
                 try {
                     const userEmotion = detectDetailedEmotion(currentInput);
-                    console.log(`[ExChat] Detected emotion: ${ userEmotion } `);
+                    console.log(`[ExChat] Detected emotion: ${userEmotion} `);
 
                     if (userId) {
                         const memories = await retrieveRelevantMemories(userEmotion as any, profileData.supabaseId, userId);
                         if (memories.length > 0) {
                             emotionalContext = `\n═══════════════════════════════════════════════\nRECUERDOS EMOCIONALES RELEVANTES: \n`;
                             memories.forEach(mem => {
-                                emotionalContext += `📌 ${ mem.title } \n   ${ mem.summary } \n`;
+                                emotionalContext += `📌 ${mem.title} \n   ${mem.summary} \n`;
                             });
                             emotionalContext += `\n⚠️ Estos son recuerdos reales.Menciόnalos sutilmente si es natural.\n═══════════════════════════════════════════════\n`;
                         }
@@ -381,16 +380,16 @@ export default function ExSimulatorChat() {
 
                     if (profileData.importantDates && profileData.importantDates.length > 0) {
                         const today = new Date();
-                        const todayStr = `${ String(today.getMonth() + 1).padStart(2, '0') } -${ String(today.getDate()).padStart(2, '0') } `;
+                        const todayStr = `${String(today.getMonth() + 1).padStart(2, '0')} -${String(today.getDate()).padStart(2, '0')} `;
                         const relevantDates = profileData.importantDates.filter((d: any) => d.dateValue.substring(5) === todayStr);
 
                         if (relevantDates.length > 0) {
                             importantDatesContext = `\n═══════════════════════════════════════════════\nFECHAS IMPORTANTES HOY: \n`;
                             relevantDates.forEach((d: any) => {
                                 const emoji = d.dateType === 'birthday' ? '🎂' : d.dateType === 'anniversary' ? '💕' : '📅';
-                                importantDatesContext += `${ emoji } ${ d.description } \n`;
+                                importantDatesContext += `${emoji} ${d.description} \n`;
                             });
-                            importantDatesContext += `\n⚠️ Hoy es especial.Menci�نalo naturalmente.\n═══════════════════════════════════════════════\n`;
+                            importantDatesContext += `\n⚠️ Hoy es especial.Menciنalo naturalmente.\n═══════════════════════════════════════════════\n`;
                             console.log(`[ExChat] Today has ${relevantDates.length} important dates`);
                         }
                     }
@@ -587,9 +586,15 @@ export default function ExSimulatorChat() {
                         visible={drawerVisible}
                         onClose={() => setDrawerVisible(false)}
                         currentProfileId={null}
+                        onProfileDeleted={() => {
+                            console.log('[ExChat/EmptyState] Profile deleted, resetting...');
+                            setProfileData(null);
+                            setMessages([]);
+                            // Do not reload profile immediately
+                        }}
                     />
-                </SafeAreaView>
-            </View>
+                </SafeAreaView >
+            </View >
         );
     }
 
@@ -641,7 +646,7 @@ export default function ExSimulatorChat() {
                                         "No dejo de pensar en ti",
                                         "¿Cómo has estado?"
                                     ].map((text, index) => (
-                                        <TouchableOpacity 
+                                        <TouchableOpacity
                                             key={index}
                                             style={{
                                                 backgroundColor: '#2A2A2A',
@@ -850,6 +855,17 @@ export default function ExSimulatorChat() {
                 visible={drawerVisible}
                 onClose={() => setDrawerVisible(false)}
                 currentProfileId={profileData?.id || profileData?.supabaseId}
+                onProfileDeleted={() => {
+                    console.log('[ExChat] Profile deleted, resetting state...');
+                    setProfileData(null);
+                    setMessages([]);
+                    setMemoryFacts([]);
+                    setEmotionalSession(null);
+                    setConversationMemory('');
+                    setUserName('');
+                    setPastSummaries('');
+                    // Do not reload profile immediately, stick to empty state
+                }}
             />
         </View>
     );

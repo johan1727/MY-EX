@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Switch, ScrollView, Alert, Platform, StyleSheet, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, Switch, ScrollView, Platform, StyleSheet, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Bell, Smartphone, Shield, FileText, Trash2, ChevronRight, Globe, Moon, Download, Cookie, Check, Database } from 'lucide-react-native';
+import { ArrowLeft, Bell, Smartphone, Shield, FileText, Trash2, ChevronRight, Globe, Moon, Download, Cookie, Check, Database, HelpCircle, X, LogOut, Sparkles } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +19,30 @@ export default function PreferencesScreen() {
     const [darkModeEnabled, setDarkModeEnabled] = useState(true);
     const [currentLanguage, setCurrentLanguage] = useState('es');
     const [showLanguageModal, setShowLanguageModal] = useState(false);
+
+    // Custom Alert State
+    interface AlertConfig {
+        visible: boolean;
+        title: string;
+        message: string;
+        buttons?: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' | 'confirm' }[];
+        type?: 'success' | 'error' | 'info' | 'warning';
+    }
+    const [customAlert, setCustomAlert] = useState<AlertConfig>({ visible: false, title: '', message: '' });
+
+    const showAlert = (title: string, message: string, buttons?: AlertConfig['buttons'], type: AlertConfig['type'] = 'info') => {
+        setCustomAlert({
+            visible: true,
+            title,
+            message,
+            buttons,
+            type
+        });
+    };
+
+    const closeAlert = () => {
+        setCustomAlert(prev => ({ ...prev, visible: false }));
+    };
 
     useEffect(() => {
         loadSettings();
@@ -39,7 +63,7 @@ export default function PreferencesScreen() {
         setCurrentLanguage(code);
         await AsyncStorage.setItem('app_language', code);
         setShowLanguageModal(false);
-        Alert.alert('Idioma actualizado', 'El idioma se aplicará en la próxima carga.');
+        showAlert('Idioma actualizado', 'El idioma se aplicará en la próxima carga.', [{ text: 'OK', onPress: closeAlert }], 'success');
     };
 
     const handleToggleNotifications = async (value: boolean) => {
@@ -53,12 +77,12 @@ export default function PreferencesScreen() {
     };
 
     const handleExportData = () => {
-        Alert.alert('Exportar datos', 'Esta función estará disponible próximamente. Podrás descargar todos tus datos de la app.');
+        showAlert('Exportar datos', 'Esta función estará disponible próximamente. Podrás descargar todos tus datos de la app.', [{ text: 'OK', onPress: closeAlert }], 'info');
     };
 
     const handleCookieSettings = async () => {
         await AsyncStorage.removeItem('cookie_consent_v2');
-        Alert.alert('Cookies', 'Las preferencias de cookies se reiniciarán. Recarga la app para ver el banner.');
+        showAlert('Cookies', 'Las preferencias de cookies se reiniciarán. Recarga la app para ver el banner.', [{ text: 'OK', onPress: closeAlert }], 'info');
     };
 
     const handleDeleteAccount = () => {
@@ -68,42 +92,34 @@ export default function PreferencesScreen() {
                 await supabase.auth.signOut();
                 router.replace('/welcome');
             } catch (e) {
-                if (Platform.OS === 'web') {
-                    alert('No se pudo eliminar la cuenta. Intenta de nuevo.');
-                } else {
-                    Alert.alert("Error", "No se pudo eliminar la cuenta.");
-                }
+                showAlert("Error", "No se pudo eliminar la cuenta.", [{ text: 'OK' }], 'error');
             }
         };
 
-        if (Platform.OS === 'web') {
-            // Web: Use confirm() with double confirmation
-            const firstConfirm = confirm(
-                '⚠️ ELIMINAR CUENTA\n\n¿Estás seguro que deseas eliminar tu cuenta?\n\nEsta acción NO se puede deshacer y perderás todo tu progreso, análisis y conversaciones.'
-            );
-            if (firstConfirm) {
-                const secondConfirm = confirm(
-                    '🚨 ÚLTIMA CONFIRMACIÓN\n\nEscribe "ELIMINAR" mentalmente y confirma que realmente deseas borrar todos tus datos permanentemente.'
-                );
-                if (secondConfirm) {
-                    executeDelete();
-                }
-            }
-        } else {
-            // Native: Use Alert with destructive button
-            Alert.alert(
-                "⚠️ Eliminar Cuenta",
-                "¿Estás seguro? Esta acción NO se puede deshacer.\n\nPerderás todo tu progreso, análisis y conversaciones.",
-                [
-                    { text: "Cancelar", style: "cancel" },
-                    {
-                        text: "Eliminar Todo",
-                        style: "destructive",
-                        onPress: executeDelete
+        showAlert(
+            "⚠️ Eliminar Cuenta",
+            "¿Estás seguro? Esta acción NO se puede deshacer.\n\nPerderás todo tu progreso, análisis y conversaciones.",
+            [
+                { text: "Cancelar", style: "cancel" },
+                {
+                    text: "Eliminar Todo",
+                    style: "destructive",
+                    onPress: () => {
+                        // Double confirmation
+                        showAlert(
+                            '🚨 ÚLTIMA CONFIRMACIÓN',
+                            'Confirma que realmente deseas borrar todos tus datos permanentemente.',
+                            [
+                                { text: 'Cancelar', style: 'cancel' },
+                                { text: 'SÍ, ELIMINAR', style: 'destructive', onPress: () => { closeAlert(); executeDelete(); } }
+                            ],
+                            'warning'
+                        );
                     }
-                ]
-            );
-        }
+                }
+            ],
+            'warning'
+        );
     };
 
     const SettingGroup = ({ title, children }: { title: string, children: React.ReactNode }) => (
@@ -226,7 +242,7 @@ export default function PreferencesScreen() {
                         label="Borrar Caché Local"
                         isDestructive
                         onPress={() => {
-                            Alert.alert(
+                            showAlert(
                                 '⚠️ Borrar Caché',
                                 'Esto eliminará TODOS los perfiles y conversaciones guardadas localmente en este dispositivo.\n\n' +
                                 '✓ Útil si la app no funciona correctamente\n' +
@@ -241,20 +257,22 @@ export default function PreferencesScreen() {
                                         onPress: async () => {
                                             try {
                                                 await storage.clear();
-                                                Alert.alert(
+                                                showAlert(
                                                     '✓ Caché Borrado',
                                                     'Todos los datos locales han sido eliminados. La app se reiniciará.',
                                                     [{
                                                         text: 'OK',
-                                                        onPress: () => router.replace('/tools/ex-simulator/import')
-                                                    }]
+                                                        onPress: () => { closeAlert(); router.replace('/tools/ex-simulator/import'); }
+                                                    }],
+                                                    'success'
                                                 );
                                             } catch (error) {
-                                                Alert.alert('Error', 'No se pudo borrar el caché. Intenta de nuevo.');
+                                                showAlert('Error', 'No se pudo borrar el caché. Intenta de nuevo.', [{ text: 'OK' }], 'error');
                                             }
                                         }
                                     }
-                                ]
+                                ],
+                                'warning'
                             );
                         }}
                     />
@@ -299,6 +317,66 @@ export default function PreferencesScreen() {
                         >
                             <Text style={styles.modalCancelText}>Cancelar</Text>
                         </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Custom Alert Modal */}
+            <Modal
+                transparent
+                visible={customAlert.visible}
+                animationType="fade"
+                onRequestClose={closeAlert}
+            >
+                <View style={styles.alertOverlay}>
+                    <View style={styles.alertBox}>
+                        <View style={[
+                            styles.alertIconContainer,
+                            customAlert.type === 'error' ? { backgroundColor: 'rgba(239, 68, 68, 0.1)' } :
+                                customAlert.type === 'warning' ? { backgroundColor: 'rgba(245, 158, 11, 0.1)' } :
+                                    customAlert.type === 'success' ? { backgroundColor: 'rgba(34, 197, 94, 0.1)' } :
+                                        { backgroundColor: 'rgba(59, 130, 246, 0.1)' }
+                        ]}>
+                            {customAlert.type === 'error' && <X size={32} color="#ef4444" />}
+                            {customAlert.type === 'warning' && <LogOut size={32} color="#f59e0b" />}
+                            {customAlert.type === 'success' && <Sparkles size={32} color="#22c55e" />}
+                            {customAlert.type === 'info' && <HelpCircle size={32} color="#3b82f6" />}
+                        </View>
+                        <Text style={styles.alertTitle}>{customAlert.title}</Text>
+                        <Text style={styles.alertMessage}>
+                            {customAlert.message}
+                        </Text>
+                        <View style={styles.alertButtons}>
+                            {!customAlert.buttons || customAlert.buttons.length === 0 ? (
+                                <TouchableOpacity
+                                    style={[styles.alertButton, styles.alertButtonPrimary]}
+                                    onPress={closeAlert}
+                                >
+                                    <Text style={styles.alertButtonText}>OK</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                customAlert.buttons.map((btn, idx) => (
+                                    <TouchableOpacity
+                                        key={idx}
+                                        style={[
+                                            styles.alertButton,
+                                            btn.style === 'cancel' ? styles.alertButtonCancel :
+                                                btn.style === 'destructive' ? styles.alertButtonDestructive :
+                                                    styles.alertButtonPrimary
+                                        ]}
+                                        onPress={() => {
+                                            if (btn.onPress) btn.onPress();
+                                            else closeAlert();
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.alertButtonText,
+                                            btn.style === 'destructive' && { color: '#ef4444' }
+                                        ]}>{btn.text}</Text>
+                                    </TouchableOpacity>
+                                ))
+                            )}
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -449,5 +527,79 @@ const styles = StyleSheet.create({
     modalCancelText: {
         color: '#6b7280',
         fontSize: 14,
+    },
+    // Custom Alert Styles
+    alertOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    alertBox: {
+        backgroundColor: '#1E1E1E',
+        borderRadius: 20,
+        padding: 24,
+        width: '100%',
+        maxWidth: 340,
+        borderWidth: 1,
+        borderColor: '#333',
+        alignItems: 'center',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    alertIconContainer: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 20,
+    },
+    alertTitle: {
+        color: '#fff',
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    alertMessage: {
+        color: '#9ca3af',
+        fontSize: 15,
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 24,
+    },
+    alertButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        width: '100%',
+    },
+    alertButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: '#333',
+        alignItems: 'center',
+    },
+    alertButtonPrimary: {
+        backgroundColor: '#3b82f6',
+    },
+    alertButtonCancel: {
+        backgroundColor: '#333',
+    },
+    alertButtonDestructive: {
+        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+        borderWidth: 1,
+        borderColor: '#ef4444',
+    },
+    alertButtonText: {
+        color: '#fff',
+        fontWeight: '600',
+        fontSize: 15,
     },
 });

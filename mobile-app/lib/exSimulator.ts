@@ -3,6 +3,7 @@ import { intelligentTokenSampling } from './messageSampling';
 import { extractConversationContext } from './conversationHelpers';
 import { extractMessageSamples, MessageSamples } from './messageSampleExtractor';
 import { cleanSystemMessages, validateOneOnOneChat, detectLanguage, saveAnalysisProgress, loadAnalysisProgress, clearAnalysisCache, type SupportedLanguage } from './chatValidation';
+import { getRelevantFactsForMessage } from './factEmbeddings';
 
 // TODO: Revertir esto antes de hacer commit!
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
@@ -643,10 +644,10 @@ Responde SOLO con JSON:
 
                 // Validar que el nombre exista en los participantes
                 const validEx = participants.find(p =>
-                    p.toLowerCase().trim() === parsed.exSender?.toLowerCase().trim()
+                    p.toLowerCase().trim() === (parsed.exSender || '').toLowerCase().trim()
                 );
                 const validUser = participants.find(p =>
-                    p.toLowerCase().trim() === parsed.userSender?.toLowerCase().trim()
+                    p.toLowerCase().trim() === (parsed.userSender || '').toLowerCase().trim()
                 );
 
                 if (validEx && validUser) {
@@ -742,7 +743,7 @@ export async function analyzePersonality(
     messages: ParsedMessage[],
     exName: string,
     onProgress?: (progress: number, status: string) => void,
-    relationshipType?: 'ex' | 'friend' | 'family' | 'deceased'
+    relationshipType?: 'ex' | 'friend' | 'family' | 'deceased' | 'partner' | 'crush' | 'family_parent' | 'family_sibling' | 'family_other' | 'acquaintance'
 ): Promise<ExProfile> {
     const startTime = Date.now();
     const isDeceased = relationshipType === 'deceased';
@@ -770,12 +771,20 @@ export async function analyzePersonality(
     }
 
     onProgress?.(5, 'Preparando mensajes...');
-    const { messages: sampledMessages } = intelligentTokenSampling(messages);
+    let { messages: sampledMessages } = intelligentTokenSampling(messages);
+
+    // CRITICAL FIX: Sanitize messages to ensure all have valid sender
+    sampledMessages = sampledMessages.map(msg => ({
+        ...msg,
+        sender: msg.sender || 'Unknown'
+    }));
+
 
     // Quick sender detection
     const senderCounts = new Map<string, number>();
     sampledMessages.forEach(msg => {
-        const name = msg.sender.trim();
+        // CRITICAL FIX: Ensure sender exists before trimming
+        const name = (msg.sender || 'Unknown').trim();
         senderCounts.set(name, (senderCounts.get(name) || 0) + 1);
     });
 
@@ -1757,13 +1766,8 @@ export async function simulateResponse(
 
     // 🔗 Buscar hechos relevantes basados en el mensaje del usuario
     let relevantFacts: string[] = [];
-    try {
-        const { getRelevantFactsForMessage } = await import('./factEmbeddings');
-        if (userMessage) {
-            relevantFacts = await getRelevantFactsForMessage(profile.exName, userMessage);
-        }
-    } catch (e) {
-        // Silently fail si no hay hechos
+    if (userMessage) {
+        relevantFacts = await getRelevantFactsForMessage(profile.exName, userMessage);
     }
 
     let fullPrompt = `${systemPrompt} \n\n`;

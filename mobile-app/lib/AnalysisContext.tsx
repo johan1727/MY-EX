@@ -120,6 +120,7 @@ export const AnalysisProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 parsedMessages,
                 exSenderName,
                 exName,
+                relationshipType, // Pass relationship type
                 (p, s) => {
                     // Map 0-100 to 60-90% global
                     const mapped = 60 + Math.round(p * 0.3);
@@ -131,7 +132,7 @@ export const AnalysisProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
             // 4. Construct Profile Data
             const profileData: any = {
-                id: `local_${Date.now()}`,
+                id: updateProfileId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`),
                 exName,
                 userName: detectedUserName,
                 profile,

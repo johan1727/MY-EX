@@ -1,0 +1,313 @@
+import React, { useState } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    ScrollView,
+    TouchableOpacity,
+    ActivityIndicator,
+    Platform,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
+import { Check } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { supabase } from '../lib/supabase';
+
+const PLANS = [
+    {
+        id: 'explorer',
+        name: 'Explorer',
+        price: 89,
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER || 'price_1RxtmyP3GWiMooGS4yHwDZmW',
+        color: '#3b82f6',
+        features: [
+            'Límites más amplios de uso',
+            'Crea múltiples perfiles de ex',
+            'Análisis profundo de patrones',
+            'REMI recuerda tu historia completa',
+        ],
+    },
+    {
+        id: 'warrior',
+        name: 'Warrior',
+        price: 299,
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR || 'price_1RxtnNP3GWiMooGSgROuc422',
+        color: '#f97316',
+        popular: true,
+        features: [
+            'Uso extendido sin interrupciones',
+            'Respuestas más largas y detalladas',
+            'Decodificador de mensajes incluido',
+            'Respuestas prioritarias',
+        ],
+    },
+    {
+        id: 'phoenix',
+        name: 'Phoenix',
+        price: 449,
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX || 'price_1RxtnWP3GWiMooGS5kpAvvXn',
+        color: '#ec4899',
+        badge: 'MEJOR VALOR',
+        features: [
+            'Uso ilimitado',
+            'Acceso total sin restricciones',
+            '20 perfiles de ex',
+            'Soporte premium prioritario',
+        ],
+    },
+];
+
+export default function SubscribePage() {
+    const router = useRouter();
+    const [loading, setLoading] = useState<string | null>(null);
+
+    const handleSubscribe = async (plan: typeof PLANS[0]) => {
+        if (Platform.OS !== 'web') {
+            alert('Los pagos web solo funcionan en navegador. Por favor usa la app móvil para suscribirte.');
+            return;
+        }
+
+        setLoading(plan.id);
+
+        try {
+            // Get current user
+            const { data: { user } } = await supabase.auth.getUser();
+
+            if (!user) {
+                router.push('/auth');
+                return;
+            }
+
+            // Call API to create checkout session
+            const response = await fetch('/api/stripe/create-checkout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    priceId: plan.priceId,
+                    userId: user.id,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Error al crear sesión de pago');
+            }
+
+            // Redirect to Stripe Checkout
+            if (Platform.OS === 'web') {
+                window.location.href = data.sessionUrl;
+            }
+        } catch (error: any) {
+            console.error('Error subscribing:', error);
+            alert(error.message || 'Error al procesar el pago');
+        } finally {
+            setLoading(null);
+        }
+    };
+
+    return (
+        <LinearGradient
+            colors={['#0f0f23', '#1a0a2e', '#2d1b4e']}
+            style={styles.container}
+        >
+            <StatusBar style="light" />
+
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Header */}
+                <View style={styles.header}>
+                    <Text style={styles.title}>Elige tu plan</Text>
+                    <Text style={styles.subtitle}>
+                        Mejora tu experiencia con REMI
+                    </Text>
+                </View>
+
+                {/* Plans */}
+                <View style={styles.plansContainer}>
+                    {PLANS.map((plan) => (
+                        <View
+                            key={plan.id}
+                            style={[
+                                styles.planCard,
+                                plan.popular && styles.popularCard,
+                            ]}
+                        >
+                            {plan.badge && (
+                                <View style={styles.badge}>
+                                    <Text style={styles.badgeText}>{plan.badge}</Text>
+                                </View>
+                            )}
+
+                            <Text style={styles.planName}>{plan.name}</Text>
+
+                            <View style={styles.priceContainer}>
+                                <Text style={styles.currency}>MX$</Text>
+                                <Text style={styles.price}>{plan.price}.00</Text>
+                                <Text style={styles.period}>/mes</Text>
+                            </View>
+
+                            <View style={styles.featuresContainer}>
+                                {plan.features.map((feature, index) => (
+                                    <View key={index} style={styles.featureRow}>
+                                        <Check size={20} color="#22c55e" />
+                                        <Text style={styles.featureText}>{feature}</Text>
+                                    </View>
+                                ))}
+                            </View>
+
+                            <TouchableOpacity
+                                style={[
+                                    styles.button,
+                                    { backgroundColor: plan.color },
+                                    loading === plan.id && styles.buttonDisabled,
+                                ]}
+                                onPress={() => handleSubscribe(plan)}
+                                disabled={loading !== null}
+                                activeOpacity={0.8}
+                            >
+                                {loading === plan.id ? (
+                                    <ActivityIndicator color="#fff" />
+                                ) : (
+                                    <Text style={styles.buttonText}>
+                                        Elegir {plan.name}
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    ))}
+                </View>
+
+                {/* Footer */}
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>
+                        💳 Pago seguro con Stripe
+                    </Text>
+                    <Text style={styles.footerText}>
+                        ✨ Cancela cuando quieras
+                    </Text>
+                </View>
+            </ScrollView>
+        </LinearGradient>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+    },
+    scrollContent: {
+        padding: 24,
+        paddingTop: 60,
+    },
+    header: {
+        alignItems: 'center',
+        marginBottom: 40,
+    },
+    title: {
+        fontSize: 32,
+        fontWeight: '900',
+        color: '#fff',
+        marginBottom: 8,
+    },
+    subtitle: {
+        fontSize: 16,
+        color: 'rgba(255, 255, 255, 0.6)',
+    },
+    plansContainer: {
+        gap: 20,
+    },
+    planCard: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderRadius: 20,
+        padding: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    popularCard: {
+        borderColor: '#f97316',
+        borderWidth: 2,
+    },
+    badge: {
+        position: 'absolute',
+        top: -12,
+        right: 20,
+        backgroundColor: '#ec4899',
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    badgeText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    planName: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: '#fff',
+        marginBottom: 16,
+    },
+    priceContainer: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+        marginBottom: 24,
+    },
+    currency: {
+        fontSize: 20,
+        color: '#9ca3af',
+        marginRight: 4,
+    },
+    price: {
+        fontSize: 48,
+        fontWeight: '900',
+        color: '#fff',
+    },
+    period: {
+        fontSize: 16,
+        color: '#9ca3af',
+        marginLeft: 4,
+    },
+    featuresContainer: {
+        gap: 12,
+        marginBottom: 24,
+    },
+    featureRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    featureText: {
+        fontSize: 14,
+        color: 'rgba(255, 255, 255, 0.8)',
+        flex: 1,
+    },
+    button: {
+        height: 56,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    buttonDisabled: {
+        opacity: 0.5,
+    },
+    buttonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    footer: {
+        alignItems: 'center',
+        marginTop: 40,
+        gap: 8,
+    },
+    footerText: {
+        color: 'rgba(255, 255, 255, 0.5)',
+        fontSize: 14,
+    },
+});

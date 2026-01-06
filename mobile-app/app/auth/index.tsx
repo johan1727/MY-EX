@@ -238,8 +238,11 @@ export default function AuthScreen() {
     };
 
     return (
-        <View style={styles.container}>
-            <StatusBar style="dark" />
+        <LinearGradient
+            colors={['#0f0f23', '#1a0a2e', '#2d1b4e']}
+            style={styles.container}
+        >
+            <StatusBar style="light" />
 
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -254,9 +257,17 @@ export default function AuthScreen() {
                     <View style={styles.content}>
                         {!showEmailForm ? (
                             <>
-                                {/* Header */}
+                                {/* Header with gradient text */}
                                 <View style={styles.header}>
-                                    <Text style={styles.title}>Comienza tu sanación●</Text>
+                                    <LinearGradient
+                                        colors={['#a855f7', '#ec4899', '#f97316']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                        style={styles.titleGradient}
+                                    >
+                                        <Text style={styles.title}>Comienza tu sanación ●</Text>
+                                    </LinearGradient>
+                                    <Text style={styles.subtitle}>Tu coach de IA para superar el pasado</Text>
                                 </View>
 
                                 {/* OAuth Buttons */}
@@ -266,8 +277,9 @@ export default function AuthScreen() {
                                         <TouchableOpacity
                                             style={[styles.button, styles.appleButton]}
                                             disabled={oauthLoading !== null}
+                                            activeOpacity={0.8}
                                         >
-                                            <Text style={styles.appleButtonText}>🍎 Continue with Apple</Text>
+                                            <Text style={styles.appleButtonText}>🍎  Continue with Apple</Text>
                                         </TouchableOpacity>
                                     )}
 
@@ -276,24 +288,36 @@ export default function AuthScreen() {
                                         style={[styles.button, styles.googleButton]}
                                         onPress={() => handleOAuthLogin('google')}
                                         disabled={oauthLoading !== null}
+                                        activeOpacity={0.8}
                                     >
                                         {oauthLoading === 'google' ? (
                                             <ActivityIndicator color="#fff" size="small" />
                                         ) : (
-                                            <Text style={styles.googleButtonText}>Continue with Google</Text>
+                                            <>
+                                                <Text style={styles.googleIcon}>G</Text>
+                                                <Text style={styles.googleButtonText}>Continue with Google</Text>
+                                            </>
                                         )}
                                     </TouchableOpacity>
 
-                                    {/* Sign Up Button */}
-                                    <TouchableOpacity
-                                        style={[styles.button, styles.signupButton]}
-                                        onPress={() => {
-                                            setIsSignUp(true);
-                                            setShowEmailForm(true);
-                                        }}
+                                    {/* Sign Up Button with gradient */}
+                                    <LinearGradient
+                                        colors={['#a855f7', '#8b5cf6']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                        style={[styles.button, styles.gradientButton]}
                                     >
-                                        <Text style={styles.signupButtonText}>Sign up</Text>
-                                    </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.gradientButtonInner}
+                                            onPress={() => {
+                                                setIsSignUp(true);
+                                                setShowEmailForm(true);
+                                            }}
+                                            activeOpacity={0.8}
+                                        >
+                                            <Text style={styles.signupButtonText}>Sign up</Text>
+                                        </TouchableOpacity>
+                                    </LinearGradient>
 
                                     {/* Log In Button */}
                                     <TouchableOpacity
@@ -302,6 +326,7 @@ export default function AuthScreen() {
                                             setIsSignUp(false);
                                             setShowEmailForm(true);
                                         }}
+                                        activeOpacity={0.8}
                                     >
                                         <Text style={styles.loginButtonText}>Log in</Text>
                                     </TouchableOpacity>
@@ -422,7 +447,7 @@ export default function AuthScreen() {
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
-        </View>
+        </LinearGradient>
     );
 }
 
@@ -430,7 +455,6 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#000000',
     },
     keyboardView: {
         flex: 1,
@@ -450,58 +474,89 @@ const styles = StyleSheet.create({
     },
     header: {
         alignItems: 'center',
-        marginBottom: 48,
+        marginBottom: 56,
+    },
+    titleGradient: {
+        borderRadius: 16,
+        padding: 4,
+        marginBottom: 12,
     },
     title: {
-        fontSize: 32,
-        fontWeight: 'bold',
+        fontSize: 34,
+        fontWeight: '900',
         color: '#FFFFFF',
         textAlign: 'center',
+        letterSpacing: -0.5,
+    },
+    subtitle: {
+        fontSize: 16,
+        color: 'rgba(255, 255, 255, 0.6)',
+        textAlign: 'center',
+        marginTop: 8,
     },
     buttonsContainer: {
-        gap: 12,
+        gap: 14,
     },
     button: {
-        height: 52,
-        borderRadius: 12,
+        height: 56,
+        borderRadius: 16,
         justifyContent: 'center',
         alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
     },
     appleButton: {
-        backgroundColor: '#1A1A1A',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: 'rgba(255, 255, 255, 0.2)',
     },
     appleButtonText: {
         color: '#FFF',
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: '600',
     },
     googleButton: {
-        backgroundColor: '#2A2A2A',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    googleIcon: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#4285F4',
     },
     googleButtonText: {
-        color: '#FFF',
+        color: '#1f1f1f',
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: '600',
     },
-    signupButton: {
-        backgroundColor: '#A855F7',
+    gradientButton: {
+        overflow: 'hidden',
+    },
+    gradientButtonInner: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     signupButtonText: {
         color: '#FFF',
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: '700',
     },
     loginButton: {
-        backgroundColor: 'transparent',
-        borderWidth: 1,
-        borderColor: '#444',
+        backgroundColor: 'rgba(168, 85, 247, 0.1)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(168, 85, 247, 0.4)',
     },
     loginButtonText: {
-        color: '#999',
+        color: '#a855f7',
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: '600',
     },
     backBtn: {
         position: 'absolute',

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
     View,
     Text,
@@ -83,6 +83,30 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
     // State for user menu dropdown
     const [showUserMenu, setShowUserMenu] = useState(false);
 
+    // Custom Alert State
+    interface AlertConfig {
+        visible: boolean;
+        title: string;
+        message: string;
+        buttons?: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' | 'confirm' }[];
+        type?: 'success' | 'error' | 'info' | 'warning';
+    }
+    const [customAlert, setCustomAlert] = useState<AlertConfig>({ visible: false, title: '', message: '' });
+
+    const showAlert = (title: string, message: string, buttons?: AlertConfig['buttons'], type: AlertConfig['type'] = 'info') => {
+        setCustomAlert({
+            visible: true,
+            title,
+            message,
+            buttons,
+            type
+        });
+    };
+
+    const closeAlert = () => {
+        setCustomAlert(prev => ({ ...prev, visible: false }));
+    };
+
     // Logout function with confirmation
     const handleLogout = () => {
         haptics.impact(haptics.ImpactFeedbackStyle.Medium);
@@ -102,23 +126,19 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
                 router.replace('/auth');
             } catch (error: any) {
                 console.error('[Logout] Error:', error);
-                if (Platform.OS === 'web') {
-                    alert('Error al cerrar sesión: ' + error.message);
-                } else {
-                    Alert.alert('Error', 'No se pudo cerrar sesión.');
-                }
+                showAlert('Error', 'No se pudo cerrar sesión.', [{ text: 'OK' }], 'error');
             }
         };
 
-        if (Platform.OS === 'web') {
-            const confirmed = confirm('¿Cerrar sesión?');
-            if (confirmed) executeLogout();
-        } else {
-            Alert.alert('Cerrar Sesión', '¿Estás seguro?', [
-                { text: 'Cancelar', style: 'cancel' },
-                { text: 'Cerrar Sesión', style: 'destructive', onPress: executeLogout }
-            ]);
-        }
+        showAlert(
+            'Cerrar Sesión',
+            '¿Estás seguro que deseas salir?',
+            [
+                { text: 'Cancelar', style: 'cancel', onPress: closeAlert },
+                { text: 'Cerrar Sesión', style: 'destructive', onPress: () => { closeAlert(); executeLogout(); } }
+            ],
+            'warning'
+        );
     };
 
     const handleEditPress = (p: any) => {
@@ -162,19 +182,15 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
             setMenuProfile(null);
         };
 
-        if (Platform.OS === 'web') {
-            const confirmed = confirm(`¿Eliminar perfil "${menuProfile.exName}"? Esta acción no se puede deshacer.`);
-            if (confirmed) doDelete();
-        } else {
-            Alert.alert(
-                'Eliminar Perfil',
-                `¿Eliminar "${menuProfile.exName}"? Esta acción no se puede deshacer.`,
-                [
-                    { text: 'Cancelar', style: 'cancel' },
-                    { text: 'Eliminar', style: 'destructive', onPress: doDelete }
-                ]
-            );
-        }
+        showAlert(
+            'Eliminar Perfil',
+            `¿Eliminar a "${menuProfile.exName}"? Esta acción no se puede deshacer.`,
+            [
+                { text: 'Cancelar', style: 'cancel', onPress: closeAlert },
+                { text: 'Eliminar', style: 'destructive', onPress: () => { closeAlert(); doDelete(); } }
+            ],
+            'destructive' as any // Type assertion for custom type matching
+        );
     };
 
     const handleUpdateProfile = async () => {
@@ -188,7 +204,7 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
                 // 1. Cargar conversaciones existentes
                 const { data: { user } } = await supabase.auth.getUser();
                 if (!user) {
-                    Alert.alert('Error', 'Debes iniciar sesión para actualizar');
+                    showAlert('Error', 'Debes iniciar sesión para actualizar', [{ text: 'OK' }], 'error');
                     return;
                 }
 
@@ -202,7 +218,7 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
                     .maybeSingle();
 
                 if (!conv || !conv.messages || conv.messages.length === 0) {
-                    Alert.alert('Info', 'No hay conversaciones para analizar aún');
+                    showAlert('Info', 'No hay conversaciones para analizar aún', [{ text: 'OK' }], 'info');
                     return;
                 }
 
@@ -243,37 +259,26 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
                 );
 
                 console.log('[Sidebar] ✅ Perfil actualizado con mejoras');
-                // Silently updated - changes will be visible immediately
+                showAlert('Éxito', 'Perfil actualizado correctamente.', [{ text: 'OK', onPress: closeAlert }], 'success');
             } catch (error: any) {
                 console.error('[Sidebar] Error actualizando perfil:', error);
-                if (Platform.OS === 'web') {
-                    alert('Error al actualizar: ' + error.message);
-                } else {
-                    Alert.alert('Error', 'No se pudo actualizar el perfil');
-                }
+                showAlert('Error', 'No se pudo actualizar el perfil', [{ text: 'OK' }], 'error');
             }
         };
 
-        if (Platform.OS === 'web') {
-            const confirmed = confirm(
-                `¿Actualizar "${menuProfile.exName}" con las nuevas mejoras?\n\n` +
-                `Se mantendrán todas las conversaciones.`
-            );
-            if (confirmed) doUpdate();
-        } else {
-            Alert.alert(
-                '🔄 Actualizar Perfil',
-                `Esto aplicará las nuevas mejoras a "${menuProfile.exName}":\n\n` +
-                `✅ Detección de emojis favoritos\n` +
-                `✅ Palabras signature\n` +
-                `✅ Memoria episódica\n\n` +
-                `Tus conversaciones se mantendrán intactas.`,
-                [
-                    { text: 'Cancelar', style: 'cancel' },
-                    { text: '🔄 Actualizar', onPress: doUpdate }
-                ]
-            );
-        }
+        showAlert(
+            '🔄 Actualizar Perfil',
+            `Esto aplicará las nuevas mejoras a "${menuProfile.exName}":\n\n` +
+            `✅ Detección de emojis favoritos\n` +
+            `✅ Palabras signature\n` +
+            `✅ Memoria episódica\n\n` +
+            `Tus conversaciones se mantendrán intactas.`,
+            [
+                { text: 'Cancelar', style: 'cancel', onPress: closeAlert },
+                { text: 'Actualizar', onPress: () => { closeAlert(); doUpdate(); } }
+            ],
+            'info'
+        );
     };
 
     const handleExportChat = async () => {
@@ -322,10 +327,10 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
             }
 
             if (!savedConv) {
-                Alert.alert(
+                showAlert(
                     '📭 Sin conversación guardada',
                     `No encontramos mensajes guardados para "${menuProfile.exName}".\n\nAsegúrate de chatear primero con este perfil.`,
-                    [{ text: 'Entendido', style: 'default' }]
+                    [{ text: 'Entendido', onPress: closeAlert }]
                 );
                 return;
             }
@@ -333,7 +338,7 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
             const messages = JSON.parse(savedConv);
 
             if (messages.length === 0) {
-                Alert.alert('📭 Chat vacío', 'La conversación está vacía.');
+                showAlert('📭 Chat vacío', 'La conversación está vacía.', [{ text: 'OK', onPress: closeAlert }]);
                 return;
             }
 
@@ -349,7 +354,7 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
             if (Platform.OS === 'web') {
                 // Web: copy to clipboard
                 navigator.clipboard?.writeText(exportText);
-                alert('✅ ¡Conversación copiada al portapapeles!');
+                showAlert('✅ Éxito', '¡Conversación copiada al portapapeles!', [{ text: 'OK', onPress: closeAlert }], 'success');
             } else {
                 // Mobile: share
                 await Share.share({
@@ -359,7 +364,7 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
             }
         } catch (error) {
             console.error('Export error:', error);
-            Alert.alert('❌ Error', 'No se pudo exportar la conversación. Intenta de nuevo.');
+            showAlert('❌ Error', 'No se pudo exportar la conversación. Intenta de nuevo.', [{ text: 'OK', onPress: closeAlert }], 'error');
         }
     };
 
@@ -718,6 +723,63 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
                     </View>
                 </TouchableOpacity>
             </Modal>
+
+            {/* Custom Alert Modal */}
+            <Modal
+                transparent
+                visible={customAlert.visible}
+                animationType="fade"
+                onRequestClose={closeAlert}
+            >
+                <View style={styles.alertOverlay}>
+                    <View style={styles.alertBox}>
+                        <View style={[
+                            styles.alertIconContainer,
+                            customAlert.type === 'error' ? { backgroundColor: 'rgba(239, 68, 68, 0.1)' } :
+                                customAlert.type === 'warning' ? { backgroundColor: 'rgba(245, 158, 11, 0.1)' } :
+                                    customAlert.type === 'success' ? { backgroundColor: 'rgba(34, 197, 94, 0.1)' } :
+                                        { backgroundColor: 'rgba(59, 130, 246, 0.1)' }
+                        ]}>
+                            {customAlert.type === 'error' && <X size={32} color="#ef4444" />}
+                            {customAlert.type === 'warning' && <LogOut size={32} color="#f59e0b" />}
+                            {customAlert.type === 'success' && <Sparkles size={32} color="#22c55e" />}
+                            {customAlert.type === 'info' && <HelpCircle size={32} color="#3b82f6" />}
+                        </View>
+                        <Text style={styles.alertTitle}>{customAlert.title}</Text>
+                        <Text style={styles.alertMessage}>
+                            {customAlert.message}
+                        </Text>
+                        <View style={styles.alertButtons}>
+                            {!customAlert.buttons || customAlert.buttons.length === 0 ? (
+                                <TouchableOpacity
+                                    style={[styles.alertButton, styles.alertButtonPrimary]}
+                                    onPress={closeAlert}
+                                >
+                                    <Text style={styles.alertButtonText}>OK</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                customAlert.buttons.map((btn, idx) => (
+                                    <TouchableOpacity
+                                        key={idx}
+                                        style={[
+                                            styles.alertButton,
+                                            btn.style === 'cancel' ? styles.alertButtonCancel :
+                                                btn.style === 'destructive' ? styles.alertButtonDestructive :
+                                                    styles.alertButtonPrimary
+                                        ]}
+                                        onPress={btn.onPress || closeAlert}
+                                    >
+                                        <Text style={[
+                                            styles.alertButtonText,
+                                            btn.style === 'destructive' && { color: '#ef4444' }
+                                        ]}>{btn.text}</Text>
+                                    </TouchableOpacity>
+                                ))
+                            )}
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -802,82 +864,108 @@ const styles = StyleSheet.create({
         marginBottom: 2,
     },
     profileItemActive: {
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: 'rgba(168, 85, 247, 0.1)',
     },
     profileName: {
         flex: 1,
-        color: '#9ca3af',
-        fontSize: 14,
+        color: '#d1d5db',
+        fontSize: 15,
+        fontWeight: '500',
     },
     profileNameActive: {
         color: '#fff',
+        fontWeight: '600',
     },
     editBtn: {
         padding: 4,
     },
-    quickActions: {
-        marginTop: 20,
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.1)',
+    analysisBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        backgroundColor: 'rgba(168, 85, 247, 0.1)',
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: 'rgba(168, 85, 247, 0.2)',
+        marginLeft: 36, // Indent to align below name
+        marginBottom: 8,
+        alignSelf: 'flex-start',
     },
-    quickAction: {
+    analysisBtnText: {
+        fontSize: 11,
+        color: '#a855f7',
+        marginLeft: 4,
+        fontWeight: '500',
+    },
+    coachSection: {
+        marginTop: 20,
+        marginBottom: 20,
+    },
+    coachEmptyBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
-        paddingVertical: 10,
-        paddingHorizontal: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(168, 85, 247, 0.3)',
+        borderStyle: 'dashed',
+        backgroundColor: 'rgba(168, 85, 247, 0.05)',
     },
-    quickActionText: {
-        color: '#9ca3af',
+    coachEmptyText: {
+        color: '#a855f7',
         fontSize: 14,
+        fontWeight: '500',
+    },
+    guestBanner: {
+        margin: 12,
+        padding: 12,
+        backgroundColor: '#262626',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#404040',
+    },
+    guestBannerText: {
+        color: '#9ca3af',
+        fontSize: 12,
+        marginBottom: 10,
+        lineHeight: 16,
+    },
+    guestBannerBtn: {
+        backgroundColor: '#fff',
+        paddingVertical: 8,
+        borderRadius: 6,
+        alignItems: 'center',
+    },
+    guestBannerBtnText: {
+        color: '#000',
+        fontSize: 12,
+        fontWeight: '600',
     },
     footer: {
+        padding: 16,
         borderTopWidth: 1,
         borderTopColor: 'rgba(255,255,255,0.1)',
-        padding: 12,
-    },
-    userMenuDropdown: {
-        backgroundColor: '#2a2a2a',
-        borderRadius: 10,
-        marginBottom: 10,
-        paddingVertical: 6,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
-    },
-    userMenuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        paddingVertical: 10,
-        paddingHorizontal: 14,
-    },
-    userMenuText: {
-        color: '#e5e7eb',
-        fontSize: 14,
-    },
-    userMenuDivider: {
-        height: 1,
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        marginVertical: 6,
+        backgroundColor: '#171717',
     },
     userSection: {
-        marginBottom: 10,
+        marginBottom: 12,
     },
     userBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 10,
-        paddingVertical: 8,
-        paddingHorizontal: 4,
+        gap: 12,
     },
     userAvatar: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         backgroundColor: '#3b82f6',
         alignItems: 'center',
         justifyContent: 'center',
+        overflow: 'hidden',
     },
     userInfo: {
         flex: 1,
@@ -885,227 +973,242 @@ const styles = StyleSheet.create({
     userName: {
         color: '#fff',
         fontSize: 14,
-        fontWeight: '500',
+        fontWeight: '600',
     },
     userPlan: {
         color: '#f59e0b',
         fontSize: 12,
+        marginTop: 2,
     },
     userPlanFree: {
-        color: '#6b7280',
+        color: '#9ca3af',
         fontSize: 12,
+        marginTop: 2,
     },
     upgradeBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 6,
-        paddingVertical: 8,
-        paddingHorizontal: 14,
+        gap: 8,
         backgroundColor: 'rgba(245, 158, 11, 0.15)',
+        paddingVertical: 10,
         borderRadius: 8,
-        borderWidth: 1,
-        borderColor: 'rgba(245, 158, 11, 0.3)',
     },
     upgradeText: {
         color: '#f59e0b',
         fontSize: 13,
         fontWeight: '600',
     },
-    // Modal styles
+    userMenuDropdown: {
+        position: 'absolute',
+        bottom: '100%',
+        left: 16,
+        right: 16,
+        backgroundColor: '#262626',
+        borderRadius: 12,
+        padding: 8,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: '#404040',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 10,
+        zIndex: 100,
+    },
+    userMenuItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+    },
+    userMenuText: {
+        color: '#e5e7eb',
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    userMenuDivider: {
+        height: 1,
+        backgroundColor: '#404040',
+        marginVertical: 4,
+    },
+    // Modal Styles
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.8)',
+        backgroundColor: 'rgba(0,0,0,0.7)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
+        padding: 24,
     },
     modalContent: {
-        backgroundColor: '#1f1f1f',
-        borderRadius: 12,
-        padding: 20,
         width: '100%',
-        maxWidth: 300,
+        maxWidth: 320,
+        backgroundColor: '#1E1E1E',
+        borderRadius: 16,
+        padding: 20,
+        borderWidth: 1,
+        borderColor: '#333',
     },
     modalTitle: {
-        color: '#fff',
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: '600',
+        color: '#fff',
         marginBottom: 16,
         textAlign: 'center',
     },
     modalInput: {
-        backgroundColor: '#2a2a2a',
+        backgroundColor: '#262626',
         borderRadius: 8,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
+        padding: 12,
         color: '#fff',
-        fontSize: 15,
-        marginBottom: 16,
+        fontSize: 16,
+        borderWidth: 1,
+        borderColor: '#404040',
+        marginBottom: 20,
     },
     modalButtons: {
         flexDirection: 'row',
-        gap: 10,
+        gap: 12,
     },
     modalCancelBtn: {
         flex: 1,
-        paddingVertical: 10,
+        paddingVertical: 12,
         borderRadius: 8,
+        backgroundColor: '#333',
         alignItems: 'center',
-        backgroundColor: '#2a2a2a',
     },
     modalCancelText: {
-        color: '#9ca3af',
+        color: '#fff',
         fontWeight: '500',
     },
     modalSaveBtn: {
         flex: 1,
-        paddingVertical: 10,
+        paddingVertical: 12,
         borderRadius: 8,
+        backgroundColor: '#a855f7',
         alignItems: 'center',
-        backgroundColor: '#3b82f6',
     },
     modalSaveText: {
         color: '#fff',
         fontWeight: '600',
     },
     profileMenuContent: {
-        backgroundColor: '#2a2a2a',
+        position: 'absolute',
+        top: '20%',
+        left: 20, // Adjust as needed, or make it center
+        backgroundColor: '#1E1E1E',
         borderRadius: 12,
-        padding: 16,
-        width: '85%',
-        maxWidth: 280,
+        padding: 8,
+        width: 200,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.5,
+        shadowRadius: 10,
+        elevation: 10,
     },
     profileMenuTitle: {
-        color: '#fff',
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '600',
-        marginBottom: 16,
-        textAlign: 'center',
+        color: '#6b7280',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.1)',
+        marginBottom: 4,
     },
     profileMenuItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 12,
         gap: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
     },
     profileMenuText: {
         color: '#e5e7eb',
-        fontSize: 15,
+        fontSize: 14,
     },
     profileMenuDivider: {
         height: 1,
         backgroundColor: 'rgba(255,255,255,0.1)',
-        marginVertical: 8,
+        marginVertical: 4,
     },
-    // Coach IA Section Styles
-    coachSection: {
-        marginTop: 16,
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.1)',
-    },
-    coachHeader: {
-        flexDirection: 'row',
+    // Custom Alert Styles
+    alertOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        justifyContent: 'center',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 8,
+        padding: 24,
     },
-    coachHeaderLeft: {
-        flexDirection: 'row',
+    alertBox: {
+        backgroundColor: '#1E1E1E',
+        borderRadius: 20,
+        padding: 24,
+        width: '100%',
+        maxWidth: 340,
+        borderWidth: 1,
+        borderColor: '#333',
         alignItems: 'center',
-        gap: 8,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
+        elevation: 10,
     },
-    coachTitle: {
-        color: '#a855f7',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    newChatSmallBtn: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: 'rgba(168, 85, 247, 0.2)',
+    alertIconContainer: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
         alignItems: 'center',
         justifyContent: 'center',
+        marginBottom: 20,
     },
-    coachChatItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-        paddingVertical: 8,
-        paddingHorizontal: 10,
-        borderRadius: 8,
-        marginBottom: 4,
-    },
-    coachChatItemActive: {
-        backgroundColor: 'rgba(168, 85, 247, 0.3)',
-    },
-    coachChatTitle: {
-        color: '#9ca3af',
-        fontSize: 13,
-        flex: 1,
-    },
-    coachChatTitleActive: {
+    alertTitle: {
         color: '#fff',
-    },
-    coachEmptyBtn: {
-        flexDirection: 'row',
-        gap: 8,
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        borderRadius: 8,
-        backgroundColor: 'rgba(168, 85, 247, 0.1)',
-        alignItems: 'center',
-    },
-    coachEmptyText: {
-        color: '#a855f7',
-        fontSize: 13,
-        fontWeight: '500',
-    },
-    analysisBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        paddingVertical: 8,
-        paddingHorizontal: 32,
-        marginBottom: 8,
-        backgroundColor: 'rgba(168, 85, 247, 0.1)',
-        borderRadius: 8,
-        marginLeft: 26,
-    },
-    analysisBtnText: {
-        color: '#a855f7',
-        fontSize: 12,
-        fontWeight: '500',
-    },
-    // ChatGPT-style guest registration banner
-    guestBanner: {
-        padding: 16,
-        marginHorizontal: 12,
-        marginBottom: 12,
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-    },
-    guestBannerText: {
-        color: '#9ca3af',
-        fontSize: 13,
-        lineHeight: 18,
+        fontSize: 20,
+        fontWeight: 'bold',
         marginBottom: 12,
         textAlign: 'center',
     },
-    guestBannerBtn: {
-        backgroundColor: '#fff',
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        borderRadius: 24,
+    alertMessage: {
+        color: '#9ca3af',
+        fontSize: 15,
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 24,
+    },
+    alertButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        width: '100%',
+    },
+    alertButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: '#333',
         alignItems: 'center',
     },
-    guestBannerBtnText: {
-        color: '#000',
-        fontSize: 14,
+    alertButtonPrimary: {
+        backgroundColor: '#3b82f6',
+    },
+    alertButtonCancel: {
+        backgroundColor: '#333',
+    },
+    alertButtonDestructive: {
+        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+        borderWidth: 1,
+        borderColor: '#ef4444',
+    },
+    alertButtonText: {
+        color: '#fff',
         fontWeight: '600',
+        fontSize: 15,
     },
 });

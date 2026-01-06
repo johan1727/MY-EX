@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Alert, Platform, Share, Linking, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Alert, Platform, Share, Linking, StyleSheet, Modal } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { haptics } from '../lib/haptics';
 import { storage } from '../lib/storage';
 import { loadProfiles, deleteProfile } from '../lib/profileSync';
 import { extractConversationContext } from '../lib/conversationHelpers';
 import { extractAndSaveMemoryFromConversation } from '../lib/memorySync';
-import { User, LogOut, LogIn, Mail, Calendar, Settings, Shield, ChevronRight, Edit2, Share2, Star, ArrowLeft, Sparkles, Trash2, Download } from 'lucide-react-native';
+import { User, LogOut, LogIn, Mail, Calendar, Settings, Shield, ChevronRight, Edit2, Share2, Star, ArrowLeft, Sparkles, Trash2, Download, HelpCircle, X } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -39,6 +39,30 @@ export default function ProfileScreen() {
     const [tier, setTier] = useState('Free');
     const [joined, setJoined] = useState('');
     const [isGuest, setIsGuest] = useState(true);
+
+    // Custom Alert State
+    interface AlertConfig {
+        visible: boolean;
+        title: string;
+        message: string;
+        buttons?: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' | 'confirm' }[];
+        type?: 'success' | 'error' | 'info' | 'warning';
+    }
+    const [customAlert, setCustomAlert] = useState<AlertConfig>({ visible: false, title: '', message: '' });
+
+    const showAlert = (title: string, message: string, buttons?: AlertConfig['buttons'], type: AlertConfig['type'] = 'info') => {
+        setCustomAlert({
+            visible: true,
+            title,
+            message,
+            buttons,
+            type
+        });
+    };
+
+    const closeAlert = () => {
+        setCustomAlert(prev => ({ ...prev, visible: false }));
+    };
 
     useEffect(() => {
         loadProfile();
@@ -83,10 +107,10 @@ export default function ProfileScreen() {
                 executeSignOut();
             }
         } else {
-            Alert.alert('Cerrar Sesión', '¿Estás seguro?', [
+            showAlert('Cerrar Sesión', '¿Estás seguro?', [
                 { text: 'Cancelar', style: 'cancel' },
-                { text: 'Cerrar Sesión', style: 'destructive', onPress: executeSignOut }
-            ]);
+                { text: 'Cerrar Sesión', style: 'destructive', onPress: () => { closeAlert(); executeSignOut(); } }
+            ], 'warning');
         }
     };
 
@@ -130,20 +154,21 @@ export default function ProfileScreen() {
 
                 await supabase.auth.signOut();
 
-                Alert.alert(
+                showAlert(
                     '✅ Cuenta eliminada',
                     'Tu cuenta y todos tus datos han sido eliminados.',
-                    [{ text: 'OK', onPress: () => router.replace('/auth') }]
+                    [{ text: 'OK', onPress: () => { closeAlert(); router.replace('/auth'); } }],
+                    'success'
                 );
 
             } catch (error: any) {
                 console.error('[Profile] Delete account error:', error);
-                Alert.alert('Error', 'No se pudo eliminar la cuenta. Intenta de nuevo.');
+                showAlert('Error', 'No se pudo eliminar la cuenta. Intenta de nuevo.', [{ text: 'OK' }], 'error');
             }
         };
 
         // Double confirmation for account deletion
-        Alert.alert(
+        showAlert(
             '⚠️ Eliminar Cuenta',
             '¿Estás SEGURO que deseas eliminar tu cuenta?\n\nEsta acción eliminará:\n• Todos tus perfiles de simulación\n• Todas tus conversaciones\n• Tu historial y datos\n\n⚠️ Esta acción NO se puede deshacer.',
             [
@@ -152,18 +177,20 @@ export default function ProfileScreen() {
                     text: 'Sí, Eliminar Todo',
                     style: 'destructive',
                     onPress: () => {
-                        // Second confirmation
-                        Alert.alert(
+                        // Second confirmation - triggers new alert state
+                        showAlert(
                             'Confirmación Final',
                             '¿Realmente deseas eliminar tu cuenta permanentemente?',
                             [
                                 { text: 'No, mantener cuenta', style: 'cancel' },
-                                { text: 'Sí, eliminar', style: 'destructive', onPress: executeDelete }
-                            ]
+                                { text: 'Sí, eliminar', style: 'destructive', onPress: () => { closeAlert(); executeDelete(); } }
+                            ],
+                            'warning'
                         );
                     }
                 }
-            ]
+            ],
+            'warning'
         );
     };
 
@@ -172,11 +199,11 @@ export default function ProfileScreen() {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) {
-                Alert.alert('Error', 'Necesitas iniciar sesión para exportar tus datos');
+                showAlert('Error', 'Necesitas iniciar sesión para exportar tus datos', [{ text: 'OK' }], 'error');
                 return;
             }
 
-            Alert.alert('📦 Exportando...', 'Esto puede tomar unos segundos');
+            showAlert('📦 Exportando...', 'Esto puede tomar unos segundos', [], 'info');
 
             const userId = user.id;
             const exportData: any = {
@@ -227,14 +254,16 @@ export default function ProfileScreen() {
                 title: 'REMI - Mis Datos'
             });
 
-            Alert.alert(
+            showAlert(
                 '✅ Datos exportados',
-                'Puedes copiar o compartir el archivo JSON con todos tus datos.'
+                'Puedes copiar o compartir el archivo JSON con todos tus datos.',
+                [{ text: 'OK', onPress: closeAlert }],
+                'success'
             );
 
         } catch (error: any) {
             console.error('[Profile] Export data error:', error);
-            Alert.alert('Error', 'No se pudieron exportar los datos. Intenta de nuevo.');
+            showAlert('Error', 'No se pudieron exportar los datos. Intenta de nuevo.', [{ text: 'OK' }], 'error');
         }
     };
 
@@ -294,6 +323,25 @@ export default function ProfileScreen() {
                         <ProfileItem label="Plan Actual" value={tier} icon={Shield} />
                     </View>
 
+                    {/* Dashboard Stats */}
+                    {!isGuest && (
+                        <View style={styles.card}>
+                            <Text style={styles.sectionTitle}>ESTADÍSTICAS</Text>
+                            <View style={styles.statsGrid}>
+                                <View style={styles.statCard}>
+                                    <Text style={styles.statValue}>0</Text>
+                                    <Text style={styles.statLabel}>Perfiles Creados</Text>
+                                </View>
+                                <View style={styles.statCard}>
+                                    <Text style={styles.statValue}>0</Text>
+                                    <Text style={styles.statLabel}>Mensajes</Text>
+                                </View>
+                            </View>
+                            <Text style={styles.statsNote}>Las estadísticas se actualizan automáticamente</Text>
+                        </View>
+                    )}
+
+
                     <View style={styles.card}>
                         <Text style={styles.sectionTitle}>CONFIGURACIÓN</Text>
                         <SettingItem label="Preferencias" icon={Settings} onPress={() => router.push('/preferences')} />
@@ -344,6 +392,66 @@ export default function ProfileScreen() {
 
                 </ScrollView>
             </SafeAreaView>
+
+            {/* Custom Alert Modal */}
+            <Modal
+                transparent
+                visible={customAlert.visible}
+                animationType="fade"
+                onRequestClose={closeAlert}
+            >
+                <View style={styles.alertOverlay}>
+                    <View style={styles.alertBox}>
+                        <View style={[
+                            styles.alertIconContainer,
+                            customAlert.type === 'error' ? { backgroundColor: 'rgba(239, 68, 68, 0.1)' } :
+                                customAlert.type === 'warning' ? { backgroundColor: 'rgba(245, 158, 11, 0.1)' } :
+                                    customAlert.type === 'success' ? { backgroundColor: 'rgba(34, 197, 94, 0.1)' } :
+                                        { backgroundColor: 'rgba(59, 130, 246, 0.1)' }
+                        ]}>
+                            {customAlert.type === 'error' && <X size={32} color="#ef4444" />}
+                            {customAlert.type === 'warning' && <LogOut size={32} color="#f59e0b" />}
+                            {customAlert.type === 'success' && <Sparkles size={32} color="#22c55e" />}
+                            {customAlert.type === 'info' && <HelpCircle size={32} color="#3b82f6" />}
+                        </View>
+                        <Text style={styles.alertTitle}>{customAlert.title}</Text>
+                        <Text style={styles.alertMessage}>
+                            {customAlert.message}
+                        </Text>
+                        <View style={styles.alertButtons}>
+                            {!customAlert.buttons || customAlert.buttons.length === 0 ? (
+                                <TouchableOpacity
+                                    style={[styles.alertButton, styles.alertButtonPrimary]}
+                                    onPress={closeAlert}
+                                >
+                                    <Text style={styles.alertButtonText}>OK</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                customAlert.buttons.map((btn, idx) => (
+                                    <TouchableOpacity
+                                        key={idx}
+                                        style={[
+                                            styles.alertButton,
+                                            btn.style === 'cancel' ? styles.alertButtonCancel :
+                                                btn.style === 'destructive' ? styles.alertButtonDestructive :
+                                                    styles.alertButtonPrimary
+                                        ]}
+                                        onPress={() => {
+                                            if (btn.onPress) btn.onPress();
+                                            else closeAlert();
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.alertButtonText,
+                                            btn.style === 'destructive' && { color: '#ef4444' }
+                                        ]}>{btn.text}</Text>
+                                    </TouchableOpacity>
+                                ))
+                            )}
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -564,5 +672,112 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '700',
         letterSpacing: 2,
+    },
+    // Custom Alert Styles
+    alertOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    alertBox: {
+        backgroundColor: '#1E1E1E',
+        borderRadius: 20,
+        padding: 24,
+        width: '100%',
+        maxWidth: 340,
+        borderWidth: 1,
+        borderColor: '#333',
+        alignItems: 'center',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    alertIconContainer: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 20,
+    },
+    alertTitle: {
+        color: '#fff',
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    alertMessage: {
+        color: '#9ca3af',
+        fontSize: 15,
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 24,
+    },
+    alertButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        width: '100%',
+    },
+    alertButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: '#333',
+        alignItems: 'center',
+    },
+    alertButtonPrimary: {
+        backgroundColor: '#3b82f6',
+    },
+    alertButtonCancel: {
+        backgroundColor: '#333',
+    },
+    alertButtonDestructive: {
+        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+        borderWidth: 1,
+        borderColor: '#ef4444',
+    },
+    alertButtonText: {
+        color: '#fff',
+        fontWeight: '600',
+        fontSize: 15,
+    },
+    // Stats Dashboard Styles
+    statsGrid: {
+        flexDirection: 'row',
+        gap: 12,
+        marginBottom: 12,
+    },
+    statCard: {
+        flex: 1,
+        backgroundColor: '#000',
+        borderRadius: 16,
+        padding: 16,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    statValue: {
+        color: '#fff',
+        fontSize: 28,
+        fontWeight: '900',
+        marginBottom: 4,
+    },
+    statLabel: {
+        color: '#6b7280',
+        fontSize: 11,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    statsNote: {
+        color: '#6b7280',
+        fontSize: 11,
+        fontStyle: 'italic',
+        textAlign: 'center',
     },
 });

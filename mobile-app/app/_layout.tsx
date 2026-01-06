@@ -231,6 +231,7 @@ export default function RootLayout() {
                         <Stack.Screen name="tools/panic" />
                         {/* Main Simulator is now /(tabs)/chat, keeping import as tool */}
                         <Stack.Screen name="tools/ex-simulator/import" />
+                        <Stack.Screen name="tools/ex-simulator/analysis" />
                         <Stack.Screen name="tools/journal" />
                         <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
                     </Stack>

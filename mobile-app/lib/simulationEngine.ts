@@ -143,9 +143,9 @@ export async function getOrCreateSession(
     try {
         let stored: string | null = null;
 
-        if (Platform.OS === 'web') {
+        if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
             stored = localStorage.getItem(storageKey);
-        } else {
+        } else if (Platform.OS !== 'web') {
             stored = await SecureStore.getItemAsync(storageKey);
         }
 
@@ -174,9 +174,9 @@ export async function saveSession(session: SimulationSession): Promise<void> {
 
     // Guardar en localStorage
     try {
-        if (Platform.OS === 'web') {
+        if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
             localStorage.setItem(storageKey, serialized);
-        } else {
+        } else if (Platform.OS !== 'web') {
             await SecureStore.setItemAsync(storageKey, serialized);
         }
     } catch (e) {
@@ -559,9 +559,9 @@ export async function resetSession(profileId: string, userId: string): Promise<S
 
     // Limpiar localStorage
     try {
-        if (Platform.OS === 'web') {
+        if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
             localStorage.removeItem(storageKey);
-        } else {
+        } else if (Platform.OS !== 'web') {
             await SecureStore.deleteItemAsync(storageKey);
         }
     } catch (e) {

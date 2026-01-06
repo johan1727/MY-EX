@@ -166,11 +166,17 @@ export function extractConversationContext(
     messages: ParsedMessage[],
     targetName: string
 ) {
-    const targetSender = messages.find(m =>
-        m.sender.toLowerCase().includes(targetName.toLowerCase())
-    )?.sender || targetName;
+    // Safety check - if targetName is undefined/null, use first participant
+    const safeTargetName = targetName || '';
 
-    const otherSender = messages.find(m => m.sender !== targetSender)?.sender || 'Usuario';
+    const targetSender = safeTargetName
+        ? messages.find(m =>
+            m.sender && m.sender.toLowerCase().includes(safeTargetName.toLowerCase())
+        )?.sender || safeTargetName
+        : messages[0]?.sender || 'Persona';
+
+    const otherSender = messages.find(m => m.sender && m.sender !== targetSender)?.sender || 'Usuario';
+
 
     return {
         participants: {

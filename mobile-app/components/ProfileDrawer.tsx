@@ -8,6 +8,7 @@ import {
     StyleSheet,
     Animated,
     Alert,
+    Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -25,7 +26,9 @@ import {
     ChevronUp,
     ChevronDown,
     Eye,
+
     Trash2,
+    HelpCircle,
 } from 'lucide-react-native';
 import { storage } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
@@ -44,12 +47,14 @@ interface ProfileDrawerProps {
     visible: boolean;
     onClose: () => void;
     currentProfileId?: string | null;
+    onProfileDeleted?: () => void;
 }
 
 export default function ProfileDrawer({
     visible,
     onClose,
-    currentProfileId
+    currentProfileId,
+    onProfileDeleted
 }: ProfileDrawerProps) {
     const router = useRouter();
     const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -58,6 +63,34 @@ export default function ProfileDrawer({
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [slideAnim] = useState(new Animated.Value(-300));
     const [userId, setUserId] = useState<string | null>(null); // Added userId state
+    // Custom Alert State
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [profileToDelete, setProfileToDelete] = useState<Profile | null>(null);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+    // Custom Alert State
+    interface AlertConfig {
+        visible: boolean;
+        title: string;
+        message: string;
+        buttons?: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' | 'confirm' }[];
+        type?: 'success' | 'error' | 'info' | 'warning';
+    }
+    const [customAlert, setCustomAlert] = useState<AlertConfig>({ visible: false, title: '', message: '' });
+
+    const showAlert = (title: string, message: string, buttons?: AlertConfig['buttons'], type: AlertConfig['type'] = 'info') => {
+        setCustomAlert({
+            visible: true,
+            title,
+            message,
+            buttons,
+            type
+        });
+    };
+
+    const closeAlert = () => {
+        setCustomAlert(prev => ({ ...prev, visible: false }));
+    };
 
     useEffect(() => {
         if (visible) {
@@ -111,14 +144,29 @@ export default function ProfileDrawer({
                 setIsPremium(subscription?.tier !== 'survivor');
                 setIsGuest(false);
             } else {
-                // Load from local storage (guest mode)
-                const localProfile = await storage.getItem('exSimulator_currentProfile');
-                if (localProfile) {
-                    const parsed = JSON.parse(localProfile);
-                    setProfiles([{
-                        id: 'local',
-                        exName: parsed.exName || 'Perfil Local'
-                    }]);
+                // Load from local storage (guest mode) - load ALL profiles
+                const allProfilesJson = await storage.getItem('exSimulator_allProfiles');
+                if (allProfilesJson) {
+                    const allProfiles = JSON.parse(allProfilesJson);
+                    console.log('[ProfileDrawer] Guest mode - loaded profiles:', allProfiles.length);
+                    setProfiles(allProfiles.map((p: any) => ({
+                        id: p.id || 'local',
+                        exName: p.exName || 'Perfil Local',
+                        timestamp: p.createdAt
+                    })));
+                } else {
+                    // Fallback: try loading current profile only
+                    const localProfile = await storage.getItem('exSimulator_currentProfile');
+                    if (localProfile) {
+                        const parsed = JSON.parse(localProfile);
+                        setProfiles([{
+                            id: parsed.id || 'local',
+                            exName: parsed.exName || 'Perfil Local',
+                            timestamp: parsed.createdAt
+                        }]);
+                    } else {
+                        setProfiles([]);
+                    }
                 }
                 setIsGuest(true);
             }
@@ -127,15 +175,37 @@ export default function ProfileDrawer({
         }
     };
 
+
     const handleProfileSelect = async (profile: Profile) => {
-        // Clear cached analysis view to force reload of selected profile
-        await storage.removeItem('analysis_view_profile');
-        // Load the selected profile
-        await storage.setItem('exSimulator_currentProfile', JSON.stringify(profile));
-        onClose();
-        // Router should already be on /(tabs) which is the chat
-        router.replace('/(tabs)');
+        try {
+            // Clear cached analysis view to force reload of selected profile
+            await storage.removeItem('analysis_view_profile');
+
+            // In guest mode, load the FULL profile from allProfiles (not just the minimal data)
+            const allProfilesJson = await storage.getItem('exSimulator_allProfiles');
+            if (allProfilesJson) {
+                const allProfiles = JSON.parse(allProfilesJson);
+                const fullProfile = allProfiles.find((p: any) => p.id === profile.id);
+                if (fullProfile) {
+                    console.log('[ProfileDrawer] Loading full profile:', fullProfile.id, 'with', Object.keys(fullProfile).length, 'keys');
+                    await storage.setItem('exSimulator_currentProfile', JSON.stringify(fullProfile));
+                } else {
+                    // Fallback to minimal profile if not found
+                    console.warn('[ProfileDrawer] Full profile not found, using minimal');
+                    await storage.setItem('exSimulator_currentProfile', JSON.stringify(profile));
+                }
+            } else {
+                await storage.setItem('exSimulator_currentProfile', JSON.stringify(profile));
+            }
+
+            onClose();
+            // Router should already be on /(tabs) which is the chat
+            router.replace('/(tabs)');
+        } catch (error) {
+            console.error('[ProfileDrawer] Error selecting profile:', error);
+        }
     };
+
 
     const handleNewSimulation = () => {
         onClose();
@@ -161,60 +231,70 @@ export default function ProfileDrawer({
         router.replace('/auth');
     };
 
+    const performDelete = async (profile: Profile) => {
+        try {
+            console.log('[Delete] Executing deletion for:', profile.id, profile.exName);
+
+            // Delete from Supabase if user is logged in
+            if (userId && profile.supabaseId) {
+                const { error } = await supabase
+                    .from('ex_profiles')
+                    .delete()
+                    .eq('id', profile.supabaseId)
+                    .eq('user_id', userId);
+
+                if (error) console.error('Error deleting from Supabase:', error);
+            }
+
+            // Delete from local storage list
+            const allProfiles = await storage.getItem('exSimulator_profiles');
+            if (allProfiles) {
+                const parsed = JSON.parse(allProfiles);
+                const updated = parsed.filter((p: Profile) => p.id !== profile.id);
+                await storage.setItem('exSimulator_profiles', JSON.stringify(updated));
+            }
+
+            // Clear specific profile data and conversation
+            await storage.removeItem(`exSimulator_conversation_${profile.id}`);
+            if (profile.supabaseId) {
+                await storage.removeItem(`exSimulator_conversation_${profile.supabaseId}`);
+            }
+
+            // FORCE DELETE for 'local' guest profile OR current profile
+            if (profile.id === 'local' || currentProfileId === profile.id || (profile.supabaseId && currentProfileId === profile.supabaseId)) {
+                console.log('[Delete] Clearing current profile stats');
+                await storage.removeItem('exSimulator_currentProfile');
+                await storage.removeItem('analysis_view_profile');
+            }
+
+            if (profile.id === 'local') {
+                try {
+                    await storage.removeItem('exSimulator_analyzeData');
+                } catch (e) { }
+            }
+
+            // Reload profiles to update UI
+            await loadProfiles();
+
+            // Notify parent to clear state
+            if (onProfileDeleted) {
+                onProfileDeleted();
+            }
+
+            setShowSuccessModal(true);
+            setTimeout(() => {
+                setShowSuccessModal(false);
+            }, 2500);
+
+        } catch (error) {
+            console.error('Error deleting profile:', error);
+            showAlert('Error', 'No se pudo eliminar el perfil completamente. Intenta de nuevo.', [{ text: 'OK' }], 'error');
+        }
+    };
+
     const handleDeleteProfile = async (profile: Profile) => {
-        Alert.alert(
-            '⚠️ Eliminar Perfil',
-            `¿Estás seguro que deseas eliminar el perfil de "${profile.exName}"?\n\nEsto borrará:\n- El perfil y su análisis\n- Todo el historial de conversación\n- Memorias emocionales guardadas\n\nEsta acción NO se puede deshacer.`,
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Eliminar',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            // Delete from Supabase if user is logged in and profile has a supabaseId
-                            if (userId && profile.supabaseId) {
-                                const { error } = await supabase
-                                    .from('ex_profiles')
-                                    .delete()
-                                    .eq('id', profile.supabaseId)
-                                    .eq('user_id', userId);
-
-                                if (error) {
-                                    console.error('Error deleting from Supabase:', error);
-                                }
-                            }
-
-                            // Delete from local storage (this logic might need refinement if profiles are only from Supabase)
-                            // For now, assuming local storage might also hold a list of profiles or current profile
-                            const allProfiles = await storage.getItem('exSimulator_profiles');
-                            if (allProfiles) {
-                                const parsed = JSON.parse(allProfiles);
-                                const updated = parsed.filter((p: Profile) => p.id !== profile.id);
-                                await storage.setItem('exSimulator_profiles', JSON.stringify(updated));
-                            }
-
-                            // Clear conversation history
-                            await storage.removeItem(`exSimulator_conversation_${profile.id}`);
-
-                            // If this was the current profile, clear it
-                            if (currentProfileId === profile.id) {
-                                await storage.removeItem('exSimulator_currentProfile');
-                                await storage.removeItem('analysis_view_profile');
-                            }
-
-                            // Reload profiles
-                            await loadProfiles();
-
-                            Alert.alert('✓ Perfil Eliminado', `El perfil de "${profile.exName}" ha sido eliminado.`);
-                        } catch (error) {
-                            console.error('Error deleting profile:', error);
-                            Alert.alert('Error', 'No se pudo eliminar el perfil. Intenta de nuevo.');
-                        }
-                    }
-                }
-            ]
-        );
+        setProfileToDelete(profile);
+        setShowDeleteConfirm(true);
     };
 
     return (
@@ -280,15 +360,30 @@ export default function ProfileDrawer({
                                             {/* Analysis Button */}
                                             <TouchableOpacity
                                                 style={styles.analysisBtn}
-                                                onPress={() => {
+                                                onPress={async () => {
                                                     onClose();
-                                                    storage.setItem('analysis_view_profile', JSON.stringify(profile));
+                                                    // Load FULL profile from allProfiles, not just the minimal {id, exName}
+                                                    const allProfilesJson = await storage.getItem('exSimulator_allProfiles');
+                                                    if (allProfilesJson) {
+                                                        const allProfiles = JSON.parse(allProfilesJson);
+                                                        const fullProfile = allProfiles.find((p: any) => p.id === profile.id);
+                                                        if (fullProfile) {
+                                                            console.log('[ProfileDrawer] Setting full analysis profile:', fullProfile.id, 'with', Object.keys(fullProfile).length, 'keys');
+                                                            await storage.setItem('analysis_view_profile', JSON.stringify(fullProfile));
+                                                        } else {
+                                                            console.warn('[ProfileDrawer] Full profile not found for analysis view');
+                                                            await storage.setItem('analysis_view_profile', JSON.stringify(profile));
+                                                        }
+                                                    } else {
+                                                        await storage.setItem('analysis_view_profile', JSON.stringify(profile));
+                                                    }
                                                     router.push('/tools/ex-simulator/analysis');
                                                 }}
                                             >
                                                 <Eye size={14} color="#a855f7" />
                                                 <Text style={styles.analysisBtnText}>Ver análisis de personalidad</Text>
                                             </TouchableOpacity>
+
 
                                             {/* Delete Button */}
                                             <TouchableOpacity
@@ -408,6 +503,64 @@ export default function ProfileDrawer({
                     </View>
                 </Animated.View>
             </TouchableOpacity>
+
+            {/* Custom Delete Confirmation Modal */}
+            <Modal
+                transparent
+                visible={showDeleteConfirm}
+                animationType="fade"
+                onRequestClose={() => setShowDeleteConfirm(false)}
+            >
+                <View style={styles.alertOverlay}>
+                    <View style={styles.alertBox}>
+                        <View style={styles.alertIconContainer}>
+                            <Trash2 size={32} color="#ef4444" />
+                        </View>
+                        <Text style={styles.alertTitle}>¿Eliminar perfil?</Text>
+                        <Text style={styles.alertMessage}>
+                            Estás a punto de eliminar a <Text style={{ fontWeight: 'bold', color: '#fff' }}>"{profileToDelete?.exName}"</Text>.
+                            {"\n\n"}Esta acción borrará el análisis y todo el historial de conversación para siempre.
+                        </Text>
+                        <View style={styles.alertButtons}>
+                            <TouchableOpacity
+                                style={styles.alertButtonCancel}
+                                onPress={() => setShowDeleteConfirm(false)}
+                            >
+                                <Text style={styles.alertButtonCancelText}>Cancelar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.alertButtonConfirm}
+                                onPress={() => {
+                                    setShowDeleteConfirm(false);
+                                    if (profileToDelete) performDelete(profileToDelete);
+                                }}
+                            >
+                                <Text style={styles.alertButtonConfirmText}>Eliminar</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Success Modal */}
+            <Modal
+                transparent
+                visible={showSuccessModal}
+                animationType="fade"
+                onRequestClose={() => setShowSuccessModal(false)}
+            >
+                <View style={styles.alertOverlay}>
+                    <View style={[styles.alertBox, { alignItems: 'center', paddingTop: 30, paddingBottom: 30 }]}>
+                        <View style={[styles.alertIconContainer, { backgroundColor: 'rgba(34, 197, 94, 0.1)' }]}>
+                            <Sparkles size={32} color="#22c55e" />
+                        </View>
+                        <Text style={[styles.alertTitle, { marginTop: 16 }]}>¡Perfil Eliminado!</Text>
+                        <Text style={[styles.alertMessage, { textAlign: 'center', marginTop: 8 }]}>
+                            El perfil ha sido borrado correctamente.
+                        </Text>
+                    </View>
+                </View>
+            </Modal>
         </Modal>
     );
 }
@@ -703,5 +856,87 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#ef4444',
         marginLeft: 4,
+    },
+    // Custom Alert Styles
+    alertOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    alertBox: {
+        backgroundColor: '#1E1E1E',
+        borderRadius: 20,
+        padding: 24,
+        width: '100%',
+        maxWidth: 340,
+        borderWidth: 1,
+        borderColor: '#333',
+        alignItems: 'center',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    alertIconContainer: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 20,
+    },
+    alertTitle: {
+        color: '#fff',
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    alertMessage: {
+        color: '#9ca3af',
+        fontSize: 15,
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 24,
+    },
+    alertButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        width: '100%',
+    },
+    alertButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: '#333',
+        alignItems: 'center',
+    },
+    alertButtonPrimary: {
+        backgroundColor: '#3b82f6',
+    },
+    alertButtonCancel: {
+    },
+    alertButtonCancelText: {
+        color: '#fff',
+        fontWeight: '600',
+        fontSize: 15,
+    },
+    alertButtonConfirm: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+        borderWidth: 1,
+        borderColor: '#ef4444',
+        alignItems: 'center',
+    },
+    alertButtonConfirmText: {
+        color: '#ef4444',
+        fontWeight: '600',
+        fontSize: 15,
     },
 });

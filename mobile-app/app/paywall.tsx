@@ -6,12 +6,12 @@ import {
     ScrollView,
     TouchableOpacity,
     ActivityIndicator,
-    Alert,
+    Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Crown, Check, Sparkles, Star, Flame } from 'lucide-react-native';
+import { ArrowLeft, Crown, Check, Sparkles, Star, Flame, HelpCircle, X, LogOut } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getOfferings, purchasePackage } from '../lib/revenuecat';
 import { PurchasesPackage } from 'react-native-purchases';
@@ -35,6 +35,30 @@ export default function PremiumScreen() {
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
     const [packages, setPackages] = useState<PurchasesPackage[]>([]);
+
+    // Custom Alert State
+    interface AlertConfig {
+        visible: boolean;
+        title: string;
+        message: string;
+        buttons?: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' | 'confirm' }[];
+        type?: 'success' | 'error' | 'info' | 'warning';
+    }
+    const [customAlert, setCustomAlert] = useState<AlertConfig>({ visible: false, title: '', message: '' });
+
+    const showAlert = (title: string, message: string, buttons?: AlertConfig['buttons'], type: AlertConfig['type'] = 'info') => {
+        setCustomAlert({
+            visible: true,
+            title,
+            message,
+            buttons,
+            type
+        });
+    };
+
+    const closeAlert = () => {
+        setCustomAlert(prev => ({ ...prev, visible: false }));
+    };
 
     // Static plan definitions - will be matched with RevenueCat packages
     const planDefinitions: Omit<Plan, 'monthlyPackage' | 'yearlyPackage'>[] = [
@@ -92,7 +116,7 @@ export default function PremiumScreen() {
             }
         } catch (error) {
             console.error('Error loading offerings:', error);
-            Alert.alert('Error', 'No se pudieron cargar los planes. Intenta de nuevo.');
+            showAlert('Error', 'No se pudieron cargar los planes. Intenta de nuevo.', [{ text: 'OK' }], 'error');
         } finally {
             setLoading(false);
         }
@@ -164,16 +188,17 @@ export default function PremiumScreen() {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user || user.is_anonymous) {
-            Alert.alert(
+            showAlert(
                 '🔐 Cuenta requerida',
                 'Para suscribirte a un plan premium, necesitas tener una cuenta. Tu suscripción se guardará en tu cuenta para que puedas acceder desde cualquier dispositivo.',
                 [
                     { text: 'Cancelar', style: 'cancel' },
                     {
                         text: 'Iniciar sesión',
-                        onPress: () => router.push('/auth')
+                        onPress: () => { closeAlert(); router.push('/auth'); }
                     }
-                ]
+                ],
+                'info'
             );
             return;
         }
@@ -181,10 +206,11 @@ export default function PremiumScreen() {
         const pkg = getPackageForPlan(planId, billingPeriod);
 
         if (!pkg) {
-            Alert.alert(
+            showAlert(
                 'Plan no disponible',
                 'Este plan no está disponible actualmente. Por favor intenta con otro plan.',
-                [{ text: 'OK' }]
+                [{ text: 'OK' }],
+                'warning'
             );
             return;
         }
@@ -196,21 +222,23 @@ export default function PremiumScreen() {
             const result = await purchasePackage(pkg);
 
             if (result.success) {
-                Alert.alert(
+                showAlert(
                     '🎉 ¡Compra exitosa!',
                     'Tu suscripción ha sido activada. ¡Disfruta de todas las funciones premium!',
-                    [{ text: 'OK', onPress: () => router.back() }]
+                    [{ text: 'OK', onPress: () => { closeAlert(); router.back(); } }],
+                    'success'
                 );
             } else if (result.error !== 'cancelled') {
-                Alert.alert(
+                showAlert(
                     'Error en la compra',
                     result.error || 'Hubo un problema con la compra. Intenta de nuevo.',
-                    [{ text: 'OK' }]
+                    [{ text: 'OK' }],
+                    'error'
                 );
             }
         } catch (error) {
             console.error('Purchase error:', error);
-            Alert.alert('Error', 'Hubo un problema con la compra. Intenta de nuevo.');
+            showAlert('Error', 'Hubo un problema con la compra. Intenta de nuevo.', [{ text: 'OK' }], 'error');
         } finally {
             setPurchasing(false);
         }
@@ -369,6 +397,66 @@ export default function PremiumScreen() {
                     Se renovará automáticamente. Cancela cuando quieras desde Google Play.
                 </Text>
             </ScrollView>
+
+            {/* Custom Alert Modal */}
+            <Modal
+                transparent
+                visible={customAlert.visible}
+                animationType="fade"
+                onRequestClose={closeAlert}
+            >
+                <View style={styles.alertOverlay}>
+                    <View style={styles.alertBox}>
+                        <View style={[
+                            styles.alertIconContainer,
+                            customAlert.type === 'error' ? { backgroundColor: 'rgba(239, 68, 68, 0.1)' } :
+                                customAlert.type === 'warning' ? { backgroundColor: 'rgba(245, 158, 11, 0.1)' } :
+                                    customAlert.type === 'success' ? { backgroundColor: 'rgba(34, 197, 94, 0.1)' } :
+                                        { backgroundColor: 'rgba(59, 130, 246, 0.1)' }
+                        ]}>
+                            {customAlert.type === 'error' && <X size={32} color="#ef4444" />}
+                            {customAlert.type === 'warning' && <LogOut size={32} color="#f59e0b" />}
+                            {customAlert.type === 'success' && <Sparkles size={32} color="#22c55e" />}
+                            {customAlert.type === 'info' && <HelpCircle size={32} color="#3b82f6" />}
+                        </View>
+                        <Text style={styles.alertTitle}>{customAlert.title}</Text>
+                        <Text style={styles.alertMessage}>
+                            {customAlert.message}
+                        </Text>
+                        <View style={styles.alertButtons}>
+                            {!customAlert.buttons || customAlert.buttons.length === 0 ? (
+                                <TouchableOpacity
+                                    style={[styles.alertButton, styles.alertButtonPrimary]}
+                                    onPress={closeAlert}
+                                >
+                                    <Text style={styles.alertButtonText}>OK</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                customAlert.buttons.map((btn, idx) => (
+                                    <TouchableOpacity
+                                        key={idx}
+                                        style={[
+                                            styles.alertButton,
+                                            btn.style === 'cancel' ? styles.alertButtonCancel :
+                                                btn.style === 'destructive' ? styles.alertButtonDestructive :
+                                                    styles.alertButtonPrimary
+                                        ]}
+                                        onPress={() => {
+                                            if (btn.onPress) btn.onPress();
+                                            else closeAlert();
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.alertButtonText,
+                                            btn.style === 'destructive' && { color: '#ef4444' }
+                                        ]}>{btn.text}</Text>
+                                    </TouchableOpacity>
+                                ))
+                            )}
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -579,5 +667,79 @@ const styles = StyleSheet.create({
         color: '#6b7280',
         textAlign: 'center',
         marginTop: 20,
+    },
+    // Custom Alert Styles
+    alertOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    alertBox: {
+        backgroundColor: '#1E1E1E',
+        borderRadius: 20,
+        padding: 24,
+        width: '100%',
+        maxWidth: 340,
+        borderWidth: 1,
+        borderColor: '#333',
+        alignItems: 'center',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    alertIconContainer: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 20,
+    },
+    alertTitle: {
+        color: '#fff',
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    alertMessage: {
+        color: '#9ca3af',
+        fontSize: 15,
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 24,
+    },
+    alertButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        width: '100%',
+    },
+    alertButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: '#333',
+        alignItems: 'center',
+    },
+    alertButtonPrimary: {
+        backgroundColor: '#3b82f6',
+    },
+    alertButtonCancel: {
+        backgroundColor: '#333',
+    },
+    alertButtonDestructive: {
+        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+        borderWidth: 1,
+        borderColor: '#ef4444',
+    },
+    alertButtonText: {
+        color: '#fff',
+        fontWeight: '600',
+        fontSize: 15,
     },
 });

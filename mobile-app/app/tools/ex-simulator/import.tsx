@@ -524,7 +524,7 @@ export default function ImportChat() {
             let finalMessages: ParsedMessage[];
             try {
                 const samplingPromise = new Promise<{ messages: ParsedMessage[]; stats: any }>((resolve) => {
-                    const result = intelligentTokenSampling(messages, 500000); // Explicit 500k tokens
+                    const result = intelligentTokenSampling(messages, 250000); // Reduced to 250k tokens for cost optimization
                     resolve(result);
                 });
 
@@ -534,7 +534,7 @@ export default function ImportChat() {
 
                 const samplingResult = await Promise.race([samplingPromise, samplingTimeout]);
                 finalMessages = samplingResult.messages;
-                addDebug(`📊 ~${samplingResult.stats?.estimatedTokens?.toLocaleString() || 'N/A'} tokens`);
+                addDebug(`📊 ~${samplingResult.stats?.estimatedTokens?.toLocaleString() || 'N/A'} tokens (optimizado a 250k)`);
             } catch (samplingError: any) {
                 addDebug(`⚠️ Sampling falló, usando mensajes recientes`);
                 // Fallback: take last 25000 messages (enough for good analysis)
@@ -696,7 +696,7 @@ export default function ImportChat() {
                 <Text style={styles.loadingTitle}>
                     {step === 'loading' ? 'Procesando' : 'Analizando'}
                 </Text>
-                <Text style={styles.loadingSubtitle}>Esto puede tomar hasta 2 minutos...</Text>
+                <Text style={styles.loadingSubtitle}>Esto puede tomar hasta 5 minutos...</Text>
 
                 {/* Progress Bar */}
                 <View style={styles.progressBarContainer}>
@@ -1568,15 +1568,6 @@ const styles = StyleSheet.create({
     truncationDesc: {
         color: '#9ca3af',
         fontSize: 12,
-    },
-    progressBarContainer: {
-        width: '80%',
-        height: 8,
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        borderRadius: 4,
-        marginTop: 24,
-        marginBottom: 8,
-        overflow: 'hidden',
     },
     progressBarFill: {
         height: '100%',

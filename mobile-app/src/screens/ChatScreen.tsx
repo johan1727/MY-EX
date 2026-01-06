@@ -8,10 +8,11 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Alert,
+  Modal,
+  StyleSheet,
 } from 'react-native';
-import { supabase } from '../lib/supabaseClient'; // Archivo de configuración
-import { Send, ArrowLeft } from 'lucide-react-native';
+import { supabase } from '@/lib/supabase';
+import { Send, ArrowLeft, X, HelpCircle, Sparkles, LogOut } from 'lucide-react-native';
 
 interface Message {
   id: string;
@@ -28,6 +29,30 @@ export default function ChatScreen({ navigation, route }) {
   const [isTyping, setIsTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const flatListRef = useRef(null);
+
+  // Custom Alert State
+  interface AlertConfig {
+    visible: boolean;
+    title: string;
+    message: string;
+    buttons?: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' | 'confirm' }[];
+    type?: 'success' | 'error' | 'info' | 'warning';
+  }
+  const [customAlert, setCustomAlert] = useState<AlertConfig>({ visible: false, title: '', message: '' });
+
+  const showAlert = (title: string, message: string, buttons?: AlertConfig['buttons'], type: AlertConfig['type'] = 'info') => {
+    setCustomAlert({
+      visible: true,
+      title,
+      message,
+      buttons,
+      type
+    });
+  };
+
+  const closeAlert = () => {
+    setCustomAlert(prev => ({ ...prev, visible: false }));
+  };
 
   useEffect(() => {
     loadChatHistory();
@@ -55,7 +80,7 @@ export default function ChatScreen({ navigation, route }) {
       setMessages(formattedMessages);
     } catch (error) {
       console.error('Error loading chat:', error);
-      Alert.alert('Error', 'No se pudo cargar el historial');
+      showAlert('Error', 'No se pudo cargar el historial', [{ text: 'OK' }], 'error');
     } finally {
       setIsLoading(false);
     }
@@ -100,7 +125,7 @@ export default function ChatScreen({ navigation, route }) {
       setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
       console.error('Error sending message:', error);
-      Alert.alert('Error', 'No se pudo enviar el mensaje. Verifica tu conexión.');
+      showAlert('Error', 'No se pudo enviar el mensaje. Verifica tu conexión.', [{ text: 'OK' }], 'error');
       setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
     } finally {
       setIsTyping(false);
@@ -180,6 +205,139 @@ export default function ChatScreen({ navigation, route }) {
           <Send size={20} color="#ffffff" />
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert Modal */}
+      <Modal
+        transparent
+        visible={customAlert.visible}
+        animationType="fade"
+        onRequestClose={closeAlert}
+      >
+        <View style={styles.alertOverlay}>
+          <View style={styles.alertBox}>
+            <View style={[
+              styles.alertIconContainer,
+              customAlert.type === 'error' ? { backgroundColor: 'rgba(239, 68, 68, 0.1)' } :
+                customAlert.type === 'warning' ? { backgroundColor: 'rgba(245, 158, 11, 0.1)' } :
+                  customAlert.type === 'success' ? { backgroundColor: 'rgba(34, 197, 94, 0.1)' } :
+                    { backgroundColor: 'rgba(59, 130, 246, 0.1)' }
+            ]}>
+              {customAlert.type === 'error' && <X size={32} color="#ef4444" />}
+              {customAlert.type === 'warning' && <LogOut size={32} color="#f59e0b" />}
+              {customAlert.type === 'success' && <Sparkles size={32} color="#22c55e" />}
+              {customAlert.type === 'info' && <HelpCircle size={32} color="#3b82f6" />}
+            </View>
+            <Text style={styles.alertTitle}>{customAlert.title}</Text>
+            <Text style={styles.alertMessage}>
+              {customAlert.message}
+            </Text>
+            <View style={styles.alertButtons}>
+              {!customAlert.buttons || customAlert.buttons.length === 0 ? (
+                <TouchableOpacity
+                  style={[styles.alertButton, styles.alertButtonPrimary]}
+                  onPress={closeAlert}
+                >
+                  <Text style={styles.alertButtonText}>OK</Text>
+                </TouchableOpacity>
+              ) : (
+                customAlert.buttons.map((btn, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={[
+                      styles.alertButton,
+                      btn.style === 'cancel' ? styles.alertButtonCancel :
+                        btn.style === 'destructive' ? styles.alertButtonDestructive :
+                          styles.alertButtonPrimary
+                    ]}
+                    onPress={btn.onPress || closeAlert}
+                  >
+                    <Text style={[
+                      styles.alertButtonText,
+                      btn.style === 'destructive' && { color: '#ef4444' }
+                    ]}>{btn.text}</Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
+
+const styles = StyleSheet.create({
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  alertBox: {
+    backgroundColor: '#1E1E1E',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    borderWidth: 1,
+    borderColor: '#333',
+    alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  alertIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  alertTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  alertMessage: {
+    color: '#9ca3af',
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  alertButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  alertButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#333',
+    alignItems: 'center',
+  },
+  alertButtonPrimary: {
+    backgroundColor: '#3b82f6',
+  },
+  alertButtonCancel: {
+    backgroundColor: '#333',
+  },
+  alertButtonDestructive: {
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+  },
+  alertButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+});
