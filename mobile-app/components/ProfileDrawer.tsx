@@ -219,7 +219,7 @@ export default function ProfileDrawer({
 
     const handleUpgradePress = () => {
         onClose();
-        router.push('/paywall');
+        router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
     };
 
     const handleLogout = async () => {
@@ -436,7 +436,7 @@ export default function ProfileDrawer({
                                             style={styles.upgradeMenuItem}
                                             onPress={() => {
                                                 onClose();
-                                                router.push('/paywall');
+                                                router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
                                             }}
                                         >
                                             <Crown size={16} color="#f59e0b" />

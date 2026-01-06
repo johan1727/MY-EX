@@ -520,7 +520,7 @@ export default function ExSimulatorChat() {
                                     alignItems: 'center',
                                     gap: 4
                                 }}
-                                onPress={() => router.push('/paywall')}
+                                onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
                             >
                                 <Sparkles size={14} color="#a855f7" />
                                 <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>Mejorar plan</Text>
@@ -608,7 +608,7 @@ export default function ExSimulatorChat() {
                     exName={profileData.exName || 'Ex'}
                     onMenuPress={() => setDrawerVisible(true)}
                     isPremium={isPremium}
-                    onUpgradePress={() => router.push('/paywall')}
+                    onUpgradePress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
                 />
             </SafeAreaView>
 
@@ -745,7 +745,7 @@ export default function ExSimulatorChat() {
                                 placeholderTextColor="#666"
                                 value={inputText}
                                 onChangeText={setInputText}
-                                onSubmitEditing={sendMessage}
+                                onSubmitEditing={() => sendMessage()}
                                 editable={!isTyping}
                                 multiline
                             />
