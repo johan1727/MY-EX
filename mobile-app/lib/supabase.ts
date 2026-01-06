@@ -25,8 +25,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
         // Use SecureStore on Native, default localStorage on Web
         storage: Platform.OS === 'web' ? undefined : ExpoSecureStoreAdapter,
-        autoRefreshToken: false,
+        autoRefreshToken: true, // Enable auto-refresh for better UX
         persistSession: true,
-        detectSessionInUrl: false,
+        // CRITICAL: Enable session detection in URL for Web OAuth to work
+        detectSessionInUrl: Platform.OS === 'web', // true for Web, false for Native
     },
 });

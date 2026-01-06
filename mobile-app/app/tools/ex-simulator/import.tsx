@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Upload, FileText, CheckCircle, ArrowLeft, Brain, MessageSquare } from 'lucide-react-native';
@@ -655,11 +655,12 @@ export default function ImportChat() {
         }
 
         // Navigate to analysis screen with data for hybrid progress display
-        // Limit to 20,000 messages for local storage to prevent QuotaExceededError (approx 2MB)
-        // The background analysis will likely have access to more if needed via other means,
-        // but for the UI progress and initial prompt this should be enough.
+        // WEB FIX: Limit to 5,000 messages for Web localStorage (max ~500KB)
+        // Mobile can handle more, but Web localStorage has strict quota limits
+        // The background analysis will have access to full dataset via other means
+        const messageLimit = Platform.OS === 'web' ? 5000 : 20000;
         await storage.setItem('exSimulator_analyzeData', JSON.stringify({
-            parsedMessages: parsedMessages.slice(0, 20000),
+            parsedMessages: parsedMessages.slice(0, messageLimit),
             exName,
             relationshipType
         }));
@@ -669,9 +670,10 @@ export default function ImportChat() {
 
     const continueAnalysis = async () => {
         // Navigate to analysis screen with data for hybrid progress display
-        // Navigate to analysis screen with data for hybrid progress display
+        // WEB FIX: Use same message limit as handleAnalyze
+        const messageLimit = Platform.OS === 'web' ? 5000 : 20000;
         await storage.setItem('exSimulator_analyzeData', JSON.stringify({
-            parsedMessages: parsedMessages.slice(0, 20000),
+            parsedMessages: parsedMessages.slice(0, messageLimit),
             exName,
             relationshipType
         }));

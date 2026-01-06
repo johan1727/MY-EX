@@ -136,6 +136,9 @@ export class BackgroundAnalysisManager {
             const { messages: sanitizedMessages, reverseMap } = sanitizeChat(messages);
             console.log('[BackgroundAnalysis] Sanitized', reverseMap.size, 'PII items');
 
+            // WEB FIX: Yield to UI after heavy sync operation
+            await new Promise(resolve => setTimeout(resolve, 0));
+
             // Store reverse map for later (to show original data to user if needed)
             await AsyncStorage.setItem(
                 `pii_reverse_map_${profileId}`,
@@ -157,6 +160,9 @@ export class BackgroundAnalysisManager {
 
             // CHECKPOINT 2: Detect sender names
             await onProgress(68, '🔍 Identificando participantes...');
+
+            // WEB FIX: Yield to UI before sync loop
+            await new Promise(resolve => setTimeout(resolve, 0));
 
             const senderCounts = new Map<string, number>();
             sanitizedMessages.forEach(msg => {
@@ -183,6 +189,9 @@ export class BackgroundAnalysisManager {
 
             // CHECKPOINT 3: Generate Master Prompt (70-95%)
             await onProgress(70, '🧠 Generando Master Prompt...');
+
+            // WEB FIX: Yield to UI before heavy AI operation
+            await new Promise(resolve => setTimeout(resolve, 0));
 
             let masterPromptResult;
             try {

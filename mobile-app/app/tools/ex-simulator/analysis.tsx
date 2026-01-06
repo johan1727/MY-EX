@@ -351,6 +351,29 @@ export default function AnalysisScreen() {
                     <Text style={{ color: '#6b7280', fontSize: 12 }}>
                         REMI AI ENGINE 2.0
                     </Text>
+
+                    {/* DEBUG PANEL - Show logs for Web debugging */}
+                    {analysisLogs.length > 0 && (
+                        <View style={{
+                            marginTop: 24,
+                            padding: 16,
+                            backgroundColor: 'rgba(0,0,0,0.3)',
+                            borderRadius: 12,
+                            width: '100%',
+                            maxHeight: 200
+                        }}>
+                            <Text style={{ color: '#a855f7', fontWeight: 'bold', marginBottom: 8, fontSize: 12 }}>
+                                📋 Debug Log:
+                            </Text>
+                            <ScrollView style={{ maxHeight: 150 }}>
+                                {analysisLogs.slice(-10).map((log, i) => (
+                                    <Text key={i} style={{ color: '#9ca3af', fontSize: 11, marginBottom: 4, fontFamily: 'monospace' }}>
+                                        {log}
+                                    </Text>
+                                ))}
+                            </ScrollView>
+                        </View>
+                    )}
                 </SafeAreaView>
             </View>
         );
