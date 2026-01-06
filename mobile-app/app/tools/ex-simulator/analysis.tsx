@@ -110,6 +110,16 @@ export default function AnalysisScreen() {
                         const profileData = (finalProfile as any).profile || finalProfile;
                         setProfile(profileData ? { ...finalProfile, ...profileData } : finalProfile);
 
+                        // INCREMENT GUEST USAGE
+                        supabase.auth.getUser().then(({ data: { user } }) => {
+                            if (!user) {
+                                storage.getItem('guest_analysis_count').then(current => {
+                                    const newVal = (current ? parseInt(current) : 0) + 1;
+                                    storage.setItem('guest_analysis_count', newVal.toString());
+                                });
+                            }
+                        });
+
                         // Navigate to chat after completion
                         setTimeout(() => {
                             router.replace('/');

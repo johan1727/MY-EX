@@ -579,10 +579,27 @@ export default function ImportChat() {
             return;
         }
 
+        // GUEST LIMIT CHECK
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            const guestUsage = await storage.getItem('guest_analysis_count');
+            const count = guestUsage ? parseInt(guestUsage) : 0;
+            if (count > 0) {
+                Alert.alert(
+                    'Límite Gratuito Alcanzado',
+                    'Has utilizado tu análisis gratuito como invitado. Por favor regístrate para continuar (es gratis).',
+                    [
+                        { text: 'Registrarme', onPress: () => router.push('/auth') },
+                        { text: 'Cancelar', style: 'cancel' }
+                    ]
+                );
+                return;
+            }
+        }
+
         // Check for existing profile with same name (with timeout)
         try {
             const checkPromise = async () => {
-                const { data: { user } } = await supabase.auth.getUser();
                 if (user) {
                     const { data: existingProfile } = await supabase
                         .from('ex_profiles')
