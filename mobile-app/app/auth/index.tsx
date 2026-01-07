@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
-import { Eye, EyeOff } from 'lucide-react-native';
+import { Eye, EyeOff, Brain } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
@@ -284,7 +284,9 @@ export default function AuthScreen() {
             <StatusBar style="light" />
             <View style={styles.heroSection}>
                 <View style={styles.imageWrapper}>
-                    <Image source={require('../../assets/icon_transparent.png')} style={styles.heroImage} resizeMode="contain" />
+                    <View style={styles.brainIconContainer}>
+                        <Brain size={80} color="#a855f7" strokeWidth={1.5} />
+                    </View>
                     <View style={[styles.floatingTag, styles.tagLeft]}>
                         <Text style={styles.tagEmoji}>💜</Text>
                         <Text style={styles.tagText}>Sanación</Text>
@@ -332,6 +334,16 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         position: 'relative',
+    },
+    brainIconContainer: {
+        width: 160,
+        height: 160,
+        borderRadius: 80,
+        backgroundColor: '#1A1A1A',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#333',
     },
     heroImage: {
         width: '100%',
