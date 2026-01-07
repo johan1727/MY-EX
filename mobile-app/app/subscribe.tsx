@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -8,11 +8,13 @@ import {
     ActivityIndicator,
     Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { Check } from 'lucide-react-native';
+import { Check, ArrowLeft, Crown } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
+import { useSubscription } from '../lib/SubscriptionContext';
 
 const PLANS = [
     {
@@ -61,6 +63,9 @@ const PLANS = [
 export default function SubscribePage() {
     const router = useRouter();
     const [loading, setLoading] = useState<string | null>(null);
+    const { tier, isLoading: tierLoading } = useSubscription();
+    const isPremium = tier !== 'survivor';
+    const currentPlanIndex = PLANS.findIndex(p => p.id === tier);
 
     const handleSubscribe = async (plan: typeof PLANS[0]) => {
         if (Platform.OS !== 'web') {
@@ -115,84 +120,110 @@ export default function SubscribePage() {
             style={styles.container}
         >
             <StatusBar style="light" />
-
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-            >
-                {/* Header */}
-                <View style={styles.header}>
-                    <Text style={styles.title}>Elige tu plan</Text>
-                    <Text style={styles.subtitle}>
-                        Mejora tu experiencia con REMI
-                    </Text>
+            <SafeAreaView style={{ flex: 1 }}>
+                {/* Back Button Header */}
+                <View style={styles.backHeader}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                        <ArrowLeft size={24} color="#fff" />
+                    </TouchableOpacity>
                 </View>
 
-                {/* Plans */}
-                <View style={styles.plansContainer}>
-                    {PLANS.map((plan) => (
-                        <View
-                            key={plan.id}
-                            style={[
-                                styles.planCard,
-                                plan.popular && styles.popularCard,
-                            ]}
-                        >
-                            {plan.badge && (
-                                <View style={styles.badge}>
-                                    <Text style={styles.badgeText}>{plan.badge}</Text>
-                                </View>
-                            )}
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {/* Header */}
+                    <View style={styles.header}>
+                        <Text style={styles.title}>
+                            {isPremium ? 'Tu Plan Actual' : 'Elige tu plan'}
+                        </Text>
+                        <Text style={styles.subtitle}>
+                            {isPremium
+                                ? `Actualmente estás en el plan ${tier.charAt(0).toUpperCase() + tier.slice(1)}`
+                                : 'Mejora tu experiencia con REMI'
+                            }
+                        </Text>
+                    </View>
 
-                            <Text style={styles.planName}>{plan.name}</Text>
+                    {/* Plans */}
+                    <View style={styles.plansContainer}>
+                        {PLANS.map((plan, planIndex) => {
+                            const isCurrentPlan = plan.id === tier;
+                            const isLowerPlan = planIndex < currentPlanIndex;
+                            const isDisabled = isCurrentPlan || isLowerPlan;
 
-                            <View style={styles.priceContainer}>
-                                <Text style={styles.currency}>MX$</Text>
-                                <Text style={styles.price}>{plan.price}.00</Text>
-                                <Text style={styles.period}>/mes</Text>
-                            </View>
+                            return (
+                                <View
+                                    key={plan.id}
+                                    style={[
+                                        styles.planCard,
+                                        plan.popular && styles.popularCard,
+                                        isCurrentPlan && styles.currentPlanCard,
+                                    ]}
+                                >
+                                    {isCurrentPlan && (
+                                        <View style={styles.currentBadge}>
+                                            <Crown size={12} color="#fff" />
+                                            <Text style={styles.currentBadgeText}>PLAN ACTUAL</Text>
+                                        </View>
+                                    )}
+                                    {plan.badge && !isCurrentPlan && (
+                                        <View style={styles.badge}>
+                                            <Text style={styles.badgeText}>{plan.badge}</Text>
+                                        </View>
+                                    )}
 
-                            <View style={styles.featuresContainer}>
-                                {plan.features.map((feature, index) => (
-                                    <View key={index} style={styles.featureRow}>
-                                        <Check size={20} color="#22c55e" />
-                                        <Text style={styles.featureText}>{feature}</Text>
+                                    <Text style={styles.planName}>{plan.name}</Text>
+
+                                    <View style={styles.priceContainer}>
+                                        <Text style={styles.currency}>MX$</Text>
+                                        <Text style={styles.price}>{plan.price}.00</Text>
+                                        <Text style={styles.period}>/mes</Text>
                                     </View>
-                                ))}
-                            </View>
 
-                            <TouchableOpacity
-                                style={[
-                                    styles.button,
-                                    { backgroundColor: plan.color },
-                                    loading === plan.id && styles.buttonDisabled,
-                                ]}
-                                onPress={() => handleSubscribe(plan)}
-                                disabled={loading !== null}
-                                activeOpacity={0.8}
-                            >
-                                {loading === plan.id ? (
-                                    <ActivityIndicator color="#fff" />
-                                ) : (
-                                    <Text style={styles.buttonText}>
-                                        Elegir {plan.name}
-                                    </Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
-                    ))}
-                </View>
+                                    <View style={styles.featuresContainer}>
+                                        {plan.features.map((feature, index) => (
+                                            <View key={index} style={styles.featureRow}>
+                                                <Check size={20} color="#22c55e" />
+                                                <Text style={styles.featureText}>{feature}</Text>
+                                            </View>
+                                        ))}
+                                    </View>
 
-                {/* Footer */}
-                <View style={styles.footer}>
-                    <Text style={styles.footerText}>
-                        💳 Pago seguro con Stripe
-                    </Text>
-                    <Text style={styles.footerText}>
-                        ✨ Cancela cuando quieras
-                    </Text>
-                </View>
-            </ScrollView>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.button,
+                                            { backgroundColor: isDisabled ? '#4b5563' : plan.color },
+                                            loading === plan.id && styles.buttonDisabled,
+                                        ]}
+                                        onPress={() => handleSubscribe(plan)}
+                                        disabled={loading !== null || isDisabled}
+                                        activeOpacity={0.8}
+                                    >
+                                        {loading === plan.id ? (
+                                            <ActivityIndicator color="#fff" />
+                                        ) : (
+                                            <Text style={styles.buttonText}>
+                                                {isCurrentPlan ? 'Plan Actual' : isLowerPlan ? 'Incluido' : `Elegir ${plan.name}`}
+                                            </Text>
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
+                            );
+                        })}
+                    </View>
+
+                    {/* Footer */}
+                    <View style={styles.footer}>
+                        <Text style={styles.footerText}>
+                            💳 Pago seguro con Stripe
+                        </Text>
+                        <Text style={styles.footerText}>
+                            ✨ Cancela cuando quieras
+                        </Text>
+                    </View>
+                </ScrollView>
+            </SafeAreaView>
         </LinearGradient>
     );
 }
@@ -203,7 +234,7 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         padding: 24,
-        paddingTop: 60,
+        paddingTop: 20,
     },
     header: {
         alignItems: 'center',
@@ -309,5 +340,35 @@ const styles = StyleSheet.create({
     footerText: {
         color: 'rgba(255, 255, 255, 0.5)',
         fontSize: 14,
+    },
+    backHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+    },
+    backButton: {
+        padding: 8,
+    },
+    currentPlanCard: {
+        borderColor: '#22c55e',
+        borderWidth: 2,
+    },
+    currentBadge: {
+        position: 'absolute',
+        top: -12,
+        left: 20,
+        backgroundColor: '#22c55e',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    currentBadgeText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: '700',
     },
 });
