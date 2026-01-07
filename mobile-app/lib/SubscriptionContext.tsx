@@ -114,10 +114,10 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                 setTimeout(() => reject(new Error('Supabase request timed out')), 5000)
             );
 
-            // Execute query
+            // Execute query - include expires_at for expiration check
             const queryPromise = supabase
                 .from('profiles')
-                .select('subscription_tier')
+                .select('subscription_tier, subscription_expires_at, subscription_current_period_end')
                 .eq('id', userId)
                 .single();
 
@@ -137,7 +137,43 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             console.log('[Subscription] Profile data from Supabase:', profile);
 
             if (profile && profile.subscription_tier) {
-                const newTier = profile.subscription_tier as SubscriptionTier;
+                let newTier = profile.subscription_tier as SubscriptionTier;
+
+                // CHECK IF SUBSCRIPTION EXPIRED
+                const expiresAt = profile.subscription_expires_at || profile.subscription_current_period_end;
+                if (expiresAt && newTier !== 'survivor') {
+                    const expireDate = new Date(expiresAt);
+                    const now = new Date();
+
+                    if (now > expireDate) {
+                        console.log('[Subscription] ⚠️ Subscription expired:', {
+                            tier: newTier,
+                            expiresAt: expiresAt,
+                            now: now.toISOString(),
+                        });
+
+                        // Downgrade to free tier
+                        newTier = 'survivor';
+
+                        // Update in Supabase (fire and forget, don't block UI)
+                        (async () => {
+                            try {
+                                await supabase
+                                    .from('profiles')
+                                    .update({
+                                        subscription_tier: 'survivor',
+                                        subscription_status: 'expired',
+                                    })
+                                    .eq('id', userId);
+                                console.log('[Subscription] ✅ Auto-downgraded expired subscription');
+                            } catch (err) {
+                                console.error('[Subscription] Error auto-downgrading:', err);
+                            }
+                        })();
+                    } else {
+                        console.log('[Subscription] ✅ Subscription active until:', expireDate.toISOString());
+                    }
+                }
                 console.log('[Subscription] ✅ Setting tier from Supabase:', newTier);
                 setTier(newTier);
 

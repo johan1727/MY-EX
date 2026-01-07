@@ -77,6 +77,17 @@ module.exports = async function handler(req, res) {
                 break;
             }
 
+            case 'invoice.payment_succeeded': {
+                const invoice = event.data.object;
+                console.log('[Webhook] Invoice payment succeeded');
+
+                // Only process subscription invoices (not one-time payments)
+                if (invoice.subscription) {
+                    await handleInvoicePaid(invoice);
+                }
+                break;
+            }
+
             default:
                 console.log(`Unhandled event type: ${event.type}`);
         }
@@ -230,4 +241,57 @@ async function handleSubscriptionDeleted(subscription) {
     }
 
     console.log(`Downgraded subscription ${subscription.id} to survivor`);
+}
+
+async function handleInvoicePaid(invoice) {
+    console.log('[Webhook] Invoice paid:', JSON.stringify({
+        id: invoice.id,
+        subscription: invoice.subscription,
+        customer: invoice.customer,
+        amount_paid: invoice.amount_paid,
+    }));
+
+    try {
+        // Get the full subscription object to get the updated period_end
+        const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+
+        console.log('[Webhook] Retrieved subscription for invoice:', JSON.stringify({
+            id: subscription.id,
+            status: subscription.status,
+            current_period_end: subscription.current_period_end,
+        }));
+
+        const priceId = subscription.items.data[0].price.id;
+        const tier = PRICE_TO_TIER[priceId] || 'survivor';
+
+        // Update the subscription period_end (renewal)
+        const expiresAt = subscription.current_period_end
+            ? new Date(subscription.current_period_end * 1000).toISOString()
+            : null;
+
+        const updateData = {
+            subscription_tier: tier,
+            subscription_status: subscription.status,
+            subscription_current_period_end: expiresAt,
+            subscription_expires_at: expiresAt,
+        };
+
+        console.log('[Webhook] Updating renewal period:', JSON.stringify(updateData));
+
+        const { data, error } = await supabase
+            .from('profiles')
+            .update(updateData)
+            .eq('stripe_customer_id', invoice.customer)
+            .select();
+
+        if (error) {
+            console.error('[Webhook] Error updating renewal:', error);
+            throw error;
+        }
+
+        console.log(`[Webhook] ✅ Renewal processed for customer ${invoice.customer}, new period_end: ${expiresAt}`);
+    } catch (error) {
+        console.error('[Webhook] Error handling invoice payment:', error);
+        throw error;
+    }
 }
