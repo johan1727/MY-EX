@@ -20,10 +20,11 @@ const PRICE_TO_TIER = {
     'price_1RxtmyP3GWiMooGS4yHwDZmW': 'explorer',  // Explorer TEST
     'price_1RxtnNP3GWiMooGSgROuc422': 'warrior',   // Warrior TEST
     'price_1RxtnWP3GWiMooGS5kpAvvXn': 'phoenix',   // Phoenix TEST
-    // Add LIVE price IDs when ready
-    // 'price_1RsodvP3GWiMooGSMQpJ0KL8': 'explorer',  // Explorer LIVE
-    // 'price_1RqOMRP3GWiMooGSD5OPjzim': 'warrior',   // Warrior LIVE
-    // 'price_1RqOM5P3GWiMooGS8k3BDdW8': 'phoenix',   // Phoenix LIVE
+
+    // LIVE Price IDs
+    'price_1RsodvP3GWiMooGSMQpJ0KL8': 'explorer',  // Explorer LIVE
+    'price_1RqOMRP3GWiMooGSD5OPjzim': 'warrior',   // Warrior LIVE
+    'price_1RqOM5P3GWiMooGS8k3BDdW8': 'phoenix',   // Phoenix LIVE
 };
 
 module.exports = async function handler(req, res) {
