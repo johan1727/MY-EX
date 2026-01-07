@@ -186,12 +186,41 @@ async function handleSubscriptionUpdated(subscription) {
     const tier = PRICE_TO_TIER[priceId] || 'survivor';
     console.log('[Webhook] Price ID:', priceId, '-> Tier:', tier);
 
-    // Calculate expiration date - ALWAYS include it
-    const expiresAt = subscription.current_period_end
-        ? new Date(subscription.current_period_end * 1000).toISOString()
-        : null;
+    // Calculate expiration date with FALLBACK for Stripe TEST mode bug
+    let expiresAt;
 
-    const startDate = subscription.start_date
+    if (subscription.current_period_end) {
+        // Normal case: Stripe provides the end date
+        expiresAt = new Date(subscription.current_period_end * 1000).toISOString();
+        console.log('[Webhook] Using Stripe period_end:', expiresAt);
+    } else {
+        // FALLBACK: Stripe TEST mode sends null - calculate manually
+        console.log('[Webhook] ⚠️ Stripe sent null period_end, calculating...');
+
+        // Use billing_cycle_anchor (always present) + interval
+        const billingStart = subscription.billing_cycle_anchor || subscription.created || Math.floor(Date.now() / 1000);
+        const interval = subscription.items.data[0].price.recurring?.interval || 'month';
+        const intervalCount = subscription.items.data[0].price.recurring?.interval_count || 1;
+
+        const startDate = new Date(billingStart * 1000);
+        console.log('[Webhook] Billing start:', startDate.toISOString(), 'Interval:', interval, intervalCount);
+
+        // Calculate end date based on interval
+        if (interval === 'month') {
+            startDate.setMonth(startDate.getMonth() + intervalCount);
+        } else if (interval === 'year') {
+            startDate.setFullYear(startDate.getFullYear() + intervalCount);
+        } else if (interval === 'week') {
+            startDate.setDate(startDate.getDate() + (7 * intervalCount));
+        } else if (interval === 'day') {
+            startDate.setDate(startDate.getDate() + intervalCount);
+        }
+
+        expiresAt = startDate.toISOString();
+        console.log('[Webhook] ✅ Calculated period_end:', expiresAt);
+    }
+
+    const startDateISO = subscription.start_date
         ? new Date(subscription.start_date * 1000).toISOString()
         : new Date().toISOString();
 
@@ -200,7 +229,7 @@ async function handleSubscriptionUpdated(subscription) {
         subscription_status: subscription.status,
         subscription_current_period_end: expiresAt,
         subscription_expires_at: expiresAt,
-        subscription_start_date: startDate,
+        subscription_start_date: startDateISO,
         stripe_subscription_id: subscription.id,
         stripe_customer_id: subscription.customer,
     };
@@ -264,10 +293,34 @@ async function handleInvoicePaid(invoice) {
         const priceId = subscription.items.data[0].price.id;
         const tier = PRICE_TO_TIER[priceId] || 'survivor';
 
-        // Update the subscription period_end (renewal)
-        const expiresAt = subscription.current_period_end
-            ? new Date(subscription.current_period_end * 1000).toISOString()
-            : null;
+        // Update the subscription period_end with FALLBACK
+        let expiresAt;
+
+        if (subscription.current_period_end) {
+            expiresAt = new Date(subscription.current_period_end * 1000).toISOString();
+            console.log('[Webhook] Using Stripe period_end for renewal:', expiresAt);
+        } else {
+            // FALLBACK: Calculate manually
+            console.log('[Webhook] ⚠️ Calculating period_end for renewal...');
+            const billingStart = subscription.billing_cycle_anchor || subscription.created || Math.floor(Date.now() / 1000);
+            const interval = subscription.items.data[0].price.recurring?.interval || 'month';
+            const intervalCount = subscription.items.data[0].price.recurring?.interval_count || 1;
+
+            const startDate = new Date(billingStart * 1000);
+
+            if (interval === 'month') {
+                startDate.setMonth(startDate.getMonth() + intervalCount);
+            } else if (interval === 'year') {
+                startDate.setFullYear(startDate.getFullYear() + intervalCount);
+            } else if (interval === 'week') {
+                startDate.setDate(startDate.getDate() + (7 * intervalCount));
+            } else if (interval === 'day') {
+                startDate.setDate(startDate.getDate() + intervalCount);
+            }
+
+            expiresAt = startDate.toISOString();
+            console.log('[Webhook] ✅ Calculated renewal period_end:', expiresAt);
+        }
 
         const updateData = {
             subscription_tier: tier,
