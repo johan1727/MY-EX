@@ -100,45 +100,56 @@ async function handleCheckoutCompleted(session) {
     try {
         // Get subscription details
         const subscription = await stripe.subscriptions.retrieve(session.subscription);
+        console.log('[Webhook] Subscription retrieved:', JSON.stringify({
+            id: subscription.id,
+            status: subscription.status,
+            current_period_end: subscription.current_period_end,
+            start_date: subscription.start_date,
+        }));
+
         const priceId = subscription.items.data[0].price.id;
         const tier = PRICE_TO_TIER[priceId] || 'survivor';
+        console.log('[Webhook] Price ID:', priceId, '-> Tier:', tier);
 
-        // Update user profile
+        // Update user profile - ALWAYS include period_end
+        const expiresAt = subscription.current_period_end
+            ? new Date(subscription.current_period_end * 1000).toISOString()
+            : null;
+        const startDate = subscription.start_date
+            ? new Date(subscription.start_date * 1000).toISOString()
+            : new Date().toISOString();
+
         const updateData = {
             subscription_tier: tier,
             stripe_customer_id: session.customer,
             stripe_subscription_id: session.subscription,
             subscription_status: subscription.status,
+            subscription_current_period_end: expiresAt,
+            subscription_expires_at: expiresAt,
+            subscription_start_date: startDate,
         };
 
-        // Only add period_end if it exists
-        if (subscription.current_period_end) {
-            const expiresAt = new Date(subscription.current_period_end * 1000).toISOString();
-            updateData.subscription_current_period_end = expiresAt;
-            // Also update legacy column used by mobile app
-            updateData.subscription_expires_at = expiresAt;
-        }
-
-        // Add start date
-        if (subscription.start_date) {
-            updateData.subscription_start_date = new Date(subscription.start_date * 1000).toISOString();
-        }
+        console.log('[Webhook] Update data:', JSON.stringify(updateData));
 
         let query;
         if (userId) {
+            console.log('[Webhook] Updating by userId:', userId);
             query = supabase.from('profiles').update(updateData).eq('id', userId);
         } else {
+            console.log('[Webhook] Updating by email:', customerEmail);
             query = supabase.from('profiles').update(updateData).eq('email', customerEmail);
         }
 
-        const { error } = await query;
+        const { data, error } = await query.select();
+
+        console.log('[Webhook] Update result - data:', JSON.stringify(data));
 
         if (error) {
-            console.error('Error updating profile:', error);
+            console.error('[Webhook] Error updating profile:', error);
             throw error;
         }
 
-        console.log(`Updated user ${userId || customerEmail} to tier ${tier}`);
+        console.log(`[Webhook] ✅ Updated user ${userId || customerEmail} to tier ${tier}, expires: ${expiresAt}`);
     } catch (error) {
         console.error('Error handling checkout completed:', error);
         throw error;

@@ -373,7 +373,8 @@ export default function ProfileDrawer({
                                             onPress={() => handleProfileSelect(profile)}
                                         >
                                             <MessageCircle size={20} color="#9ca3af" />
-                                            <Text style={styles.profileName}>{profile.exName}</Text>
+                                            <Text style={styles.profileName} numberOfLines={1}>{profile.exName}</Text>
+                                            <Text style={styles.profileChatHint}>Chatear →</Text>
                                         </TouchableOpacity>
 
                                         {/* Action Buttons */}
@@ -664,19 +665,24 @@ const styles = StyleSheet.create({
     profileItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 10,
-        paddingHorizontal: 10,
-        borderRadius: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        borderRadius: 10,
         gap: 10,
         marginBottom: 2,
+        backgroundColor: '#1A1A1A',
+        borderWidth: 1,
+        borderColor: '#333',
     },
     profileItemActive: {
         backgroundColor: 'rgba(168, 85, 247, 0.1)',
+        borderColor: 'rgba(168, 85, 247, 0.3)',
     },
     profileName: {
         color: '#fff',
         fontSize: 14,
         fontWeight: '500',
+        flex: 1,
     },
     coachButton: {
         flexDirection: 'row',
@@ -881,6 +887,11 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#ef4444',
         marginLeft: 4,
+    },
+    profileChatHint: {
+        fontSize: 12,
+        color: '#6b7280',
+        fontWeight: '500',
     },
     // Custom Alert Styles
     alertOverlay: {
