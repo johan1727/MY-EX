@@ -64,6 +64,13 @@ module.exports = async function handler(req, res) {
                 break;
             }
 
+            case 'customer.subscription.created': {
+                const subscription = event.data.object;
+                console.log('[Webhook] Subscription created event received');
+                await handleSubscriptionUpdated(subscription);
+                break;
+            }
+
             case 'customer.subscription.deleted': {
                 const subscription = event.data.object;
                 await handleSubscriptionDeleted(subscription);
@@ -157,37 +164,53 @@ async function handleCheckoutCompleted(session) {
 }
 
 async function handleSubscriptionUpdated(subscription) {
-    console.log('Subscription updated:', subscription.id);
+    console.log('[Webhook] Subscription updated/created:', JSON.stringify({
+        id: subscription.id,
+        status: subscription.status,
+        current_period_end: subscription.current_period_end,
+        customer: subscription.customer,
+    }));
 
     const priceId = subscription.items.data[0].price.id;
     const tier = PRICE_TO_TIER[priceId] || 'survivor';
+    console.log('[Webhook] Price ID:', priceId, '-> Tier:', tier);
 
-    // Calculate expiration date
+    // Calculate expiration date - ALWAYS include it
     const expiresAt = subscription.current_period_end
         ? new Date(subscription.current_period_end * 1000).toISOString()
         : null;
 
+    const startDate = subscription.start_date
+        ? new Date(subscription.start_date * 1000).toISOString()
+        : new Date().toISOString();
+
     const updateData = {
         subscription_tier: tier,
         subscription_status: subscription.status,
+        subscription_current_period_end: expiresAt,
+        subscription_expires_at: expiresAt,
+        subscription_start_date: startDate,
+        stripe_subscription_id: subscription.id,
+        stripe_customer_id: subscription.customer,
     };
 
-    if (expiresAt) {
-        updateData.subscription_current_period_end = expiresAt;
-        updateData.subscription_expires_at = expiresAt;
-    }
+    console.log('[Webhook] Update data for subscription event:', JSON.stringify(updateData));
 
-    const { error } = await supabase
+    // Update using customer ID
+    const { data, error } = await supabase
         .from('profiles')
         .update(updateData)
-        .eq('stripe_subscription_id', subscription.id);
+        .eq('stripe_customer_id', subscription.customer)
+        .select();
+
+    console.log('[Webhook] Subscription update result:', JSON.stringify(data));
 
     if (error) {
-        console.error('Error updating subscription:', error);
+        console.error('[Webhook] Error updating subscription:', error);
         throw error;
     }
 
-    console.log(`Updated subscription ${subscription.id} to tier ${tier}`);
+    console.log(`[Webhook] ✅ Subscription updated for customer ${subscription.customer}, expires: ${expiresAt} to tier ${tier}`);
 }
 
 async function handleSubscriptionDeleted(subscription) {
