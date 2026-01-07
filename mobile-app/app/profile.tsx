@@ -230,7 +230,7 @@ export default function ProfileScreen() {
                                         </Text>
                                         <Text style={styles.premiumSubtitle}>
                                             {isPremium
-                                                ? 'Disfruta de tu acceso ilimitado y funciones avanzadas.'
+                                                ? `Plan ${SUBSCRIPTION_CONFIG[tier]?.name || tier} activo con funciones premium.`
                                                 : 'Desbloquea análisis ilimitados y coaching avanzado con IA.'
                                             }
                                         </Text>
