@@ -157,56 +157,42 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     };
 
     const initRevenueCat = async () => {
-        // RevenueCat initialization
-        // Make sure to set EXPO_PUBLIC_REVENUECAT_ANDROID_KEY in .env
-
         try {
-            // Get API key from environment variables
-            const apiKey = Platform.OS === 'android'
-                ? process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || ''
-                : process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '';
-
-            // If no API key, default to survivor tier
-            if (!apiKey) {
-                console.log('[Subscription] No RevenueCat API key found, defaulting to survivor');
-                setTier('survivor');
-                setIsLoading(false);
-                return;
-            }
-
-            await Purchases.configure({ apiKey });
-
-            // Identificar usuario si está logueado
+            // FIRST: Always try to get user and fetch tier from Supabase
             const { data: { user } } = await supabase.auth.getUser();
 
             if (user) {
-                console.log('[Subscription] User found, fetching tier from Supabase');
-                if (Platform.OS !== 'web') {
-                    await Purchases.logIn(user.id);
-                }
-                // ALWAYS fetch from Supabase first for web
+                console.log('[Subscription] User found, fetching tier from Supabase FIRST');
                 await fetchTierFromSupabase(user.id);
             } else {
                 console.log('[Subscription] No user found');
             }
 
-            const info = await Purchases.getCustomerInfo();
-            setCustomerInfo(info);
-
-            // Only use RevenueCat info if we didn't get it from Supabase or if it's a native purchase
+            // THEN: Configure RevenueCat for native platforms
             if (Platform.OS !== 'web') {
-                updateTierFromInfo(info);
-            } else {
-                console.log('[Subscription] Web platform - using Supabase tier only');
-            }
+                const apiKey = Platform.OS === 'android'
+                    ? process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || ''
+                    : process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '';
 
-            await loadOfferings();
-        } catch (e) {
-            console.error('Error initializing RevenueCat:', e);
-            // On web, we don't want to block the app if RevenueCat fails
-            if (Platform.OS === 'web') {
-                console.log('[Subscription] RevenueCat failed on web (expected), continuing...');
+                if (apiKey) {
+                    await Purchases.configure({ apiKey });
+
+                    if (user) {
+                        await Purchases.logIn(user.id);
+                    }
+
+                    const info = await Purchases.getCustomerInfo();
+                    setCustomerInfo(info);
+                    updateTierFromInfo(info);
+                    await loadOfferings();
+                } else {
+                    console.log('[Subscription] No RevenueCat API key for native');
+                }
+            } else {
+                console.log('[Subscription] Web platform - using Supabase tier only (no RevenueCat)');
             }
+        } catch (e) {
+            console.error('Error initializing subscription:', e);
         } finally {
             setIsLoading(false);
         }
