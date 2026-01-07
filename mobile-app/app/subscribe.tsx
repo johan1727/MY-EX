@@ -21,7 +21,9 @@ const PLANS = [
         id: 'explorer',
         name: 'Explorer',
         price: 89,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER || 'price_1RsodvP3GWiMooGSMQpJ0KL8', // LIVE
+        annualPrice: 890,
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER || 'price_1RsodvP3GWiMooGSMQpJ0KL8', // LIVE Monthly
+        annualPriceId: 'price_1Sn4siP3GWiMooGSc336SbzN', // LIVE Annual
         color: '#3b82f6',
         features: [
             'Límites más amplios de uso',
@@ -34,7 +36,9 @@ const PLANS = [
         id: 'warrior',
         name: 'Warrior',
         price: 299,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR || 'price_1RqOMRP3GWiMooGSD5OPjzim', // LIVE
+        annualPrice: 2990,
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR || 'price_1RqOMRP3GWiMooGSD5OPjzim', // LIVE Monthly
+        annualPriceId: 'price_1Sn4uNP3GWiMooGSsVmPQzAg', // LIVE Annual
         color: '#f97316',
         popular: true,
         features: [
@@ -48,7 +52,9 @@ const PLANS = [
         id: 'phoenix',
         name: 'Phoenix',
         price: 449,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX || 'price_1RqOM5P3GWiMooGS8k3BDdW8', // LIVE
+        annualPrice: 4490,
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX || 'price_1RqOM5P3GWiMooGS8k3BDdW8', // LIVE Monthly
+        annualPriceId: 'price_1Sn4uhP3GWiMooGSwqepVrYh', // LIVE Annual
         color: '#ec4899',
         badge: 'MEJOR VALOR',
         features: [
@@ -63,6 +69,7 @@ const PLANS = [
 export default function SubscribePage() {
     const router = useRouter();
     const [loading, setLoading] = useState<string | null>(null);
+    const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('monthly');
     const { tier, isLoading: tierLoading } = useSubscription();
     const isPremium = tier !== 'survivor';
     const currentPlanIndex = PLANS.findIndex(p => p.id === tier);
@@ -84,6 +91,9 @@ export default function SubscribePage() {
                 return;
             }
 
+            // Determine correct Price ID based on selection
+            const selectedPriceId = billingPeriod === 'monthly' ? plan.priceId : plan.annualPriceId;
+
             // Call API to create checkout session
             const response = await fetch('/api/stripe/create-checkout', {
                 method: 'POST',
@@ -91,7 +101,7 @@ export default function SubscribePage() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    priceId: plan.priceId,
+                    priceId: selectedPriceId,
                     userId: user.id,
                 }),
             });
@@ -143,6 +153,31 @@ export default function SubscribePage() {
                                 : 'Mejora tu experiencia con REMI'
                             }
                         </Text>
+
+                        {/* Billing Period Toggle */}
+                        <View style={styles.toggleContainer}>
+                            <TouchableOpacity
+                                style={[styles.toggleOption, billingPeriod === 'monthly' && styles.toggleOptionActive]}
+                                onPress={() => setBillingPeriod('monthly')}
+                                activeOpacity={0.8}
+                            >
+                                <Text style={[styles.toggleText, billingPeriod === 'monthly' && styles.toggleTextActive]}>
+                                    Mensual
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.toggleOption, billingPeriod === 'annual' && styles.toggleOptionActive]}
+                                onPress={() => setBillingPeriod('annual')}
+                                activeOpacity={0.8}
+                            >
+                                <Text style={[styles.toggleText, billingPeriod === 'annual' && styles.toggleTextActive]}>
+                                    Anual
+                                </Text>
+                                <View style={styles.saveBadge}>
+                                    <Text style={styles.saveBadgeText}>AHORRA 17%</Text>
+                                </View>
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
                     {/* Plans */}
@@ -151,6 +186,8 @@ export default function SubscribePage() {
                             const isCurrentPlan = plan.id === tier;
                             const isLowerPlan = planIndex < currentPlanIndex;
                             const isDisabled = isCurrentPlan || isLowerPlan;
+
+                            const displayPrice = billingPeriod === 'monthly' ? plan.price : plan.annualPrice;
 
                             return (
                                 <View
@@ -172,13 +209,19 @@ export default function SubscribePage() {
                                             <Text style={styles.badgeText}>{plan.badge}</Text>
                                         </View>
                                     )}
+                                    {/* Annual Savings Badge on Card */}
+                                    {billingPeriod === 'annual' && !isCurrentPlan && (
+                                        <View style={styles.annualBadgeCard}>
+                                            <Text style={styles.annualBadgeText}>2 MESES GRATIS</Text>
+                                        </View>
+                                    )}
 
                                     <Text style={styles.planName}>{plan.name}</Text>
 
                                     <View style={styles.priceContainer}>
                                         <Text style={styles.currency}>MX$</Text>
-                                        <Text style={styles.price}>{plan.price}.00</Text>
-                                        <Text style={styles.period}>/mes</Text>
+                                        <Text style={styles.price}>{displayPrice}.00</Text>
+                                        <Text style={styles.period}>/{billingPeriod === 'monthly' ? 'mes' : 'año'}</Text>
                                     </View>
 
                                     <View style={styles.featuresContainer}>
@@ -370,5 +413,58 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 10,
         fontWeight: '700',
+    },
+    toggleContainer: {
+        flexDirection: 'row',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderRadius: 16,
+        padding: 4,
+        marginTop: 24,
+    },
+    toggleOption: {
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    toggleOptionActive: {
+        backgroundColor: '#3b82f6',
+    },
+    toggleText: {
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    toggleTextActive: {
+        color: '#fff',
+        fontWeight: '700',
+    },
+    saveBadge: {
+        backgroundColor: '#22c55e',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 6,
+    },
+    saveBadgeText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: '800',
+    },
+    annualBadgeCard: {
+        position: 'absolute',
+        top: -12,
+        right: 40,
+        backgroundColor: '#22c55e',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        zIndex: 10,
+    },
+    annualBadgeText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: '800',
     },
 });
