@@ -33,6 +33,8 @@ import { storage } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { BackgroundAnalysisManager, type AnalysisState } from '@/lib/BackgroundAnalysisManager';
 import { validateRelationshipType, formatValidationMessage } from '@/lib/relationshipTypeValidator';
+import { canCreateProfileThisMonth, incrementMonthlyProfileCount } from '@/lib/exSimulator';
+import { useSubscription } from '@/lib/SubscriptionContext';
 
 export default function AnalysisScreen() {
     const router = useRouter();
@@ -87,9 +89,68 @@ export default function AnalysisScreen() {
             // Check if we need to START a new analysis
             const analyzeData = await storage.getItem('exSimulator_analyzeData');
             if (analyzeData) {
-                // Start new analysis
-                const { parsedMessages, exName, relationshipType, userName } = JSON.parse(analyzeData);
+                // Check if using chunked storage (new format) or legacy format
+                const metadata = JSON.parse(analyzeData);
+                let parsedMessages: any[];
+                let exName: string;
+                let relationshipType: string;
+                let userName: string | undefined;
+
+                if (metadata.totalChunks) {
+                    // NEW: Chunked storage format - reassemble messages from chunks
+                    console.log(`[AnalysisScreen] Reading ${metadata.totalChunks} chunks (${metadata.totalMessages} messages)`);
+                    parsedMessages = [];
+
+                    for (let i = 0; i < metadata.totalChunks; i++) {
+                        const chunkData = await storage.getItem(`exSimulator_chunk_${i}`);
+                        if (chunkData) {
+                            const chunk = JSON.parse(chunkData);
+                            parsedMessages.push(...chunk);
+                            // Clean up chunk after reading
+                            await storage.removeItem(`exSimulator_chunk_${i}`);
+                        }
+                    }
+
+                    exName = metadata.exName;
+                    relationshipType = metadata.relationshipType;
+                    userName = metadata.userName;
+                    console.log(`[AnalysisScreen] Reassembled ${parsedMessages.length} messages from chunks`);
+                } else {
+                    // LEGACY: Old format with parsedMessages directly in storage
+                    parsedMessages = metadata.parsedMessages;
+                    exName = metadata.exName;
+                    relationshipType = metadata.relationshipType;
+                    userName = metadata.userName;
+                }
+
                 await storage.removeItem('exSimulator_analyzeData'); // Clear so we don't re-run
+
+                // 🔒 CHECK MONTHLY PROFILE LIMIT BEFORE PROCEEDING
+                const { data: { user } } = await supabase.auth.getUser();
+                let subscriptionTier = 'survivor'; // default
+                if (user) {
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('subscription_tier')
+                        .eq('user_id', user.id)
+                        .single();
+                    subscriptionTier = profile?.subscription_tier || 'survivor';
+                }
+
+                const limitCheck = await canCreateProfileThisMonth(subscriptionTier);
+                if (!limitCheck.canCreate) {
+                    setLoading(false);
+                    showAlert(
+                        '🚫 Límite Alcanzado',
+                        limitCheck.message || `Has alcanzado tu límite de perfiles este mes.`,
+                        [
+                            { text: 'Ver Planes', onPress: () => router.push('/paywall') },
+                            { text: 'OK', onPress: () => router.back() }
+                        ],
+                        'warning'
+                    );
+                    return;
+                }
 
                 setIsAnalyzing(true);
                 setLoading(false);
@@ -119,6 +180,11 @@ export default function AnalysisScreen() {
                                 });
                             }
                         });
+
+                        // 📊 INCREMENT MONTHLY PROFILE COUNT (limits per plan)
+                        incrementMonthlyProfileCount()
+                            .then(() => console.log('[AnalysisScreen] Monthly profile count incremented'))
+                            .catch(err => console.error('[AnalysisScreen] Failed to increment profile count:', err));
 
                         // Navigate to chat after completion
                         setTimeout(() => {

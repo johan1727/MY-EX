@@ -337,25 +337,41 @@ export class BackgroundAnalysisManager {
 
             let embeddingStats = null;
             try {
+                // ⚡ TIMEOUT: Skip embeddings if taking too long (prevent 96% freeze)
+                const EMBEDDING_TIMEOUT_MS = 30000; // 30 seconds max
 
+                const embeddingPromise = (async () => {
+                    // Solo crear embeddings si hay mensajes y usuario autenticado
+                    if (messages.length > 0 && user?.id) {
+                        await embedMessages(
+                            messages.slice(-250), // LIMIT: Last 250 messages (most recent)
+                            profileId,
+                            user.id,
+                            (current, total) => {
+                                const percent = 95.5 + ((current / total) * 2); // 95.5% a 97.5%
+                                onProgress(percent, `🧠 Embeddings: ${current}/${total}...`);
+                            }
+                        );
 
-                // Solo crear embeddings si hay mensajes y usuario autenticado
-                if (messages.length > 0 && user?.id) {
-                    await embedMessages(
-                        messages,
-                        profileId,
-                        user.id,
-                        (current, total) => {
-                            const percent = 95.5 + ((current / total) * 2); // 95.5% a 97.5%
-                            onProgress(percent, `🧠 Embeddings: ${current}/${total}...`);
-                        }
-                    );
+                        return await getEmbeddingStats(profileId);
+                    }
+                    return null;
+                })();
 
-                    embeddingStats = await getEmbeddingStats(profileId);
+                // Race against timeout
+                embeddingStats = await Promise.race([
+                    embeddingPromise,
+                    new Promise<null>((_, reject) =>
+                        setTimeout(() => reject(new Error('Embedding timeout')), EMBEDDING_TIMEOUT_MS)
+                    )
+                ]) as typeof embeddingStats;
+
+                if (embeddingStats) {
                     console.log('[BackgroundAnalysis] Created', embeddingStats.totalMessages, 'embeddings');
                 }
-            } catch (embErr) {
-                console.error('[BackgroundAnalysis] Embedding creation failed:', embErr);
+            } catch (embErr: any) {
+                console.error('[BackgroundAnalysis] Embedding skipped or failed:', embErr?.message || embErr);
+                // Continue without embeddings - not critical
             }
 
             // CHECKPOINT 4.02: Emotional Memories (NEW - Advanced AI)

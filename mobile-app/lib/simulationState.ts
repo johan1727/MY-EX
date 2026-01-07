@@ -324,7 +324,7 @@ export async function calculateTensionWithAI(
     conversationHistory: { role: 'user' | 'assistant'; content: string }[],
     currentTension: number
 ): Promise<{ tensionLevel: number; reason: string; emotionalShift: PrimaryEmotion | null }> {
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 
     if (!apiKey) {
         console.warn('[TensionAI] No API key, using algorithmic fallback');
@@ -468,7 +468,7 @@ export async function reevaluateEmotionalStateWithAI(
     session: SimulationSession,
     conversationHistory: { role: 'user' | 'assistant'; content: string }[]
 ): Promise<SimulationSession> {
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 
     if (!apiKey || conversationHistory.length < 5) {
         console.warn('[EmotionalAI] Skipping (not enough history or no API)');

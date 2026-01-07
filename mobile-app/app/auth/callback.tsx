@@ -63,9 +63,9 @@ export default function AuthCallback() {
                 }, 500);
             } else {
                 console.log('[AuthCallback] No session found, going to auth...');
-                // No session, go back to tabs (guest mode)
+                // No session, go to login screen
                 setTimeout(() => {
-                    router.replace('/(tabs)');
+                    router.replace('/auth');
                 }, 500);
             }
         } catch (error) {

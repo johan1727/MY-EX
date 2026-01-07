@@ -403,6 +403,16 @@ export default function ImportChat() {
                 addDebug(`📏 Tamaño: ${fileSizeMB.toFixed(1)}MB`);
                 await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
 
+                // HELPER: Read blob as text (React Native compatible)
+                const readBlobAsText = (blob: Blob): Promise<string> => {
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result as string);
+                        reader.onerror = () => reject(reader.error);
+                        reader.readAsText(blob);
+                    });
+                };
+
                 // For 500k tokens, we need ~2 million chars (~10MB text max)
                 const MAX_READ_SIZE = 10 * 1024 * 1024; // 10MB total
                 // Using outer 'text' variable declared at line 311
@@ -419,7 +429,7 @@ export default function ImportChat() {
 
                         // 1. READ START (context of how relationship began)
                         const startBlob = blob.slice(0, START_SIZE);
-                        let startText = await startBlob.text();
+                        let startText = await readBlobAsText(startBlob);
                         // Find last complete line in start section
                         const lastNewlineStart = startText.lastIndexOf('\n');
                         if (lastNewlineStart > 0) {
@@ -430,7 +440,7 @@ export default function ImportChat() {
                         // 2. READ MIDDLE (random section for relationship evolution)
                         const middleStart = Math.floor(blob.size * 0.3 + Math.random() * blob.size * 0.3);
                         const middleBlob = blob.slice(middleStart, middleStart + MIDDLE_SIZE);
-                        let middleText = await middleBlob.text();
+                        let middleText = await readBlobAsText(middleBlob);
                         // Find first and last complete lines
                         const firstNewlineMid = middleText.indexOf('\n');
                         const lastNewlineMid = middleText.lastIndexOf('\n');
@@ -441,7 +451,7 @@ export default function ImportChat() {
 
                         // 3. READ END (most recent - most important for simulation)
                         const endBlob = blob.slice(blob.size - END_SIZE);
-                        let endText = await endBlob.text();
+                        let endText = await readBlobAsText(endBlob);
                         const firstNewlineEnd = endText.indexOf('\n');
                         if (firstNewlineEnd > 0 && firstNewlineEnd < 1000) {
                             endText = endText.slice(firstNewlineEnd + 1);
@@ -453,20 +463,34 @@ export default function ImportChat() {
 
                         setTruncatedInfo({ original: blob.size, used: text.length });
                         addDebug(`✅ Sampling: ${(text.length / 1024 / 1024).toFixed(1)}MB de ${fileSizeMB.toFixed(1)}MB`);
-                    } catch (samplingError) {
+                    } catch (samplingError: any) {
                         // FALLBACK: If smart sampling fails, use simple tail method
-                        addDebug(`⚠️ Sampling falló, usando método simple...`);
-                        const tailBlob = blob.slice(blob.size - MAX_READ_SIZE);
-                        text = await tailBlob.text();
-                        const firstNewline = text.indexOf('\n');
-                        if (firstNewline > 0 && firstNewline < 1000) {
-                            text = text.slice(firstNewline + 1);
+                        addDebug(`⚠️ Sampling falló: ${samplingError.message || 'Error desconocido'}`);
+                        addDebug(`🔄 Intentando método simple...`);
+                        try {
+                            const tailBlob = blob.slice(blob.size - MAX_READ_SIZE);
+                            text = await readBlobAsText(tailBlob);
+                            const firstNewline = text.indexOf('\n');
+                            if (firstNewline > 0 && firstNewline < 1000) {
+                                text = text.slice(firstNewline + 1);
+                            }
+                            setTruncatedInfo({ original: blob.size, used: text.length });
+                            addDebug(`✅ Método simple exitoso: ${(text.length / 1024 / 1024).toFixed(1)}MB`);
+                        } catch (fallbackError: any) {
+                            addDebug(`❌ Error crítico: ${fallbackError.message}`);
+                            throw new Error(`No se pudo leer el archivo: ${fallbackError.message}`);
                         }
-                        setTruncatedInfo({ original: blob.size, used: text.length });
                     }
                 } else {
                     // NORMAL FILE: Read entire file
-                    text = await blob.text();
+                    addDebug(`📖 Leyendo archivo completo...`);
+                    try {
+                        text = await readBlobAsText(blob);
+                        addDebug(`✅ Archivo leído: ${(text.length / 1024 / 1024).toFixed(1)}MB`);
+                    } catch (readError: any) {
+                        addDebug(`❌ Error leyendo archivo: ${readError.message}`);
+                        throw new Error(`No se pudo leer el archivo: ${readError.message}`);
+                    }
                 }
             } // Close the if(isZip) / else block
             await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
@@ -655,28 +679,55 @@ export default function ImportChat() {
         }
 
         // Navigate to analysis screen with data for hybrid progress display
-        // WEB FIX: Limit to 5,000 messages for Web localStorage (max ~500KB)
-        // Mobile can handle more, but Web localStorage has strict quota limits
-        // The background analysis will have access to full dataset via other means
-        const messageLimit = Platform.OS === 'web' ? 5000 : 20000;
+        // CHUNKED STORAGE: Split 20k messages into 4 chunks of 5k each
+        // This avoids AsyncStorage "Row too big" error on Android
+        const messageLimit = 20000;
+        const chunkSize = 5000;
+        const limitedMessages = parsedMessages.slice(0, messageLimit);
+        const totalChunks = Math.ceil(limitedMessages.length / chunkSize);
+
+        // Store metadata first
         await storage.setItem('exSimulator_analyzeData', JSON.stringify({
-            parsedMessages: parsedMessages.slice(0, messageLimit),
+            totalChunks,
+            totalMessages: limitedMessages.length,
             exName,
             relationshipType
         }));
+
+        // Store each chunk separately
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * chunkSize;
+            const end = Math.min(start + chunkSize, limitedMessages.length);
+            const chunk = limitedMessages.slice(start, end);
+            await storage.setItem(`exSimulator_chunk_${i}`, JSON.stringify(chunk));
+        }
 
         router.push('/tools/ex-simulator/analysis');
     };
 
     const continueAnalysis = async () => {
         // Navigate to analysis screen with data for hybrid progress display
-        // WEB FIX: Use same message limit as handleAnalyze
-        const messageLimit = Platform.OS === 'web' ? 5000 : 20000;
+        // CHUNKED STORAGE: Same as handleAnalyze
+        const messageLimit = 20000;
+        const chunkSize = 5000;
+        const limitedMessages = parsedMessages.slice(0, messageLimit);
+        const totalChunks = Math.ceil(limitedMessages.length / chunkSize);
+
+        // Store metadata first
         await storage.setItem('exSimulator_analyzeData', JSON.stringify({
-            parsedMessages: parsedMessages.slice(0, messageLimit),
+            totalChunks,
+            totalMessages: limitedMessages.length,
             exName,
             relationshipType
         }));
+
+        // Store each chunk separately
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * chunkSize;
+            const end = Math.min(start + chunkSize, limitedMessages.length);
+            const chunk = limitedMessages.slice(start, end);
+            await storage.setItem(`exSimulator_chunk_${i}`, JSON.stringify(chunk));
+        }
 
         router.push('/tools/ex-simulator/analysis');
     };

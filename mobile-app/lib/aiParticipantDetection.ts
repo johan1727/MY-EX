@@ -21,7 +21,9 @@ export interface ParticipantAnalysis {
 export async function detectParticipantsWithAI(
     messages: ParsedMessage[]
 ): Promise<ParticipantAnalysis[]> {
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    const ENV_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    const FALLBACK_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
+    const apiKey = ENV_KEY && ENV_KEY.length > 10 ? ENV_KEY : FALLBACK_KEY;
 
     if (!apiKey || messages.length < 50) {
         console.warn('[ParticipantAI] Usando fallback algoritm ico');
@@ -38,7 +40,7 @@ export async function detectParticipantsWithAI(
             .join('\n');
 
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         const prompt = `Analiza esta conversación de WhatsApp y determina quiénes son los participantes y sus roles.
 
@@ -143,7 +145,9 @@ export async function extractKeyEventsWithAI(
     messages: ParsedMessage[],
     exName: string
 ): Promise<MemoryExtraction> {
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    const ENV_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    const FALLBACK_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
+    const apiKey = ENV_KEY && ENV_KEY.length > 10 ? ENV_KEY : FALLBACK_KEY;
 
     if (!apiKey) {
         console.warn('[MemoryAI] No API key');
@@ -163,7 +167,7 @@ export async function extractKeyEventsWithAI(
             .join('\n');
 
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         const prompt = `Analiza esta conversación y extrae la MEMORIA de eventos importantes.
 

@@ -111,7 +111,7 @@ async function analyzeCorrection(correction: UserCorrection): Promise<{
     confidence: number;
     pattern_detected: string;
 }> {
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 
     if (!apiKey) {
         return {
@@ -201,7 +201,7 @@ export async function updateMasterPromptWithCorrections(
         return null;
     }
 
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
     if (!apiKey) {
         console.warn('[AutoMejora] No API key');
         return null;
@@ -449,7 +449,7 @@ export async function analyzeConversationPatterns(
     detectedIssues?: string[];
     confidence?: number;
 } | null> {
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
     if (!apiKey || conversation.length < 10) {
         return null;
     }

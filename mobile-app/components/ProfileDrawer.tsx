@@ -415,6 +415,10 @@ export default function ProfileDrawer({
                         {showUserMenu && (
                             <View style={styles.userMenuContent}>
                                 {/* Settings inside Dropdown */}
+                                <TouchableOpacity style={styles.userMenuItem} onPress={() => { onClose(); router.push('/profile'); }}>
+                                    <User size={16} color="#9ca3af" />
+                                    <Text style={styles.userMenuText}>Mi Perfil</Text>
+                                </TouchableOpacity>
                                 <TouchableOpacity style={styles.userMenuItem} onPress={() => { onClose(); router.push('/preferences'); }}>
                                     <Settings size={16} color="#9ca3af" />
                                     <Text style={styles.userMenuText}>Preferencias</Text>

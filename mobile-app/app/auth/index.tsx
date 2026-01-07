@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -7,120 +7,84 @@ import {
     Platform,
     ActivityIndicator,
     StyleSheet,
-    Animated,
     Dimensions,
     KeyboardAvoidingView,
     ScrollView,
+    Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Mail, Lock, ArrowLeft, Eye, EyeOff } from 'lucide-react-native';
+import { Eye, EyeOff } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
-import { BlurView } from 'expo-blur';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
-// Complete auth session for web browsers
-WebBrowser.maybeCompleteAuthSession();
+// Try to import native Google Sign-In
+let GoogleSignin: any = null;
+let statusCodes: any = null;
+let isNativeGoogleSignInAvailable = false;
 
-// Configure Google Sign-In for native authentication (Android/iOS)
-if (Platform.OS !== 'web') {
-    GoogleSignin.configure({
-        webClientId: '217853738800-ncr5qhb1aatrhqskthmr2llulj6vgkkp.apps.googleusercontent.com',
-        offlineAccess: true,
-    });
+try {
+    const googleModule = require('@react-native-google-signin/google-signin');
+    GoogleSignin = googleModule.GoogleSignin;
+    statusCodes = googleModule.statusCodes;
+    isNativeGoogleSignInAvailable = Platform.OS !== 'web';
+
+    if (isNativeGoogleSignInAvailable && GoogleSignin) {
+        GoogleSignin.configure({
+            webClientId: '217853738800-ncr5qhb1aatrhqskthmr2llulj6vgkkp.apps.googleusercontent.com',
+            offlineAccess: true,
+        });
+    }
+} catch (e) {
+    isNativeGoogleSignInAvailable = false;
 }
 
-const { width, height } = Dimensions.get('window');
+WebBrowser.maybeCompleteAuthSession();
+
+const { width } = Dimensions.get('window');
 
 export default function AuthScreen() {
     const router = useRouter();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null);
+    const [oauthLoading, setOauthLoading] = useState<'google' | null>(null);
     const [isSignUp, setIsSignUp] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
     const [showEmailForm, setShowEmailForm] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-
     const [hasNavigated, setHasNavigated] = useState(false);
 
     useEffect(() => {
-        // Handle OAuth callback for web
         const handleOAuthCallback = async () => {
-            if (hasNavigated) {
-                console.log('[Auth] Already navigated, skipping');
-                return;
-            }
+            if (hasNavigated) return;
 
-            // First check for existing session
             const { data: { session: existingSession } } = await supabase.auth.getSession();
             if (existingSession && !hasNavigated) {
-                console.log('[Auth] ✅ Found existing session, navigating');
                 setHasNavigated(true);
                 router.replace('/welcome-confirmation');
                 return;
             }
 
             if (Platform.OS === 'web' && typeof window !== 'undefined') {
-                // Check if we're coming back from OAuth
                 const hashParams = new URLSearchParams(window.location.hash.substring(1));
                 const searchParams = new URLSearchParams(window.location.search);
-
                 const accessToken = hashParams.get('access_token') || searchParams.get('access_token');
                 const refreshToken = hashParams.get('refresh_token') || searchParams.get('refresh_token');
-                const errorCode = hashParams.get('error_code') || searchParams.get('error_code');
-                const errorDescription = hashParams.get('error_description') || searchParams.get('error_description');
-
-                console.log('[Auth] Checking OAuth callback:', {
-                    hasToken: !!accessToken,
-                    hasError: !!errorCode,
-                    hash: window.location.hash.substring(0, 50),
-                    search: window.location.search.substring(0, 50)
-                });
-
-                if (errorCode || errorDescription) {
-                    console.error('[Auth] OAuth error:', errorDescription || errorCode);
-                    setErrorMsg(`Error: ${errorDescription || errorCode}`);
-                    window.history.replaceState(null, '', window.location.pathname);
-                    return;
-                }
 
                 if (accessToken && refreshToken) {
-                    try {
-                        console.log('[Auth] Setting session from OAuth tokens');
-                        const { data, error } = await supabase.auth.setSession({
-                            access_token: accessToken,
-                            refresh_token: refreshToken,
-                        });
+                    const { data, error } = await supabase.auth.setSession({
+                        access_token: accessToken,
+                        refresh_token: refreshToken,
+                    });
 
-                        if (error) {
-                            console.error('[Auth] Session error:', error);
-                            setErrorMsg('Error al iniciar sesión: ' + error.message);
-                            window.history.replaceState(null, '', window.location.pathname);
-                            return;
-                        }
-
-                        if (data.session) {
-                            console.log('[Auth] ✅ Session set successfully');
-                            // Clean URL
-                            window.history.replaceState(null, '', window.location.pathname);
-                            setHasNavigated(true);
-
-                            // Small delay to ensure session is fully set
-                            setTimeout(() => {
-                                router.replace('/welcome-confirmation');
-                            }, 100);
-                            return;
-                        }
-                    } catch (error: any) {
-                        console.error('[Auth] Catch error:', error);
-                        setErrorMsg('Error procesando login: ' + error.message);
+                    if (!error && data.session) {
                         window.history.replaceState(null, '', window.location.pathname);
+                        setHasNavigated(true);
+                        setTimeout(() => router.replace('/welcome-confirmation'), 100);
+                        return;
                     }
                 }
             }
@@ -129,13 +93,9 @@ export default function AuthScreen() {
         handleOAuthCallback();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            console.log('[Auth] Auth state changed:', event, !!session);
             if (event === 'SIGNED_IN' && session && !hasNavigated) {
-                console.log('[Auth] ✅ Sign in event, navigating');
                 setHasNavigated(true);
-                setTimeout(() => {
-                    router.replace('/welcome-confirmation');
-                }, 100);
+                setTimeout(() => router.replace('/welcome-confirmation'), 100);
             }
         });
 
@@ -143,68 +103,76 @@ export default function AuthScreen() {
     }, [hasNavigated]);
 
     const handleOAuthLogin = async (provider: 'google') => {
+        console.log('Google login pressed');
         try {
             setOauthLoading(provider);
             setErrorMsg(null);
-            setSuccessMsg(null);
 
-            if (Platform.OS === 'web') {
-                const isLocal = window?.location?.hostname === 'localhost';
-                const redirectUrl = isLocal
-                    ? 'http://localhost:8081/auth'
-                    : `${window.location.origin}/auth`;
+            if (Platform.OS === 'web' || !isNativeGoogleSignInAvailable) {
 
-                const { error } = await supabase.auth.signInWithOAuth({
+                // Use default Expo scheme for dev/preview
+                const redirectUrl = Linking.createURL('auth');
+                console.log('Using redirect URL:', redirectUrl);
+
+                const { data, error } = await supabase.auth.signInWithOAuth({
                     provider,
                     options: {
                         redirectTo: redirectUrl,
+                        skipBrowserRedirect: true,
                         queryParams: {
                             access_type: 'offline',
-                            prompt: 'consent',
+                            prompt: 'consent'
                         }
                     }
                 });
 
                 if (error) throw error;
-            } else {
-                console.log('[Auth] Starting native Google Sign-In...');
-                try {
-                    await GoogleSignin.hasPlayServices();
-                    const userInfo = await GoogleSignin.signIn();
-                    console.log('[Auth] Google Sign-In successful:', userInfo.data?.user?.email);
 
-                    const tokens = await GoogleSignin.getTokens();
-                    const idToken = tokens.idToken;
+                if (data?.url) {
+                    console.log('Opening auth session with URL:', data.url);
+                    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+                    console.log('Auth session result:', result);
 
-                    if (!idToken) {
-                        throw new Error('No se pudo obtener el token de Google');
-                    }
+                    if (result.type === 'success' && result.url) {
+                        const url = result.url;
+                        const fragment = url.includes('#') ? url.split('#')[1] : null;
+                        const query = url.includes('?') ? url.split('?')[1] : null;
+                        const params = new URLSearchParams(fragment || query || '');
 
-                    const { data, error } = await supabase.auth.signInWithIdToken({
-                        provider: 'google',
-                        token: idToken,
-                    });
+                        const accessToken = params.get('access_token');
+                        const refreshToken = params.get('refresh_token');
 
-                    if (error) throw error;
-                    console.log('[Auth] ✅ Supabase sign-in successful!');
-                    router.replace('/welcome-confirmation');
+                        if (accessToken && refreshToken) {
+                            console.log('Got tokens from URL, setting session...');
+                            const { error: sessionError } = await supabase.auth.setSession({
+                                access_token: accessToken,
+                                refresh_token: refreshToken,
+                            });
 
-                } catch (nativeError: any) {
-                    if (nativeError.code === statusCodes.SIGN_IN_CANCELLED) {
-                        console.log('[Auth] User cancelled Google Sign-In');
-                        return;
-                    } else if (nativeError.code === statusCodes.IN_PROGRESS) {
-                        return;
-                    } else if (nativeError.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-                        throw new Error('Google Play Services no está disponible');
-                    } else {
-                        throw nativeError;
+                            if (!sessionError) {
+                                console.log('Session set successfully!');
+                                router.replace('/welcome-confirmation');
+                            }
+                        }
                     }
                 }
+            } else {
+                await GoogleSignin.hasPlayServices();
+                const userInfo = await GoogleSignin.signIn();
+                const tokens = await GoogleSignin.getTokens();
+                if (!tokens.idToken) throw new Error('No se pudo obtener el token de Google');
+                const { error } = await supabase.auth.signInWithIdToken({
+                    provider: 'google',
+                    token: tokens.idToken,
+                });
+                if (error) throw error;
+                router.replace('/welcome-confirmation');
             }
         } catch (error: any) {
-            console.error('OAuth error:', error);
-            setErrorMsg(error.message || `Error al iniciar con ${provider}`);
+            console.error('Login error:', error);
+            if (error.code !== statusCodes?.SIGN_IN_CANCELLED && error.code !== statusCodes?.IN_PROGRESS) {
+                setErrorMsg(error.message || 'Error al iniciar sesión');
+            }
         } finally {
             setOauthLoading(null);
         }
@@ -213,15 +181,11 @@ export default function AuthScreen() {
     const handleAuth = async () => {
         setErrorMsg(null);
         setSuccessMsg(null);
-        const trimmedEmail = email.trim();
-        const trimmedPassword = password.trim();
-
-        if (!trimmedEmail || !trimmedPassword) {
+        if (!email.trim() || !password.trim()) {
             setErrorMsg('Por favor completa todos los campos');
             return;
         }
-
-        if (trimmedPassword.length < 6) {
+        if (password.length < 6) {
             setErrorMsg('La contraseña debe tener al menos 6 caracteres');
             return;
         }
@@ -230,477 +194,207 @@ export default function AuthScreen() {
         try {
             if (isSignUp) {
                 const { data, error } = await supabase.auth.signUp({
-                    email: trimmedEmail,
-                    password: trimmedPassword,
+                    email: email.trim(),
+                    password: password.trim(),
                 });
-
                 if (error) throw error;
-
-                if (data.user) {
-                    try {
-                        await supabase.from('profiles').insert({
-                            id: data.user.id,
-                            email: data.user.email,
-                        });
-                    } catch (e) {
-                        // Profile might already exist, ignore
-                    }
-
-                    setSuccessMsg('¡Cuenta creada! Revisa tu correo para verificar.');
-                    setEmail('');
-                    setPassword('');
-                }
+                setSuccessMsg('¡Cuenta creada! Revisa tu correo.');
+                setEmail('');
+                setPassword('');
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
-                    email: trimmedEmail,
-                    password: trimmedPassword,
+                    email: email.trim(),
+                    password: password.trim(),
                 });
-
                 if (error) throw error;
                 router.replace('/welcome-confirmation');
             }
         } catch (error: any) {
-            if (error.message?.toLowerCase().includes('invalid login credentials')) {
-                setErrorMsg('Credenciales inválidas. Si acabas de registrarte, verifica tu correo primero.');
-            } else if (error.message?.toLowerCase().includes('email not confirmed')) {
-                setErrorMsg('Por favor verifica tu correo electrónico para activar tu cuenta.');
-            } else if (error.message?.includes('User already registered')) {
-                setErrorMsg('Este correo ya está registrado. Intenta iniciar sesión.');
-                setIsSignUp(false);
-            } else {
-                setErrorMsg(error.message || 'Ocurrió un error');
-            }
+            setErrorMsg(error.message || 'Ocurrió un error');
         } finally {
             setLoading(false);
         }
     };
 
+    if (showEmailForm) {
+        return (
+            <View style={styles.container}>
+                <StatusBar style="light" />
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
+                    <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                        <TouchableOpacity style={styles.backButton} onPress={() => setShowEmailForm(false)}>
+                            <Text style={styles.backText}>← Atrás</Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.formContainer}>
+                            <Text style={styles.formTitle}>{isSignUp ? 'Crear Cuenta' : 'Iniciar Sesión'}</Text>
+
+                            {errorMsg && <View style={styles.errorBox}><Text style={styles.errorText}>{errorMsg}</Text></View>}
+                            {successMsg && <View style={styles.successBox}><Text style={styles.successText}>{successMsg}</Text></View>}
+
+                            <View style={styles.inputContainer}>
+                                <Text style={styles.label}>Email</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="tu@email.com"
+                                    placeholderTextColor="#888"
+                                    value={email}
+                                    onChangeText={setEmail}
+                                    autoCapitalize="none"
+                                    keyboardType="email-address"
+                                />
+                            </View>
+
+                            <View style={styles.inputContainer}>
+                                <Text style={styles.label}>Contraseña</Text>
+                                <View style={styles.passwordWrapper}>
+                                    <TextInput
+                                        style={styles.passwordInput}
+                                        placeholder="Mínimo 6 caracteres"
+                                        placeholderTextColor="#888"
+                                        value={password}
+                                        onChangeText={setPassword}
+                                        secureTextEntry={!showPassword}
+                                    />
+                                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                                        {showPassword ? <EyeOff size={20} color="#888" /> : <Eye size={20} color="#888" />}
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            <TouchableOpacity style={styles.primaryButton} onPress={handleAuth} disabled={loading}>
+                                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>{isSignUp ? 'Crear Cuenta' : 'Continuar'}</Text>}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.toggleButton} onPress={() => setIsSignUp(!isSignUp)}>
+                                <Text style={styles.toggleText}>
+                                    {isSignUp ? '¿Ya tienes cuenta? ' : '¿No tienes cuenta? '}
+                                    <Text style={styles.toggleLink}>{isSignUp ? 'Inicia Sesión' : 'Regístrate'} </Text>
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </ScrollView>
+                </KeyboardAvoidingView>
+            </View>
+        );
+    }
+
     return (
-        <LinearGradient
-            colors={['#0f0f23', '#1a0a2e', '#2d1b4e']}
-            style={styles.container}
-        >
+        <View style={styles.container}>
             <StatusBar style="light" />
+            <View style={styles.heroSection}>
+                <View style={styles.imageWrapper}>
+                    <Image source={require('../../assets/icon_transparent.png')} style={styles.heroImage} resizeMode="contain" />
+                    <View style={[styles.floatingTag, styles.tagLeft]}>
+                        <Text style={styles.tagEmoji}>💜</Text>
+                        <Text style={styles.tagText}>Sanación</Text>
+                    </View>
+                    <View style={[styles.floatingTag, styles.tagRight]}>
+                        <Text style={styles.tagEmoji}>🤖</Text>
+                        <Text style={styles.tagText}>IA Coach</Text>
+                    </View>
+                </View>
+            </View>
 
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.keyboardView}
-            >
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    {/* Main Content */}
-                    <View style={styles.content}>
-                        {!showEmailForm ? (
+            <View style={styles.bottomSection}>
+                <Text style={styles.title}>Tu coach de IA para{'\n'}superar el pasado</Text>
+                <View style={{ height: 20 }} />
+                <View style={styles.buttonsContainer}>
+                    <TouchableOpacity style={styles.googleButton} onPress={() => handleOAuthLogin('google')} disabled={oauthLoading !== null}>
+                        {oauthLoading === 'google' ? <ActivityIndicator color="#000" size="small" /> : (
                             <>
-                                {/* Header with gradient text */}
-                                <View style={styles.header}>
-                                    <LinearGradient
-                                        colors={['#a855f7', '#ec4899', '#f97316']}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 1 }}
-                                        style={styles.titleGradient}
-                                    >
-                                        <Text style={styles.title}>Comienza tu sanación ●</Text>
-                                    </LinearGradient>
-                                    <Text style={styles.subtitle}>Tu coach de IA para superar el pasado</Text>
-                                </View>
-
-                                {/* OAuth Buttons */}
-                                <View style={styles.buttonsContainer}>
-                                    {/* Apple Button */}
-                                    {Platform.OS === 'ios' && (
-                                        <TouchableOpacity
-                                            style={[styles.button, styles.appleButton]}
-                                            disabled={oauthLoading !== null}
-                                            activeOpacity={0.8}
-                                        >
-                                            <Text style={styles.appleButtonText}>🍎  Continue with Apple</Text>
-                                        </TouchableOpacity>
-                                    )}
-
-                                    {/* Google Button */}
-                                    <TouchableOpacity
-                                        style={[styles.button, styles.googleButton]}
-                                        onPress={() => handleOAuthLogin('google')}
-                                        disabled={oauthLoading !== null}
-                                        activeOpacity={0.8}
-                                    >
-                                        {oauthLoading === 'google' ? (
-                                            <ActivityIndicator color="#fff" size="small" />
-                                        ) : (
-                                            <>
-                                                <Text style={styles.googleIcon}>G</Text>
-                                                <Text style={styles.googleButtonText}>Continue with Google</Text>
-                                            </>
-                                        )}
-                                    </TouchableOpacity>
-
-                                    {/* Sign Up Button with gradient */}
-                                    <LinearGradient
-                                        colors={['#a855f7', '#8b5cf6']}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 1 }}
-                                        style={[styles.button, styles.gradientButton]}
-                                    >
-                                        <TouchableOpacity
-                                            style={styles.gradientButtonInner}
-                                            onPress={() => {
-                                                setIsSignUp(true);
-                                                setShowEmailForm(true);
-                                            }}
-                                            activeOpacity={0.8}
-                                        >
-                                            <Text style={styles.signupButtonText}>Sign up</Text>
-                                        </TouchableOpacity>
-                                    </LinearGradient>
-
-                                    {/* Log In Button */}
-                                    <TouchableOpacity
-                                        style={[styles.button, styles.loginButton]}
-                                        onPress={() => {
-                                            setIsSignUp(false);
-                                            setShowEmailForm(true);
-                                        }}
-                                        activeOpacity={0.8}
-                                    >
-                                        <Text style={styles.loginButtonText}>Log in</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </>
-                        ) : (
-                            <>
-                                {/* Back Button */}
-                                <TouchableOpacity
-                                    style={styles.backBtn}
-                                    onPress={() => {
-                                        setShowEmailForm(false);
-                                        setErrorMsg(null);
-                                        setSuccessMsg(null);
-                                    }}
-                                >
-                                    <ArrowLeft size={24} color="#000" />
-                                </TouchableOpacity>
-
-                                {/* Form Header */}
-                                <View style={styles.formHeader}>
-                                    <Text style={styles.formTitle}>
-                                        {isSignUp ? 'Crear Cuenta' : 'Iniciar Sesión'}
-                                    </Text>
-                                    <Text style={styles.formSubtitle}>
-                                        {isSignUp
-                                            ? 'Ingresa tu correo para registrarte'
-                                            : 'Ingresa tu correo para continuar'}
-                                    </Text>
-                                </View>
-
-                                {/* Messages */}
-                                {errorMsg && (
-                                    <View style={styles.errorBox}>
-                                        <Text style={styles.errorText}>{errorMsg}</Text>
-                                    </View>
-                                )}
-                                {successMsg && (
-                                    <View style={styles.successBox}>
-                                        <Text style={styles.successText}>{successMsg}</Text>
-                                    </View>
-                                )}
-
-                                {/* Email Form */}
-                                <View style={styles.form}>
-                                    <View style={styles.inputGroup}>
-                                        <Text style={styles.label}>Correo Electrónico</Text>
-                                        <TextInput
-                                            style={styles.input}
-                                            placeholder="tu@email.com"
-                                            placeholderTextColor="#999"
-                                            value={email}
-                                            onChangeText={setEmail}
-                                            autoCapitalize="none"
-                                            keyboardType="email-address"
-                                            autoComplete="email"
-                                        />
-                                    </View>
-
-                                    <View style={styles.inputGroup}>
-                                        <Text style={styles.label}>Contraseña</Text>
-                                        <View style={styles.passwordContainer}>
-                                            <TextInput
-                                                style={styles.passwordInput}
-                                                placeholder="Mínimo 6 caracteres"
-                                                placeholderTextColor="#999"
-                                                value={password}
-                                                onChangeText={setPassword}
-                                                secureTextEntry={!showPassword}
-                                                autoComplete="password"
-                                            />
-                                            <TouchableOpacity
-                                                onPress={() => setShowPassword(!showPassword)}
-                                                style={styles.eyeBtn}
-                                            >
-                                                {showPassword ? (
-                                                    <EyeOff size={20} color="#666" />
-                                                ) : (
-                                                    <Eye size={20} color="#666" />
-                                                )}
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
-
-                                    <TouchableOpacity
-                                        onPress={handleAuth}
-                                        disabled={loading}
-                                        style={[styles.button, styles.submitButton]}
-                                    >
-                                        {loading ? (
-                                            <ActivityIndicator color="#fff" />
-                                        ) : (
-                                            <Text style={styles.submitButtonText}>
-                                                {isSignUp ? 'Crear Cuenta' : 'Continuar'}
-                                            </Text>
-                                        )}
-                                    </TouchableOpacity>
-                                </View>
-
-                                {/* Toggle */}
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        setIsSignUp(!isSignUp);
-                                        setErrorMsg(null);
-                                        setSuccessMsg(null);
-                                    }}
-                                    style={styles.toggleContainer}
-                                >
-                                    <Text style={styles.toggleText}>
-                                        {isSignUp ? '¿Ya tienes cuenta? ' : '¿No tienes cuenta? '}
-                                        <Text style={styles.toggleLink}>
-                                            {isSignUp ? 'Inicia Sesión' : 'Regístrate'}
-                                        </Text>
-                                    </Text>
-                                </TouchableOpacity>
+                                <Text style={styles.googleIcon}>G</Text>
+                                <Text style={styles.googleButtonText}>Continuar con Google</Text>
                             </>
                         )}
-                    </View>
-                </ScrollView>
-            </KeyboardAvoidingView>
-        </LinearGradient>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.emailButton} onPress={() => setShowEmailForm(true)}>
+                        <Text style={styles.emailButtonText}>Continuar con Email</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </View>
     );
 }
-
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: '#000000', // Pure Black
     },
-    keyboardView: {
-        flex: 1,
-    },
-    scrollContent: {
-        flexGrow: 1,
-        justifyContent: 'center',
-        paddingHorizontal: 24,
-        minHeight: height,
-    },
-    content: {
-        flex: 1,
-        justifyContent: 'center',
-        maxWidth: 400,
-        width: '100%',
-        alignSelf: 'center',
-    },
-    header: {
-        alignItems: 'center',
-        marginBottom: 56,
-    },
-    titleGradient: {
-        borderRadius: 16,
-        padding: 4,
-        marginBottom: 12,
-    },
-    title: {
-        fontSize: 34,
-        fontWeight: '900',
-        color: '#FFFFFF',
-        textAlign: 'center',
-        letterSpacing: -0.5,
-    },
-    subtitle: {
-        fontSize: 16,
-        color: 'rgba(255, 255, 255, 0.6)',
-        textAlign: 'center',
-        marginTop: 8,
-    },
-    buttonsContainer: {
-        gap: 14,
-    },
-    button: {
-        height: 56,
-        borderRadius: 16,
+    keyboardView: { flex: 1 },
+    scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 60 },
+
+    heroSection: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 40 },
+    imageWrapper: {
+        width: width * 0.85,
+        height: width * 0.85,
         justifyContent: 'center',
         alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
+        position: 'relative',
     },
-    appleButton: {
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.2)',
-    },
-    appleButtonText: {
-        color: '#FFF',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    googleButton: {
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    googleIcon: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#4285F4',
-    },
-    googleButtonText: {
-        color: '#1f1f1f',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    gradientButton: {
-        overflow: 'hidden',
-    },
-    gradientButtonInner: {
+    heroImage: {
         width: '100%',
         height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
     },
-    signupButtonText: {
-        color: '#FFF',
-        fontSize: 16,
-        fontWeight: '700',
-    },
-    loginButton: {
-        backgroundColor: 'rgba(168, 85, 247, 0.1)',
-        borderWidth: 1.5,
-        borderColor: 'rgba(168, 85, 247, 0.4)',
-    },
-    loginButtonText: {
-        color: '#a855f7',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    backBtn: {
+
+    floatingTag: {
         position: 'absolute',
-        top: 50,
-        left: 0,
-        padding: 12,
-        zIndex: 10,
-    },
-    formHeader: {
-        marginBottom: 32,
-        marginTop: 80,
-    },
-    formTitle: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: '#FFF',
-        marginBottom: 8,
-    },
-    formSubtitle: {
-        fontSize: 16,
-        color: '#999',
-    },
-    form: {
-        gap: 20,
-    },
-    inputGroup: {
-        gap: 8,
-    },
-    label: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#FFF',
-    },
-    input: {
-        height: 50,
-        borderWidth: 1,
-        borderColor: '#333',
-        borderRadius: 8,
+        backgroundColor: 'rgba(20, 20, 20, 0.9)',
+        borderRadius: 20,
+        paddingVertical: 8,
         paddingHorizontal: 16,
-        fontSize: 16,
-        color: '#FFF',
-        backgroundColor: '#1A1A1A',
-    },
-    passwordContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        height: 50,
+        gap: 8,
         borderWidth: 1,
         borderColor: '#333',
-        borderRadius: 8,
-        paddingHorizontal: 16,
-        backgroundColor: '#1A1A1A',
+        zIndex: 10,
     },
-    passwordInput: {
-        flex: 1,
-        fontSize: 16,
-        color: '#FFF',
+    tagLeft: { top: '15%', left: 0, transform: [{ rotate: '-5deg' }] },
+    tagRight: { bottom: '15%', right: 0, transform: [{ rotate: '5deg' }] },
+    tagText: { color: '#E9D5FF', fontWeight: '600' },
+    tagEmoji: { fontSize: 16 },
+
+    bottomSection: { paddingHorizontal: 24, paddingBottom: 48 },
+    title: { fontSize: 30, fontWeight: '800', color: '#FFF', textAlign: 'center', marginBottom: 16 },
+
+    buttonsContainer: { gap: 16 },
+    googleButton: {
+        backgroundColor: '#FFF', borderRadius: 18, height: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12
     },
-    eyeBtn: {
-        padding: 4,
+    googleIcon: { fontSize: 22, fontWeight: '700', color: '#000' },
+    googleButtonText: { color: '#000', fontSize: 16, fontWeight: '600' },
+
+    emailButton: {
+        borderRadius: 18, height: 58, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: '#333'
     },
-    submitButton: {
-        backgroundColor: '#A855F7',
-        marginTop: 8,
+    emailButtonText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+
+    // Form Styles
+    backButton: { marginBottom: 24 },
+    backText: { color: '#FFF', fontSize: 16 },
+    formContainer: { flex: 1 },
+    formTitle: { fontSize: 32, fontWeight: '800', color: '#FFF', marginBottom: 32 },
+    inputContainer: { marginBottom: 20 },
+    label: { color: '#888', marginBottom: 8, fontWeight: '600' },
+    input: {
+        backgroundColor: '#1A1A1A', borderRadius: 14, height: 56, paddingHorizontal: 16, fontSize: 16, color: '#FFF', borderWidth: 1, borderColor: '#333'
     },
-    submitButtonText: {
-        color: '#FFF',
-        fontSize: 16,
-        fontWeight: '600',
+    passwordWrapper: {
+        backgroundColor: '#1A1A1A', borderRadius: 14, height: 56, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#333'
     },
-    toggleContainer: {
-        marginTop: 24,
-        alignItems: 'center',
+    passwordInput: { flex: 1, fontSize: 16, color: '#FFF' },
+    primaryButton: {
+        backgroundColor: '#8B5CF6', borderRadius: 18, height: 58, alignItems: 'center', justifyContent: 'center', marginTop: 12
     },
-    toggleText: {
-        fontSize: 14,
-        color: '#999',
-    },
-    toggleLink: {
-        color: '#A855F7',
-        fontWeight: '600',
-    },
-    errorBox: {
-        backgroundColor: '#2A1111',
-        borderWidth: 1,
-        borderColor: '#441111',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 16,
-    },
-    errorText: {
-        color: '#F88',
-        fontSize: 14,
-        textAlign: 'center',
-    },
-    successBox: {
-        backgroundColor: '#EFE',
-        borderWidth: 1,
-        borderColor: '#CFC',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 16,
-    },
-    successText: {
-        color: '#8F8',
-        fontSize: 14,
-        textAlign: 'center',
-    },
+    primaryButtonText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+    toggleButton: { marginTop: 24, alignItems: 'center' },
+    toggleText: { color: '#888' },
+    toggleLink: { color: '#8B5CF6', fontWeight: '700' },
+
+    errorBox: { backgroundColor: 'rgba(220,38,38,0.2)', padding: 12, borderRadius: 12, marginBottom: 16 },
+    errorText: { color: '#FCA5A5', textAlign: 'center' },
+    successBox: { backgroundColor: 'rgba(5,150,105,0.2)', padding: 12, borderRadius: 12, marginBottom: 16 },
+    successText: { color: '#6EE7B7', textAlign: 'center' }
 });

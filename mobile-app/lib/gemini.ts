@@ -2,8 +2,12 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { checkProhibitedContent } from "./contentModeration";
 
 // Initialize Gemini
-const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";
+// FALLBACK: Hardcode key for debugging env loading issues
+const ENV_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+const FALLBACK_KEY = ''; // Removed for GitHub security
+const API_KEY = ENV_KEY && ENV_KEY.length > 10 ? ENV_KEY : FALLBACK_KEY;
 const genAI = new GoogleGenerativeAI(API_KEY);
+console.log('🔑 [DEBUG] Using Gemini API Key ending in:', API_KEY.slice(-4), ENV_KEY ? '(from env)' : '(FALLBACK)');
 
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 

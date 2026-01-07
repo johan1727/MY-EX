@@ -467,7 +467,7 @@ export async function aiPoweredSampling(
     console.log(`[AI-Sampling] 🤖 Iniciando muestreo con IA (${messages.length} mensajes)`);
 
     // Validar que tenemos API key
-    const apiKey = geminiApiKey || process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    const apiKey = geminiApiKey || process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
     if (!apiKey) {
         console.warn('[AI-Sampling] ⚠️ Sin API key, usando muestreo algorítmico');
         return intelligentTokenSampling(messages, maxTokens);

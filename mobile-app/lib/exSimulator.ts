@@ -4,10 +4,13 @@ import { extractConversationContext } from './conversationHelpers';
 import { extractMessageSamples, MessageSamples } from './messageSampleExtractor';
 import { cleanSystemMessages, validateOneOnOneChat, detectLanguage, saveAnalysisProgress, loadAnalysisProgress, clearAnalysisCache, type SupportedLanguage } from './chatValidation';
 import { getRelevantFactsForMessage } from './factEmbeddings';
+import { storage } from './storage';
 
-// TODO: Revertir esto antes de hacer commit!
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-console.log('[DEBUG] Loaded API Key start:', GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 10) : 'UNDEFINED');
+// FALLBACK: Use env var with fallback for production builds
+const ENV_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+const FALLBACK_KEY = ''; // Removed for GitHub security
+const GEMINI_API_KEY = ENV_KEY && ENV_KEY.length > 10 ? ENV_KEY : FALLBACK_KEY;
+console.log('[DEBUG] Loaded API Key start:', GEMINI_API_KEY.substring(0, 10), ENV_KEY ? '(from env)' : '(FALLBACK)');
 
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -1921,6 +1924,91 @@ export function getUsageLimits(subscriptionTier: string): UsageLimits {
                 maxMessagesPerSimulation: 20
             };
     }
+}
+
+// ===== MONTHLY PROFILE CREATION TRACKING =====
+interface MonthlyProfileTracker {
+    month: string; // Format: "YYYY-MM"
+    count: number;
+}
+
+/**
+ * Get current month key for tracking
+ */
+function getCurrentMonthKey(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Get number of profiles created this month
+ */
+export async function getMonthlyProfileCount(): Promise<number> {
+    try {
+        const data = await storage.getItem('monthly_profile_tracker');
+        if (!data) return 0;
+
+        const tracker: MonthlyProfileTracker = JSON.parse(data);
+        const currentMonth = getCurrentMonthKey();
+
+        // If different month, reset count
+        if (tracker.month !== currentMonth) {
+            return 0;
+        }
+
+        return tracker.count;
+    } catch {
+        return 0;
+    }
+}
+
+/**
+ * Increment monthly profile count
+ */
+export async function incrementMonthlyProfileCount(): Promise<void> {
+    const currentMonth = getCurrentMonthKey();
+    const currentCount = await getMonthlyProfileCount();
+
+    const tracker: MonthlyProfileTracker = {
+        month: currentMonth,
+        count: currentCount + 1
+    };
+
+    await storage.setItem('monthly_profile_tracker', JSON.stringify(tracker));
+    console.log(`[ProfileLimit] Incremented monthly count to ${tracker.count} for ${currentMonth}`);
+}
+
+/**
+ * Check if user can create a new profile this month
+ */
+export async function canCreateProfileThisMonth(subscriptionTier: string): Promise<{
+    canCreate: boolean;
+    currentCount: number;
+    maxAllowed: number;
+    message?: string;
+}> {
+    const limits = getUsageLimits(subscriptionTier);
+    const currentCount = await getMonthlyProfileCount();
+
+    if (limits.maxProfiles === -1) {
+        return { canCreate: true, currentCount, maxAllowed: -1 };
+    }
+
+    if (currentCount >= limits.maxProfiles) {
+        const nextMonth = new Date();
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        nextMonth.setDate(1);
+        const daysUntilReset = Math.ceil((nextMonth.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+
+        return {
+            canCreate: false,
+            currentCount,
+            maxAllowed: limits.maxProfiles,
+            message: `Has alcanzado el límite de ${limits.maxProfiles} perfil(es) este mes. Se reinicia en ${daysUntilReset} días.`
+        };
+    }
+
+    return { canCreate: true, currentCount, maxAllowed: limits.maxProfiles };
 }
 
 
