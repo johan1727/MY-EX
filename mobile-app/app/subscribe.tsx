@@ -21,7 +21,7 @@ const PLANS = [
         id: 'explorer',
         name: 'Explorer',
         price: 89,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER || 'price_1RxtmyP3GWiMooGS4yHwDZmW',
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER || 'price_1RsodvP3GWiMooGSMQpJ0KL8', // LIVE
         color: '#3b82f6',
         features: [
             'Límites más amplios de uso',
@@ -34,7 +34,7 @@ const PLANS = [
         id: 'warrior',
         name: 'Warrior',
         price: 299,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR || 'price_1RxtnNP3GWiMooGSgROuc422',
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR || 'price_1RqOMRP3GWiMooGSD5OPjzim', // LIVE
         color: '#f97316',
         popular: true,
         features: [
@@ -48,7 +48,7 @@ const PLANS = [
         id: 'phoenix',
         name: 'Phoenix',
         price: 449,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX || 'price_1RxtnWP3GWiMooGS5kpAvvXn',
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX || 'price_1RqOM5P3GWiMooGS8k3BDdW8', // LIVE
         color: '#ec4899',
         badge: 'MEJOR VALOR',
         features: [
