@@ -8,7 +8,7 @@ import { loadMasterPrompt } from '../../lib/masterPromptSupabase';
 import { storage } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { checkProhibitedContent } from '../../lib/contentModeration';
-import { Send, Sparkles, ImageIcon, Brain } from 'lucide-react-native';
+import { Send, Sparkles, ImageIcon, Brain, Menu } from 'lucide-react-native';
 import { useSubscription } from '../../lib/SubscriptionContext';
 import ChatHeader, { CHAT_THEMES, ChatTheme } from '../../components/ChatHeader';
 import { StatusBar } from 'expo-status-bar';
@@ -513,9 +513,7 @@ export default function ExSimulatorChat() {
                     <View style={styles.headerSafe}>
                         <View style={styles.header}>
                             <TouchableOpacity onPress={() => setDrawerVisible(true)} style={{ padding: 8 }}>
-                                <View style={{ width: 24, height: 2, backgroundColor: '#fff', marginBottom: 6 }} />
-                                <View style={{ width: 24, height: 2, backgroundColor: '#fff', marginBottom: 6 }} />
-                                <View style={{ width: 24, height: 2, backgroundColor: '#fff' }} />
+                                <Menu size={24} color="#fff" />
                             </TouchableOpacity>
                             {!isPremium && (
                                 <TouchableOpacity
