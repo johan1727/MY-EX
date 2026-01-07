@@ -94,7 +94,7 @@ export async function analyzeDeepPersonality(
         communicationStyle: '',
         commonPhrases: [],
         emotionalTone: '',
-        attachmentStyle: '',
+        attachmentStyle: 'seguro',
         responsePatterns: {
             whenHappy: [],
             whenAngry: [],

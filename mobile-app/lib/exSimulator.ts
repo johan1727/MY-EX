@@ -5,6 +5,7 @@ import { extractMessageSamples, MessageSamples } from './messageSampleExtractor'
 import { cleanSystemMessages, validateOneOnOneChat, detectLanguage, saveAnalysisProgress, loadAnalysisProgress, clearAnalysisCache, type SupportedLanguage } from './chatValidation';
 import { getRelevantFactsForMessage } from './factEmbeddings';
 import { storage } from './storage';
+import { supabase } from './supabase';
 
 // FALLBACK: Use env var with fallback for production builds
 const ENV_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
@@ -1935,80 +1936,140 @@ interface MonthlyProfileTracker {
 /**
  * Get current month key for tracking
  */
+/**
+ * Get current month key for tracking
+ */
 function getCurrentMonthKey(): string {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
 /**
- * Get number of profiles created this month
+ * Get number of profiles created this month (Server-side via Supabase)
+ * Returns 0 if error or no user.
  */
-export async function getMonthlyProfileCount(): Promise<number> {
+export async function getMonthlyProfileCount(userId?: string): Promise<number> {
     try {
-        const data = await storage.getItem('monthly_profile_tracker');
-        if (!data) return 0;
+        let targetId = userId;
 
-        const tracker: MonthlyProfileTracker = JSON.parse(data);
-        const currentMonth = getCurrentMonthKey();
+        // If no userId provided, try to get current user
+        if (!targetId) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return 0;
+            targetId = user.id;
+        }
 
-        // If different month, reset count
-        if (tracker.month !== currentMonth) {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('monthly_profiles_created, profile_creation_month')
+            .eq('id', targetId)
+            .single();
+
+        if (error || !data) {
+            console.log('[ProfileLimit] Error fetching count:', error);
             return 0;
         }
 
-        return tracker.count;
-    } catch {
+        const currentMonth = getCurrentMonthKey();
+
+        // If stored month is different from current, effective count is 0
+        if (data.profile_creation_month !== currentMonth) {
+            return 0;
+        }
+
+        return data.monthly_profiles_created || 0;
+    } catch (e) {
+        console.error('[ProfileLimit] Exception:', e);
         return 0;
     }
 }
 
 /**
- * Increment monthly profile count
+ * Increment monthly profile count (Server-side via Supabase)
+ * Handles monthly reset logic automatically.
  */
-export async function incrementMonthlyProfileCount(): Promise<void> {
-    const currentMonth = getCurrentMonthKey();
-    const currentCount = await getMonthlyProfileCount();
+export async function incrementMonthlyProfileCount(userId?: string): Promise<void> {
+    try {
+        let targetId = userId;
 
-    const tracker: MonthlyProfileTracker = {
-        month: currentMonth,
-        count: currentCount + 1
-    };
+        if (!targetId) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                console.warn('[ProfileLimit] Cannot increment: No user logged in');
+                return;
+            }
+            targetId = user.id;
+        }
 
-    await storage.setItem('monthly_profile_tracker', JSON.stringify(tracker));
-    console.log(`[ProfileLimit] Incremented monthly count to ${tracker.count} for ${currentMonth}`);
+        // 1. Get current state to calculate correct next value
+        const { data, error: fetchError } = await supabase
+            .from('profiles')
+            .select('monthly_profiles_created, profile_creation_month')
+            .eq('id', targetId)
+            .single();
+
+        if (fetchError) throw fetchError;
+
+        const currentMonth = getCurrentMonthKey();
+        let newCount = 1;
+
+        // If same month, increment. If different (or null), start at 1.
+        if (data && data.profile_creation_month === currentMonth) {
+            newCount = (data.monthly_profiles_created || 0) + 1;
+        }
+
+        // 2. Update with explicit month to ensure consistency
+        const { error: updateError } = await supabase
+            .from('profiles')
+            .update({
+                monthly_profiles_created: newCount,
+                profile_creation_month: currentMonth
+            })
+            .eq('id', targetId);
+
+        if (updateError) throw updateError;
+
+        console.log(`[ProfileLimit] Incremented to ${newCount} for ${currentMonth}`);
+    } catch (e) {
+        console.error('[ProfileLimit] Error incrementing count:', e);
+    }
 }
 
 /**
  * Check if user can create a new profile this month
  */
-export async function canCreateProfileThisMonth(subscriptionTier: string): Promise<{
+export async function canCreateProfileThisMonth(subscriptionTier: string, userId?: string): Promise<{
     canCreate: boolean;
     currentCount: number;
     maxAllowed: number;
     message?: string;
 }> {
     const limits = getUsageLimits(subscriptionTier);
-    const currentCount = await getMonthlyProfileCount();
 
     if (limits.maxProfiles === -1) {
-        return { canCreate: true, currentCount, maxAllowed: -1 };
+        return { canCreate: true, currentCount: 0, maxAllowed: -1 };
     }
+
+    const currentCount = await getMonthlyProfileCount(userId);
 
     if (currentCount >= limits.maxProfiles) {
         const nextMonth = new Date();
         nextMonth.setMonth(nextMonth.getMonth() + 1);
         nextMonth.setDate(1);
-        const daysUntilReset = Math.ceil((nextMonth.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
         return {
             canCreate: false,
             currentCount,
             maxAllowed: limits.maxProfiles,
-            message: `Has alcanzado el límite de ${limits.maxProfiles} perfil(es) este mes. Se reinicia en ${daysUntilReset} días.`
+            message: `Has alcanzado el límite de ${limits.maxProfiles} perfiles este mes. Podrás crear más el 1 de ${nextMonth.toLocaleString('es-ES', { month: 'long' })}.`
         };
     }
 
-    return { canCreate: true, currentCount, maxAllowed: limits.maxProfiles };
+    return {
+        canCreate: true,
+        currentCount,
+        maxAllowed: limits.maxProfiles
+    };
 }
 
 

@@ -114,6 +114,24 @@ export default function AuthScreen() {
                 const redirectUrl = Linking.createURL('auth');
                 console.log('Using redirect URL:', redirectUrl);
 
+                if (Platform.OS === 'web') {
+                    // Web-specific: Do standard redirect, not popup
+                    const { error } = await supabase.auth.signInWithOAuth({
+                        provider,
+                        options: {
+                            redirectTo: typeof window !== 'undefined' ? window.location.origin + '/auth' : redirectUrl,
+                            queryParams: {
+                                access_type: 'offline',
+                                prompt: 'consent'
+                            }
+                        }
+                    });
+                    if (error) throw error;
+                    // No further code needed, browser will redirect
+                    return;
+                }
+
+                // Native / Mobile (Popup flow)
                 const { data, error } = await supabase.auth.signInWithOAuth({
                     provider,
                     options: {

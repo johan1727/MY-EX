@@ -275,6 +275,13 @@ export default function ExSimulatorChat() {
         const textToSend = content || inputText;
         if (!textToSend.trim() || isTyping) return;
 
+        // Check Free Limit
+        if (tier === 'survivor' && userMessageCount >= FREE_MESSAGE_LIMIT) {
+            Keyboard.dismiss();
+            setShowUpgradeModal(true);
+            return;
+        }
+
         const currentInput = textToSend.trim();
         setInputText(''); // Clear instantly
         Keyboard.dismiss();
@@ -510,21 +517,23 @@ export default function ExSimulatorChat() {
                                 <View style={{ width: 24, height: 2, backgroundColor: '#fff', marginBottom: 6 }} />
                                 <View style={{ width: 24, height: 2, backgroundColor: '#fff' }} />
                             </TouchableOpacity>
-                            <TouchableOpacity
-                                style={{
-                                    backgroundColor: 'rgba(168, 85, 247, 0.2)',
-                                    paddingHorizontal: 12,
-                                    paddingVertical: 6,
-                                    borderRadius: 16,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    gap: 4
-                                }}
-                                onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
-                            >
-                                <Sparkles size={14} color="#a855f7" />
-                                <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>Mejorar plan</Text>
-                            </TouchableOpacity>
+                            {!isPremium && (
+                                <TouchableOpacity
+                                    style={{
+                                        backgroundColor: 'rgba(168, 85, 247, 0.2)',
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 16,
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        gap: 4
+                                    }}
+                                    onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
+                                >
+                                    <Sparkles size={14} color="#a855f7" />
+                                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>Mejorar plan</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                     </View>
 
@@ -543,7 +552,7 @@ export default function ExSimulatorChat() {
                             <Brain size={40} color="#fff" />
                         </View>
 
-                        <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 16 }}>Simulador</Text>
+                        <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 16 }}>Análisis de Patrones</Text>
 
                         <Text style={{
                             fontSize: 16,
@@ -552,7 +561,7 @@ export default function ExSimulatorChat() {
                             marginBottom: 40,
                             lineHeight: 24
                         }}>
-                            Importa un chat de WhatsApp y deja que la IA recree su personalidad.
+                            Analiza la dinámica de tu relación pasada para identificar patrones y sanar.
                         </Text>
 
                         <TouchableOpacity

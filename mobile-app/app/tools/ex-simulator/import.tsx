@@ -9,6 +9,7 @@ import JSZip from 'jszip';
 import { parseWhatsAppExport, analyzePersonality, ParsedMessage } from '../../../lib/exSimulator';
 import { intelligentTokenSampling, aiPoweredSampling } from '../../../lib/messageSampling';
 import { validateOneOnOneChat } from '../../../lib/chatValidation';
+import { anonymizeMessages } from '../../../lib/anonymization';
 import { generateMasterPrompt } from '../../../lib/masterPromptGenerator';
 import ExportGuide from '../../../components/ExportGuide';
 import { storage } from '../../../lib/storage';
@@ -59,7 +60,7 @@ const detectParticipants = (messages: ParsedMessage[]) => {
     return sorted;
 };
 
-type ImportStep = 'guide' | 'upload' | 'loading' | 'preview' | 'analyzing' | 'complete' | 'error';
+type ImportStep = 'guide' | 'terms' | 'upload' | 'loading' | 'preview' | 'analyzing' | 'complete' | 'error';
 
 export default function ImportChat() {
     const router = useRouter();
@@ -278,11 +279,19 @@ export default function ImportChat() {
 
                                 // DETECTAR PARTICIPANTES
                                 const participants = detectParticipants(finalMessages);
+                                const participantNames = participants.map(p => p.name);
                                 setDetectedParticipants(participants);
-                                addDebug(`👥 Detectados: ${participants.map(p => p.name).join(', ')}`);
+                                addDebug(`👥 Detectados: ${participantNames.join(', ')}`);
+
+                                // 🛡️ ANONYMIZATION
+                                addDebug('🛡️ Anonimizando datos...');
+                                const anonymizedMessages = anonymizeMessages(finalMessages, participantNames);
+
+                                setParsedMessages(anonymizedMessages);
+                                setParsedCount(anonymizedMessages.length);
 
                                 setStep('preview');
-                                addDebug(`✅ ${finalMessages.length.toLocaleString()} mensajes listos`);
+                                addDebug(`✅ ${anonymizedMessages.length.toLocaleString()} mensajes listos (Anonimizados)`);
                             } else {
                                 setStep('error');
                                 setErrorMessage('No se encontraron mensajes de WhatsApp. Asegúrate de exportar el chat como texto (.txt).');
@@ -571,8 +580,17 @@ export default function ImportChat() {
 
             // DETECTAR PARTICIPANTES (same as checkSharedFile)
             const participants = detectParticipants(finalMessages);
+            const participantNames = participants.map(p => p.name);
             setDetectedParticipants(participants);
-            addDebug(`👥 Detectados: ${participants.map(p => p.name).join(', ')}`);
+            addDebug(`👥 Detectados: ${participantNames.join(', ')}`);
+
+            // 🛡️ ANONYMIZATION (MANDATORY)
+            addDebug('🛡️ Anonimizando datos personales...');
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            const anonymizedMessages = anonymizeMessages(finalMessages, participantNames);
+            setParsedMessages(anonymizedMessages);
+            addDebug('✅ Datos anonimizados correctamente');
 
             setStep('preview');
         } catch (e: any) {
@@ -743,7 +761,53 @@ export default function ImportChat() {
     // Validation is now handled in analysis.tsx with progress display
 
     if (step === 'guide') {
-        return <ExportGuide onClose={() => setStep('upload')} onBack={() => router.replace('/(tabs)')} />;
+        return <ExportGuide onClose={() => setStep('terms')} onBack={() => router.replace('/(tabs)')} />;
+    }
+
+    if (step === 'terms') {
+        return (
+            <View style={styles.container}>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => setStep('guide')} style={styles.backButton}>
+                        <ArrowLeft size={24} color="white" />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Términos de Uso</Text>
+                </View>
+
+                <ScrollView style={{ flex: 1, padding: 24 }}>
+                    <View style={styles.termsCard}>
+                        <Text style={styles.termsTitle}>⚠️ Responsabilidad Legal</Text>
+                        <Text style={styles.termsText}>
+                            Esta herramienta es solo para fines terapéuticos y de auto-análisis ("Coaching").
+                            {"\n\n"}
+                            Al continuar, declaras bajo protesta de decir verdad que:
+                        </Text>
+
+                        <View style={styles.checkItem}>
+                            <CheckCircle size={20} color="#a855f7" />
+                            <Text style={styles.checkText}>Tienes permiso explícito de los participantes para procesar este chat.</Text>
+                        </View>
+
+                        <View style={styles.checkItem}>
+                            <CheckCircle size={20} color="#a855f7" />
+                            <Text style={styles.checkText}>El chat será anonimizado automáticamente antes de enviarse a la IA.</Text>
+                        </View>
+
+                        <View style={styles.checkItem}>
+                            <CheckCircle size={20} color="#a855f7" />
+                            <Text style={styles.checkText}>Asumes total responsabilidad legal por el uso de esta información.</Text>
+                        </View>
+                    </View>
+
+                    <TouchableOpacity
+                        style={styles.acceptButton}
+                        onPress={() => setStep('upload')}
+                    >
+                        <Text style={styles.acceptButtonText}>ACEPTO Y CONTINUAR</Text>
+                    </TouchableOpacity>
+                </ScrollView>
+            </View>
+        );
     }
 
 
@@ -1670,6 +1734,55 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontFamily: 'monospace',
         marginBottom: 2,
+    },
+    // Terms Styles
+    termsCard: {
+        backgroundColor: '#1c1c1e',
+        borderRadius: 16,
+        padding: 24,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: '#333',
+    },
+    termsTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#ff6b6b',
+        marginBottom: 16,
+    },
+    termsText: {
+        fontSize: 16,
+        color: '#d1d5db',
+        lineHeight: 24,
+        marginBottom: 24,
+    },
+    checkItem: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginBottom: 16,
+        gap: 12,
+    },
+    checkText: {
+        fontSize: 15,
+        color: '#fff',
+        flex: 1,
+        lineHeight: 22,
+    },
+    acceptButton: {
+        backgroundColor: '#a855f7',
+        paddingVertical: 18,
+        borderRadius: 12,
+        alignItems: 'center',
+        shadowColor: '#a855f7',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+    },
+    acceptButtonText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: '800',
+        letterSpacing: 1,
     },
     // New Role Selection Styles
     roleSelectionContainer: { marginTop: 24, marginBottom: 24 },

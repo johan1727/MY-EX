@@ -8,7 +8,7 @@ export default function PrivacyPolicy() {
     const router = useRouter();
 
     const openExternalPolicy = () => {
-        Linking.openURL('https://johan1727.github.io/my-ex-coach/legal/privacy-policy.html');
+        Linking.openURL('https://doc-hosting.flycricket.io/remi-privacy-policy/05311c5a-0b5e-4454-8c86-d6176c777cd4/privacy');
     };
 
     return (
@@ -33,6 +33,10 @@ export default function PrivacyPolicy() {
                     <Text style={styles.updateText}>
                         Última actualización: 23 de diciembre de 2025
                     </Text>
+
+                    <TouchableOpacity onPress={openExternalPolicy} style={styles.externalButton}>
+                        <Text style={styles.externalButtonText}>🌐 Ver Política Oficial (Online)</Text>
+                    </TouchableOpacity>
 
                     <Text style={styles.sectionTitle}>Información que Recopilamos</Text>
                     <Text style={styles.bulletPoint}>• Email y nombre (para tu cuenta)</Text>

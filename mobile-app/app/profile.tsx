@@ -1,44 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Alert, Platform, Share, Linking, StyleSheet, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Alert, Platform, Share, Linking, StyleSheet, Modal, Image } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { haptics } from '../lib/haptics';
-import { storage } from '../lib/storage';
-import { loadProfiles, deleteProfile } from '../lib/profileSync';
-import { extractConversationContext } from '../lib/conversationHelpers';
-import { extractAndSaveMemoryFromConversation } from '../lib/memorySync';
-import { User, LogOut, LogIn, Mail, Calendar, Settings, Shield, ChevronRight, Edit2, Share2, Star, ArrowLeft, Sparkles, Trash2, Download, HelpCircle, X } from 'lucide-react-native';
+import { useSubscription } from '../lib/SubscriptionContext';
+import { SUBSCRIPTION_CONFIG, SubscriptionTier } from '../lib/subscriptions';
+import { User, LogOut, LogIn, Mail, Calendar, Settings, Shield, ChevronRight, Edit2, Share2, Star, ArrowLeft, Sparkles, Trash2, Download, HelpCircle, X, Zap, Crown, Heart } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const ProfileItem = ({ label, value, icon: Icon }: any) => (
-    <View style={styles.profileItem}>
-        <View style={styles.profileItemIcon}>
-            <Icon size={18} color="#9ca3af" />
-        </View>
-        <View style={styles.profileItemContent}>
-            <Text style={styles.profileItemLabel}>{label}</Text>
-            <Text style={styles.profileItemValue}>{value || '-'}</Text>
-        </View>
-    </View>
-);
-
-const SettingItem = ({ label, icon: Icon, onPress, danger = false, highlight = false }: any) => (
+const SettingItem = ({ label, icon: Icon, onPress, danger = false, highlight = false, badge }: any) => (
     <TouchableOpacity onPress={onPress} style={styles.settingItem}>
         <View style={[styles.settingItemIcon, danger && styles.settingItemIconDanger, highlight && styles.settingItemIconHighlight]}>
-            <Icon size={18} color={danger ? '#ef4444' : highlight ? '#22c55e' : '#9ca3af'} />
+            <Icon size={20} color={danger ? '#ef4444' : highlight ? '#22c55e' : '#fff'} />
         </View>
         <Text style={[styles.settingItemLabel, danger && styles.settingItemLabelDanger, highlight && styles.settingItemLabelHighlight]}>{label}</Text>
-        <ChevronRight size={18} color="#333" />
+        {badge && <View style={styles.settingBadge}><Text style={styles.settingBadgeText}>{badge}</Text></View>}
+        <ChevronRight size={18} color="#525252" />
     </TouchableOpacity>
 );
 
 export default function ProfileScreen() {
     const router = useRouter();
     const [email, setEmail] = useState('');
-    const [tier, setTier] = useState('Free');
     const [joined, setJoined] = useState('');
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [isGuest, setIsGuest] = useState(true);
+    const { tier, isLoading } = useSubscription(); // Use context for tier
+    const isPremium = tier !== SubscriptionTier.SURVIVOR;
+    // Badge State
+    const [badgeModalVisible, setBadgeModalVisible] = useState(false);
+    const badges = [
+        { id: '1', name: 'Primeros Pasos', icon: '🚀', description: 'Creaste tu cuenta en REMI.', unlocked: true },
+        { id: '2', name: 'Analista', icon: '🔍', description: 'Completaste tu primer análisis.', unlocked: true },
+        { id: '3', name: 'Curioso', icon: '💡', description: 'Enviaste 50 mensajes a tu coach.', unlocked: isPremium },
+        { id: '4', name: 'Premium Club', icon: '👑', description: 'Te uniste a la élite de REMI.', unlocked: isPremium },
+        { id: '5', name: 'Maestro del Zen', icon: '🧘', description: 'Usaste el Diario Emocional 7 días seguidos.', unlocked: false },
+    ];
+
+    const currentPlanConfig = SUBSCRIPTION_CONFIG[tier as SubscriptionTier] || SUBSCRIPTION_CONFIG[SubscriptionTier.SURVIVOR];
 
     // Custom Alert State
     interface AlertConfig {
@@ -51,13 +50,7 @@ export default function ProfileScreen() {
     const [customAlert, setCustomAlert] = useState<AlertConfig>({ visible: false, title: '', message: '' });
 
     const showAlert = (title: string, message: string, buttons?: AlertConfig['buttons'], type: AlertConfig['type'] = 'info') => {
-        setCustomAlert({
-            visible: true,
-            title,
-            message,
-            buttons,
-            type
-        });
+        setCustomAlert({ visible: true, title, message, buttons, type });
     };
 
     const closeAlert = () => {
@@ -73,26 +66,20 @@ export default function ProfileScreen() {
         if (user && !user.is_anonymous) {
             setIsGuest(false);
             setEmail(user.email || 'Usuario');
+            if (user.user_metadata?.avatar_url) {
+                setAvatarUrl(user.user_metadata.avatar_url);
+            }
             if (user.created_at) {
                 setJoined(new Date(user.created_at).toLocaleDateString());
-            }
-
-            const { data } = await supabase
-                .from('profiles')
-                .select('subscription_tier')
-                .eq('id', user.id)
-                .single();
-            if (data?.subscription_tier) {
-                setTier(data.subscription_tier.charAt(0).toUpperCase() + data.subscription_tier.slice(1));
             }
         } else {
             setIsGuest(true);
             setEmail('Invitado');
+            setAvatarUrl(null);
         }
     };
 
     const handleSignOut = async () => {
-        // Confirmation dialog
         const executeSignOut = async () => {
             try {
                 await supabase.auth.signOut();
@@ -103,9 +90,7 @@ export default function ProfileScreen() {
         };
 
         if (Platform.OS === 'web') {
-            if (confirm('¿Estás seguro que deseas cerrar sesión?')) {
-                executeSignOut();
-            }
+            if (confirm('¿Estás seguro que deseas cerrar sesión?')) executeSignOut();
         } else {
             showAlert('Cerrar Sesión', '¿Estás seguro?', [
                 { text: 'Cancelar', style: 'cancel' },
@@ -114,156 +99,74 @@ export default function ProfileScreen() {
         }
     };
 
-    // GOOGLE PLAY REQUIREMENT: Account Deletion
     const handleDeleteAccount = async () => {
         const executeDelete = async () => {
             try {
                 const { data: { user } } = await supabase.auth.getUser();
-                if (!user) {
-                    Alert.alert('Error', 'No hay sesión activa');
-                    return;
-                }
-
-                // Step 1: Delete all user data from various tables
+                if (!user) return;
                 const userId = user.id;
 
-                // Delete ex profiles
                 await supabase.from('ex_profiles').delete().eq('user_id', userId);
-
-                // Delete conversations
                 await supabase.from('ex_conversations').delete().eq('user_id', userId);
-
-                // Delete embeddings
-                await supabase.from('message_embeddings').delete().eq('user_id', userId);
-
-                // Delete facts
-                await supabase.from('conversation_facts').delete().eq('user_id', userId);
-
-                // Delete usage limits
-                await supabase.from('usage_limits').delete().eq('user_id', userId);
-
-                // Delete content reports
-                await supabase.from('content_reports').delete().eq('user_id', userId);
-
-                // Delete profile
                 await supabase.from('profiles').delete().eq('id', userId);
-
-                // Step 2: Delete auth user (this requires admin or RPC)
-                // For now, sign out and the user record will be orphaned
-                // In production, use a server-side function to fully delete
-
                 await supabase.auth.signOut();
 
-                showAlert(
-                    '✅ Cuenta eliminada',
-                    'Tu cuenta y todos tus datos han sido eliminados.',
-                    [{ text: 'OK', onPress: () => { closeAlert(); router.replace('/auth'); } }],
-                    'success'
-                );
-
-            } catch (error: any) {
-                console.error('[Profile] Delete account error:', error);
-                showAlert('Error', 'No se pudo eliminar la cuenta. Intenta de nuevo.', [{ text: 'OK' }], 'error');
+                showAlert('✅ Cuenta eliminada', 'Tu cuenta ha sido eliminada.', [{ text: 'OK', onPress: () => { closeAlert(); router.replace('/auth'); } }], 'success');
+            } catch (error) {
+                console.error(error);
+                showAlert('Error', 'Error al eliminar cuenta.', [{ text: 'OK' }], 'error');
             }
         };
 
-        // Double confirmation for account deletion
-        showAlert(
-            '⚠️ Eliminar Cuenta',
-            '¿Estás SEGURO que deseas eliminar tu cuenta?\n\nEsta acción eliminará:\n• Todos tus perfiles de simulación\n• Todas tus conversaciones\n• Tu historial y datos\n\n⚠️ Esta acción NO se puede deshacer.',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Sí, Eliminar Todo',
-                    style: 'destructive',
-                    onPress: () => {
-                        // Second confirmation - triggers new alert state
-                        showAlert(
-                            'Confirmación Final',
-                            '¿Realmente deseas eliminar tu cuenta permanentemente?',
-                            [
-                                { text: 'No, mantener cuenta', style: 'cancel' },
-                                { text: 'Sí, eliminar', style: 'destructive', onPress: () => { closeAlert(); executeDelete(); } }
-                            ],
-                            'warning'
-                        );
-                    }
-                }
-            ],
-            'warning'
-        );
+        showAlert('⚠️ Eliminar Cuenta', 'Esta acción es irreversible. ¿Eliminar todo?', [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Sí, Eliminar', style: 'destructive', onPress: () => { closeAlert(); executeDelete(); } }
+        ], 'warning');
     };
 
-    // GDPR COMPLIANCE: Export all user data
     const handleExportData = async () => {
+        showAlert('📦 Exportando...', 'Generando archivo de respaldo...', [], 'info');
+
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-                showAlert('Error', 'Necesitas iniciar sesión para exportar tus datos', [{ text: 'OK' }], 'error');
-                return;
-            }
+            if (!user) throw new Error("No user");
 
-            showAlert('📦 Exportando...', 'Esto puede tomar unos segundos', [], 'info');
-
-            const userId = user.id;
-            const exportData: any = {
-                exportDate: new Date().toISOString(),
+            const exportData = {
                 user: {
-                    id: userId,
                     email: user.email,
-                    createdAt: user.created_at
+                    id: user.id,
+                    metadata: user.user_metadata,
+                    tier: tier
                 },
-                data: {}
+                exportedAt: new Date().toISOString(),
+                appVersion: "1.0.3"
             };
 
-            // Fetch profile
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
-            exportData.data.profile = profile;
-
-            // Fetch ex profiles
-            const { data: exProfiles } = await supabase
-                .from('ex_profiles')
-                .select('*')
-                .eq('user_id', userId);
-            exportData.data.exProfiles = exProfiles || [];
-
-            // Fetch conversations
-            const { data: conversations } = await supabase
-                .from('ex_conversations')
-                .select('*')
-                .eq('user_id', userId);
-            exportData.data.conversations = conversations || [];
-
-            // Fetch facts
-            const { data: facts } = await supabase
-                .from('conversation_facts')
-                .select('*')
-                .eq('user_id', userId);
-            exportData.data.facts = facts || [];
-
-            // Convert to JSON string
             const jsonString = JSON.stringify(exportData, null, 2);
 
-            // Share the data
-            await Share.share({
-                message: jsonString,
-                title: 'REMI - Mis Datos'
-            });
-
-            showAlert(
-                '✅ Datos exportados',
-                'Puedes copiar o compartir el archivo JSON con todos tus datos.',
-                [{ text: 'OK', onPress: closeAlert }],
-                'success'
-            );
-
-        } catch (error: any) {
-            console.error('[Profile] Export data error:', error);
-            showAlert('Error', 'No se pudieron exportar los datos. Intenta de nuevo.', [{ text: 'OK' }], 'error');
+            if (Platform.OS === 'web') {
+                // Create element with <a> tag
+                const link = document.createElement("a");
+                const file = new Blob([jsonString], { type: 'application/json' });
+                link.href = URL.createObjectURL(file);
+                link.download = `remi-export-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                closeAlert();
+                showAlert('✅ Descarga lista', 'El archivo se ha descargado en tu navegador.', [{ text: 'OK', onPress: closeAlert }], 'success');
+            } else {
+                const result = await Share.share({
+                    message: jsonString,
+                    title: `REMI Export ${new Date().toLocaleDateString()}`
+                });
+                if (result.action === Share.sharedAction) {
+                    closeAlert();
+                }
+            }
+        } catch (error) {
+            console.error(error);
+            showAlert('Error', 'No se pudo exportar los datos.', [{ text: 'OK' }], 'error');
         }
     };
 
@@ -271,127 +174,141 @@ export default function ProfileScreen() {
         <View style={styles.container}>
             <StatusBar style="light" backgroundColor="#000000" />
             <SafeAreaView style={styles.safeArea}>
+                {/* Header */}
                 <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.push('/')} style={styles.backButton}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
                         <ArrowLeft size={24} color="#fff" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Mi Perfil</Text>
-                    <View style={styles.headerSpacer} />
+                    <Text style={styles.headerTitle}>Perfil</Text>
+                    <TouchableOpacity onPress={() => router.push('/preferences')} style={styles.iconButton}>
+                        <Settings size={24} color="#fff" />
+                    </TouchableOpacity>
                 </View>
+
                 <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
 
-                    {/* Guest Login Banner - Prominent */}
-                    {isGuest && (
-                        <TouchableOpacity onPress={() => router.push('/auth')} activeOpacity={0.9}>
+                    {/* Avatar Selection */}
+                    <View style={styles.heroSection}>
+                        <View style={styles.avatarWrapper}>
                             <LinearGradient
-                                colors={['#22c55e', '#16a34a']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={styles.loginBanner}
+                                colors={['#a855f7', '#ec4899']}
+                                style={styles.avatarGradient}
                             >
-                                <View style={styles.loginBannerContent}>
-                                    <View style={styles.loginBannerIcon}>
-                                        <Sparkles size={24} color="#fff" />
-                                    </View>
-                                    <View style={styles.loginBannerText}>
-                                        <Text style={styles.loginBannerTitle}>¡Crea tu cuenta gratis!</Text>
-                                        <Text style={styles.loginBannerSubtitle}>Guarda tu progreso y accede desde cualquier dispositivo</Text>
-                                    </View>
-                                    <ChevronRight size={24} color="#fff" />
+                                <View style={styles.avatarContainer}>
+                                    {avatarUrl ? (
+                                        <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                                    ) : (
+                                        <User size={48} color="#fff" />
+                                    )}
                                 </View>
                             </LinearGradient>
-                        </TouchableOpacity>
-                    )}
-
-                    <View style={styles.avatarSection}>
-                        <View style={styles.avatarContainer}>
-                            <User size={40} color="white" />
-                            <View style={styles.avatarBadge}>
-                                <Edit2 size={12} color="black" />
+                            <View style={styles.percentageBadge}>
+                                <Text style={styles.percentageText}>100%</Text>
                             </View>
                         </View>
                         <Text style={styles.userName}>{isGuest ? 'Invitado' : email.split('@')[0]}</Text>
-                        <View style={[styles.tierBadge, isGuest && styles.tierBadgeGuest]}>
-                            <Text style={styles.tierText}>{isGuest ? 'Modo Invitado' : `${tier} Member`}</Text>
-                        </View>
+
+                        <TouchableOpacity style={styles.chatStatusButton} disabled>
+                            <View style={[styles.chatStatusDot, { backgroundColor: isPremium ? '#22c55e' : '#9ca3af' }]} />
+                            <Text style={styles.chatStatusText}>{isPremium ? `Prem: ${tier}` : 'Gratuito'}</Text>
+                        </TouchableOpacity>
                     </View>
 
-                    <View style={styles.card}>
-                        <Text style={styles.sectionTitle}>INFORMACIÓN</Text>
-                        <ProfileItem label="Email" value={email} icon={Mail} />
-                        <ProfileItem label="Miembro Desde" value={joined} icon={Calendar} />
-                        <ProfileItem label="Plan Actual" value={tier} icon={Shield} />
-                    </View>
+                    {/* Premium / Upgrade Card */}
+                    <View style={styles.premiumSection}>
+                        <LinearGradient
+                            colors={isPremium ? ['#1e1e1e', '#1e1e1e'] : ['#7c3aed', '#db2777']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.premiumCard}
+                        >
+                            <View style={styles.premiumContent}>
+                                <View style={styles.premiumHeader}>
+                                    <View>
+                                        <Text style={styles.premiumTitle}>
+                                            {isPremium ? 'Eres Premium' : 'REMI Premium'}
+                                        </Text>
+                                        <Text style={styles.premiumSubtitle}>
+                                            {isPremium
+                                                ? 'Disfruta de tu acceso ilimitado y funciones avanzadas.'
+                                                : 'Desbloquea análisis ilimitados y coaching avanzado con IA.'
+                                            }
+                                        </Text>
+                                    </View>
+                                    <View style={styles.premiumIconContainer}>
+                                        <Crown size={24} color="#fff" fill={isPremium ? "#fbbf24" : "none"} />
+                                    </View>
+                                </View>
 
-                    {/* Dashboard Stats */}
-                    {!isGuest && (
-                        <View style={styles.card}>
-                            <Text style={styles.sectionTitle}>ESTADÍSTICAS</Text>
-                            <View style={styles.statsGrid}>
-                                <View style={styles.statCard}>
-                                    <Text style={styles.statValue}>0</Text>
-                                    <Text style={styles.statLabel}>Perfiles Creados</Text>
-                                </View>
-                                <View style={styles.statCard}>
-                                    <Text style={styles.statValue}>0</Text>
-                                    <Text style={styles.statLabel}>Mensajes</Text>
-                                </View>
+                                {!isPremium && (
+                                    <TouchableOpacity
+                                        style={styles.upgradeButton}
+                                        onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
+                                    >
+                                        <Text style={styles.upgradeButtonText}>Mejorar Plan</Text>
+                                    </TouchableOpacity>
+                                )}
                             </View>
-                            <Text style={styles.statsNote}>Las estadísticas se actualizan automáticamente</Text>
-                        </View>
-                    )}
+                        </LinearGradient>
+                    </View>
 
-
-                    <View style={styles.card}>
-                        <Text style={styles.sectionTitle}>CONFIGURACIÓN</Text>
+                    {/* Menu Options */}
+                    <View style={styles.menuContainer}>
                         <SettingItem label="Preferencias" icon={Settings} onPress={() => router.push('/preferences')} />
-                        <SettingItem label="Calificar App" icon={Star} onPress={() => {
-                            if (Platform.OS === 'ios') {
-                                Linking.openURL('itms-apps://itunes.apple.com/app/viewContentsUserReviews?id=YOUR_APP_ID');
-                            } else {
-                                Linking.openURL('market://details?id=com.soyremi.remi');
-                            }
-                        }} />
-                        <SettingItem label="Compartir" icon={Share2} onPress={async () => {
-                            try {
-                                await Share.share({
-                                    message: '¡Descubre SOYREMI, tu coach de IA para sanar tu corazón! 💔✨\n\nDescárgala aquí: https://soyremi.app',
-                                });
-                            } catch (error) {
-                                console.error(error);
-                            }
-                        }} />
+                        <SettingItem label="Ayuda y Soporte" icon={HelpCircle} onPress={() => Linking.openURL('mailto:support@soyremi.app')} />
+                        <SettingItem label="Insignias" icon={Star} badge="Nuevo" onPress={() => setBadgeModalVisible(true)} />
+
+                        <View style={styles.menuSpacer} />
+
                         {isGuest ? (
-                            <SettingItem
-                                label="Iniciar Sesión"
-                                icon={LogIn}
-                                highlight
-                                onPress={() => router.push('/auth')}
-                            />
+                            <SettingItem label="Iniciar Sesión" icon={LogIn} highlight onPress={() => router.push('/auth')} />
                         ) : (
                             <>
-                                <SettingItem
-                                    label="Exportar Mis Datos"
-                                    icon={Download}
-                                    onPress={handleExportData}
-                                />
-                                <SettingItem label="Cerrar Sesión" icon={LogOut} onPress={handleSignOut} />
-                                <SettingItem
-                                    label="Eliminar Cuenta"
-                                    icon={Trash2}
-                                    danger
-                                    onPress={handleDeleteAccount}
-                                />
+                                <SettingItem label="Exportar Datos" icon={Download} onPress={handleExportData} />
+                                <SettingItem label="Cerrar Sesión" icon={LogOut} danger onPress={handleSignOut} />
+                                <SettingItem label="Eliminar Cuenta" icon={Trash2} danger onPress={handleDeleteAccount} />
                             </>
                         )}
                     </View>
 
-                    <View style={styles.versionContainer}>
-                        <Text style={styles.versionText}>REMI v1.0.0 (build 3)</Text>
-                    </View>
+                    <Text style={styles.versionText}>v1.0.3 (build 17)</Text>
+                    <View style={{ height: 40 }} />
 
                 </ScrollView>
             </SafeAreaView>
+
+            {/* Badge Modal */}
+            <Modal
+                transparent
+                visible={badgeModalVisible}
+                animationType="slide"
+                onRequestClose={() => setBadgeModalVisible(false)}
+            >
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Tus Insignias</Text>
+                            <TouchableOpacity onPress={() => setBadgeModalVisible(false)}>
+                                <X size={24} color="#fff" />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={{ maxHeight: 400 }}>
+                            {badges.map((badge) => (
+                                <View key={badge.id} style={[styles.badgeItem, !badge.unlocked && { opacity: 0.5 }]}>
+                                    <View style={styles.badgeIconBg}>
+                                        <Text style={{ fontSize: 24 }}>{badge.icon}</Text>
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.badgeName}>{badge.name}</Text>
+                                        <Text style={styles.badgeDesc}>{badge.description}</Text>
+                                    </View>
+                                    {badge.unlocked ? <View style={styles.badgeUnlocked}><Sparkles size={16} color="#000" /></View> : <View style={styles.badgeLocked}><Shield size={16} color="#666" /></View>}
+                                </View>
+                            ))}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Custom Alert Modal */}
             <Modal
@@ -415,36 +332,20 @@ export default function ProfileScreen() {
                             {customAlert.type === 'info' && <HelpCircle size={32} color="#3b82f6" />}
                         </View>
                         <Text style={styles.alertTitle}>{customAlert.title}</Text>
-                        <Text style={styles.alertMessage}>
-                            {customAlert.message}
-                        </Text>
+                        <Text style={styles.alertMessage}>{customAlert.message}</Text>
                         <View style={styles.alertButtons}>
                             {!customAlert.buttons || customAlert.buttons.length === 0 ? (
-                                <TouchableOpacity
-                                    style={[styles.alertButton, styles.alertButtonPrimary]}
-                                    onPress={closeAlert}
-                                >
+                                <TouchableOpacity style={styles.alertButton} onPress={closeAlert}>
                                     <Text style={styles.alertButtonText}>OK</Text>
                                 </TouchableOpacity>
                             ) : (
                                 customAlert.buttons.map((btn, idx) => (
                                     <TouchableOpacity
                                         key={idx}
-                                        style={[
-                                            styles.alertButton,
-                                            btn.style === 'cancel' ? styles.alertButtonCancel :
-                                                btn.style === 'destructive' ? styles.alertButtonDestructive :
-                                                    styles.alertButtonPrimary
-                                        ]}
-                                        onPress={() => {
-                                            if (btn.onPress) btn.onPress();
-                                            else closeAlert();
-                                        }}
+                                        style={[styles.alertButton, btn.style === 'destructive' && styles.alertButtonDestructive]}
+                                        onPress={() => { if (btn.onPress) btn.onPress(); else closeAlert(); }}
                                     >
-                                        <Text style={[
-                                            styles.alertButtonText,
-                                            btn.style === 'destructive' && { color: '#ef4444' }
-                                        ]}>{btn.text}</Text>
+                                        <Text style={[styles.alertButtonText, btn.style === 'destructive' && { color: '#ef4444' }]}>{btn.text}</Text>
                                     </TouchableOpacity>
                                 ))
                             )}
@@ -469,211 +370,206 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.1)',
-    },
-    backButton: {
-        padding: 8,
-        borderRadius: 8,
+        paddingTop: 12,
+        paddingBottom: 12,
     },
     headerTitle: {
-        fontSize: 18,
-        fontWeight: '700',
+        fontSize: 20,
+        fontWeight: 'bold',
         color: '#fff',
     },
-    headerSpacer: {
-        width: 40,
+    iconButton: {
+        padding: 8,
     },
     scrollView: {
         flex: 1,
-        paddingHorizontal: 24,
-        paddingTop: 12,
     },
-    pageTitle: {
-        color: '#6b7280',
-        fontSize: 10,
-        fontWeight: '700',
-        letterSpacing: 2,
-        marginBottom: 32,
-        textAlign: 'center',
-    },
-    avatarSection: {
+    heroSection: {
         alignItems: 'center',
-        marginBottom: 32,
+        marginTop: 20,
+        marginBottom: 30,
     },
-    avatarContainer: {
-        width: 112,
-        height: 112,
-        borderRadius: 56,
-        backgroundColor: '#1c1c1e',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 2,
-        borderColor: 'rgba(255,255,255,0.1)',
+    avatarWrapper: {
+        position: 'relative',
         marginBottom: 16,
     },
-    avatarBadge: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        width: 32,
-        height: 32,
-        backgroundColor: '#10b981',
-        borderRadius: 16,
+    avatarGradient: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 3,
+    },
+    avatarContainer: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 60,
+        backgroundColor: '#000',
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 4,
         borderColor: '#000',
+        overflow: 'hidden',
+    },
+    avatarImage: {
+        width: '100%',
+        height: '100%',
+    },
+    percentageBadge: {
+        position: 'absolute',
+        bottom: 0,
+        alignSelf: 'center',
+        backgroundColor: '#7c3aed',
+        borderRadius: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderWidth: 2,
+        borderColor: '#000',
+    },
+    percentageText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: 'bold',
     },
     userName: {
+        fontSize: 26,
+        fontWeight: 'bold',
         color: '#fff',
-        fontSize: 24,
-        fontWeight: '900',
-        marginBottom: 4,
+        marginBottom: 8,
     },
-    tierBadge: {
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 999,
-    },
-    tierText: {
-        color: 'rgba(255,255,255,0.8)',
-        fontSize: 10,
-        fontWeight: '700',
-        letterSpacing: 1,
-    },
-    card: {
-        backgroundColor: '#1c1c1e',
-        borderRadius: 32,
-        padding: 24,
-        marginBottom: 24,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
-    },
-    sectionTitle: {
-        color: '#6b7280',
-        fontSize: 10,
-        fontWeight: '700',
-        letterSpacing: 2,
-        marginBottom: 16,
-    },
-    profileItem: {
+    chatStatusButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
-    },
-    profileItemIcon: {
-        width: 40,
-        height: 40,
+        backgroundColor: '#1a1a1a',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
         borderRadius: 20,
-        backgroundColor: '#1c1c1e',
+        gap: 6,
+    },
+    chatStatusDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    chatStatusText: {
+        color: '#fff',
+        fontSize: 13,
+        fontWeight: '500',
+        textTransform: 'capitalize',
+    },
+    premiumSection: {
+        marginHorizontal: 16,
+        marginBottom: 24,
+        shadowColor: '#a855f7',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 16,
+        elevation: 10,
+    },
+    premiumCard: {
+        borderRadius: 24,
+        padding: 24,
+    },
+    premiumContent: {
+        width: '100%',
+    },
+    premiumHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 20,
+    },
+    premiumIconContainer: {
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: 16,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
     },
-    profileItemContent: {
-        flex: 1,
-    },
-    profileItemLabel: {
-        color: '#6b7280',
-        fontSize: 12,
-        fontWeight: '700',
-        letterSpacing: 1,
-        marginBottom: 2,
-    },
-    profileItemValue: {
+    premiumTitle: {
+        fontSize: 22,
+        fontWeight: 'bold',
         color: '#fff',
+        marginBottom: 4,
+    },
+    premiumSubtitle: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.9)',
+        maxWidth: 220,
+        lineHeight: 20,
+    },
+    upgradeButton: {
+        backgroundColor: '#fff',
+        borderRadius: 30,
+        paddingVertical: 14,
+        alignItems: 'center',
+    },
+    upgradeButtonText: {
+        color: '#000',
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: 'bold',
+    },
+    menuContainer: {
+        paddingHorizontal: 24,
+    },
+    menuSpacer: {
+        height: 24,
     },
     settingItem: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: 16,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
+        borderBottomColor: '#262626',
     },
     settingItemIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#1c1c1e',
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#1a1a1a',
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 16,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
     },
     settingItemIconDanger: {
-        backgroundColor: 'rgba(239,68,68,0.1)',
+        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    },
+    settingItemIconHighlight: {
+        backgroundColor: 'rgba(34, 197, 94, 0.15)',
     },
     settingItemLabel: {
         flex: 1,
-        color: '#fff',
         fontSize: 16,
+        color: '#fff',
         fontWeight: '500',
     },
     settingItemLabelDanger: {
         color: '#ef4444',
     },
-    settingItemIconHighlight: {
-        backgroundColor: 'rgba(34,197,94,0.1)',
-    },
     settingItemLabelHighlight: {
         color: '#22c55e',
     },
-    loginBanner: {
-        marginHorizontal: 16,
-        marginBottom: 20,
-        borderRadius: 16,
-        padding: 16,
+    settingBadge: {
+        backgroundColor: '#a855f7',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 8,
+        marginRight: 8,
     },
-    loginBannerContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    loginBannerIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-    },
-    loginBannerText: {
-        flex: 1,
-    },
-    loginBannerTitle: {
+    settingBadgeText: {
         color: '#fff',
-        fontSize: 16,
-        fontWeight: '700',
-        marginBottom: 2,
-    },
-    loginBannerSubtitle: {
-        color: 'rgba(255,255,255,0.8)',
-        fontSize: 13,
-    },
-    tierBadgeGuest: {
-        backgroundColor: '#374151',
-    },
-    versionContainer: {
-        alignItems: 'center',
-        marginBottom: 40,
+        fontSize: 11,
+        fontWeight: 'bold',
     },
     versionText: {
-        color: '#374151',
+        textAlign: 'center',
+        color: '#404040',
         fontSize: 12,
-        fontWeight: '700',
-        letterSpacing: 2,
+        marginTop: 32,
     },
-    // Custom Alert Styles
+    // Alert Styles
     alertOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.85)',
@@ -686,38 +582,33 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         padding: 24,
         width: '100%',
-        maxWidth: 340,
+        maxWidth: 320,
         borderWidth: 1,
         borderColor: '#333',
         alignItems: 'center',
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.5,
-        shadowRadius: 20,
-        elevation: 10,
     },
     alertIconContainer: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 20,
+        marginBottom: 16,
     },
     alertTitle: {
         color: '#fff',
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: 'bold',
-        marginBottom: 12,
+        marginBottom: 8,
         textAlign: 'center',
     },
     alertMessage: {
-        color: '#9ca3af',
-        fontSize: 15,
+        color: '#a3a3a3',
+        fontSize: 14,
         textAlign: 'center',
-        lineHeight: 22,
-        marginBottom: 24,
+        lineHeight: 20,
+        marginBottom: 20,
     },
     alertButtons: {
         flexDirection: 'row',
@@ -726,16 +617,10 @@ const styles = StyleSheet.create({
     },
     alertButton: {
         flex: 1,
-        paddingVertical: 14,
+        backgroundColor: '#333',
+        paddingVertical: 12,
         borderRadius: 12,
-        backgroundColor: '#333',
         alignItems: 'center',
-    },
-    alertButtonPrimary: {
-        backgroundColor: '#3b82f6',
-    },
-    alertButtonCancel: {
-        backgroundColor: '#333',
     },
     alertButtonDestructive: {
         backgroundColor: 'rgba(239, 68, 68, 0.2)',
@@ -745,39 +630,66 @@ const styles = StyleSheet.create({
     alertButtonText: {
         color: '#fff',
         fontWeight: '600',
-        fontSize: 15,
+        fontSize: 14,
     },
-    // Stats Dashboard Styles
-    statsGrid: {
-        flexDirection: 'row',
-        gap: 12,
-        marginBottom: 12,
-    },
-    statCard: {
+    // Modal Styles
+    modalContainer: {
         flex: 1,
-        backgroundColor: '#000',
-        borderRadius: 16,
-        padding: 16,
+        justifyContent: 'flex-end', // Bottom sheet style
+        backgroundColor: 'rgba(0,0,0,0.5)'
+    },
+    modalContent: {
+        backgroundColor: '#1a1a1a',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        padding: 20,
+        minHeight: 400
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 20
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#fff'
+    },
+    badgeItem: {
+        flexDirection: 'row',
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        marginBottom: 16,
+        backgroundColor: '#262626',
+        padding: 12,
+        borderRadius: 12
     },
-    statValue: {
+    badgeIconBg: {
+        width: 48,
+        height: 48,
+        backgroundColor: '#333',
+        borderRadius: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 16
+    },
+    badgeName: {
         color: '#fff',
-        fontSize: 28,
-        fontWeight: '900',
-        marginBottom: 4,
+        fontWeight: 'bold',
+        fontSize: 16
     },
-    statLabel: {
-        color: '#6b7280',
-        fontSize: 11,
-        fontWeight: '600',
-        textAlign: 'center',
+    badgeDesc: {
+        color: '#aaa',
+        fontSize: 13
     },
-    statsNote: {
-        color: '#6b7280',
-        fontSize: 11,
-        fontStyle: 'italic',
-        textAlign: 'center',
+    badgeUnlocked: {
+        backgroundColor: '#fbbf24',
+        padding: 4,
+        borderRadius: 12
     },
+    badgeLocked: {
+        backgroundColor: '#333',
+        padding: 4,
+        borderRadius: 12
+    }
 });

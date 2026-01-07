@@ -8,7 +8,7 @@ export default function TermsOfService() {
     const router = useRouter();
 
     const openExternalTerms = () => {
-        Linking.openURL('https://johan1727.github.io/my-ex-coach/legal/terms-of-service.html');
+        Linking.openURL('https://doc-hosting.flycricket.io/remi-terms-of-use/2c7da39a-0b5d-4b93-81dd-4be8290ef358/terms');
     };
 
     return (
@@ -41,6 +41,10 @@ export default function TermsOfService() {
                     <Text style={styles.updateText}>
                         Última actualización: 23 de diciembre de 2025
                     </Text>
+
+                    <TouchableOpacity onPress={openExternalTerms} style={styles.externalButton}>
+                        <Text style={styles.externalButtonText}>🌐 Ver Términos Oficiales (Online)</Text>
+                    </TouchableOpacity>
 
                     <Text style={styles.sectionTitle}>1. Descargo de Responsabilidad</Text>
                     <Text style={styles.paragraph}>

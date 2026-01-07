@@ -40,11 +40,12 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         color: '#9ca3af',
         features: [
             'Explora REMI gratis',
-            '20 mensajes cada 3 horas',
+            '30 mensajes al día',
+            '10 mensajes cada 3 horas',
             'Una prueba del simulador'
         ],
         limits: {
-            dailyTokens: 18000,
+            dailyTokens: 9000,
             messageDecoder: 3,
             moodJournal: true,
             analytics: 'none',
@@ -63,14 +64,15 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Explorer',
         color: '#06b6d4',
         features: [
-            '~160 mensajes cada 3 horas',
+            '150 mensajes al día',
+            '50 mensajes cada 3 horas',
             'Crea múltiples perfiles de ex',
             'Decodificador avanzado',
             'Bóveda de secretos privada',
             'Exporta tu diario emocional'
         ],
         limits: {
-            dailyTokens: 150000,
+            dailyTokens: 45000,
             messageDecoder: 50,
             moodJournal: true,
             analytics: 'weekly',
@@ -89,13 +91,14 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Warrior',
         color: '#3b82f6',
         features: [
-            '~400 mensajes cada 3 horas',
+            '500 mensajes al día',
+            '150 mensajes cada 3 horas',
             'Uso extendido sin interrupciones',
             'Respuestas más largas y detalladas',
             'Análisis diario de tu progreso'
         ],
         limits: {
-            dailyTokens: 400000,
+            dailyTokens: 150000,
             messageDecoder: 200,
             moodJournal: true,
             analytics: 'weekly',
@@ -114,14 +117,15 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Phoenix',
         color: '#ec4899',
         features: [
-            '✨ Uso virtualmente ilimitado',
+            '2000 mensajes al día',
+            '400 mensajes cada 3 horas',
             'Coaching personalizado con IA avanzada',
             'Análisis de capturas de pantalla',
             'Predicciones de comportamiento',
             'Soporte VIP prioritario 24/7'
         ],
         limits: {
-            dailyTokens: 2000000,
+            dailyTokens: 600000,
             messageDecoder: 1000,
             moodJournal: true,
             analytics: 'daily',
@@ -143,7 +147,7 @@ export async function getUserSubscription(userId: string): Promise<SubscriptionT
         const { data } = await supabase
             .from('profiles')
             .select('subscription_tier, subscription_status, subscription_expires_at')
-            .eq('user_id', userId)
+            .eq('id', userId)
             .single();
 
         if (!data || data.subscription_status !== 'active') {

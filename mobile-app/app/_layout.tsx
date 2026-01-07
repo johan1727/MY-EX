@@ -14,7 +14,7 @@ import { storage } from '../lib/storage';
 import { BackgroundAnalysisManager } from '../lib/BackgroundAnalysisManager';
 import { AnalysisProgressIndicator } from '../components/AnalysisProgressIndicator';
 
-import { NotificationManager } from '../lib/notifications';
+
 
 // Conditionally import share intent (not available on web)
 let useShareIntent: any = () => ({ hasShareIntent: false, shareIntent: null, resetShareIntent: () => { } });
@@ -138,9 +138,6 @@ export default function RootLayout() {
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
-            if (session) {
-                NotificationManager.scheduleDailyCheckIn();
-            }
         });
 
         return () => subscription.unsubscribe();
@@ -234,6 +231,7 @@ export default function RootLayout() {
                         <Stack.Screen name="tools/ex-simulator/analysis" />
                         <Stack.Screen name="tools/journal" />
                         <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
+                        <Stack.Screen name="subscribe" options={{ presentation: 'modal', headerShown: false }} />
                     </Stack>
                     <ShareIntentModal
                         visible={showShareModal}

@@ -7,6 +7,7 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     Modal,
+    Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -103,6 +104,11 @@ export default function PremiumScreen() {
     ];
 
     useEffect(() => {
+        if (Platform.OS === 'web') {
+            // Redirect to Stripe checkout page for web users
+            router.replace('/subscribe');
+            return;
+        }
         loadOfferings();
     }, []);
 

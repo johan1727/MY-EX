@@ -34,6 +34,8 @@ import { storage } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Linking } from 'react-native';
+import { useSubscription } from '@/lib/SubscriptionContext';
+import { SUBSCRIPTION_CONFIG, SubscriptionTier } from '../lib/subscriptions';
 
 interface Profile {
     id: string;
@@ -58,7 +60,8 @@ export default function ProfileDrawer({
 }: ProfileDrawerProps) {
     const router = useRouter();
     const [profiles, setProfiles] = useState<Profile[]>([]);
-    const [isPremium, setIsPremium] = useState(false);
+    const { tier } = useSubscription();
+    const isPremium = tier !== 'survivor';
     const [isGuest, setIsGuest] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [slideAnim] = useState(new Animated.Value(-300));
@@ -133,15 +136,6 @@ export default function ProfileDrawer({
                     })));
                 }
 
-                // Check premium status
-                const { data: subscription } = await supabase
-                    .from('subscriptions')
-                    .select('tier')
-                    .eq('user_id', user.id)
-                    .eq('status', 'active')
-                    .maybeSingle();
-
-                setIsPremium(subscription?.tier !== 'survivor');
                 setIsGuest(false);
             } else {
                 // Load from local storage (guest mode) - load ALL profiles
@@ -207,9 +201,37 @@ export default function ProfileDrawer({
     };
 
 
+
+
     const handleNewSimulation = () => {
-        onClose();
-        router.push('/tools/ex-simulator/import');
+        // Enforce profile limits
+        const limit = SUBSCRIPTION_CONFIG[tier as SubscriptionTier]?.limits?.simulatorAnalyses || 1;
+
+        // If unlimited (-1) or not reached limit, proceed
+        if (limit === -1 || profiles.length < limit) {
+            onClose();
+            router.push('/tools/ex-simulator/import');
+            return;
+        }
+
+        // Limit reached
+        showAlert(
+            'Límite de perfiles alcanzado',
+            `Tu plan actual (${SUBSCRIPTION_CONFIG[tier as SubscriptionTier]?.name}) solo permite ${limit} perfil(es). Mejora a Premium para crear más y analizar múltiples relaciones.`,
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Mejorar Plan',
+                    style: 'default',
+                    onPress: () => {
+                        closeAlert();
+                        onClose();
+                        router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
+                    }
+                }
+            ],
+            'warning'
+        );
     };
 
     const handleCoachPress = () => {
@@ -225,7 +247,6 @@ export default function ProfileDrawer({
     const handleLogout = async () => {
         await supabase.auth.signOut();
         // Reset state
-        setIsPremium(false);
         setProfiles([]);
         onClose();
         router.replace('/auth');
