@@ -8,6 +8,7 @@ import {
     ActivityIndicator,
     Modal,
     Animated,
+    Alert,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
@@ -35,11 +36,13 @@ import { BackgroundAnalysisManager, type AnalysisState } from '@/lib/BackgroundA
 import { validateRelationshipType, formatValidationMessage } from '@/lib/relationshipTypeValidator';
 import { canCreateProfileThisMonth, incrementMonthlyProfileCount } from '@/lib/exSimulator';
 import { useSubscription } from '@/lib/SubscriptionContext';
+import PremiumUpgradeModal from '@/components/PremiumUpgradeModal';
 
 export default function AnalysisScreen() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState<any>(null);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     // Live analysis states
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -49,6 +52,10 @@ export default function AnalysisScreen() {
     // Animated progress for smooth bar
     const animatedProgress = useRef(new Animated.Value(0)).current;
     const [validationWarning, setValidationWarning] = useState<any>(null);
+
+    // Premium Modal State
+    const [showPremiumModal, setShowPremiumModal] = useState(false);
+    const [premiumModalData, setPremiumModalData] = useState<any>({});
 
     // Custom Alert State
     interface AlertConfig {
@@ -87,7 +94,14 @@ export default function AnalysisScreen() {
     const checkForAnalysisOrProfile = async () => {
         try {
             // Check if we need to START a new analysis
-            const analyzeData = await storage.getItem('exSimulator_analyzeData');
+            // Retry logic to handle potential race conditions with AsyncStorage
+            let analyzeData = await storage.getItem('exSimulator_analyzeData');
+            if (!analyzeData) {
+                // Retry once after a short delay
+                await new Promise(resolve => setTimeout(resolve, 500));
+                analyzeData = await storage.getItem('exSimulator_analyzeData');
+            }
+
             if (analyzeData) {
                 // Check if using chunked storage (new format) or legacy format
                 const metadata = JSON.parse(analyzeData);
@@ -106,8 +120,8 @@ export default function AnalysisScreen() {
                         if (chunkData) {
                             const chunk = JSON.parse(chunkData);
                             parsedMessages.push(...chunk);
-                            // Clean up chunk after reading
-                            await storage.removeItem(`exSimulator_chunk_${i}`);
+                            // Clean up chunk AFTER successful processing, not during read
+                            // await storage.removeItem(`exSimulator_chunk_${i}`); 
                         }
                     }
 
@@ -123,7 +137,15 @@ export default function AnalysisScreen() {
                     userName = metadata.userName;
                 }
 
-                await storage.removeItem('exSimulator_analyzeData'); // Clear so we don't re-run
+                // VALIDATION: Ensure we have data before proceeding
+                if (!parsedMessages || parsedMessages.length === 0) {
+                    console.error('[AnalysisScreen] Failed to load messages from storage. Metadata:', metadata);
+                    Alert.alert('Error', 'No se pudieron cargar los mensajes para el análisis. Por favor intenta importar el chat nuevamente.');
+                    return;
+                }
+
+                // DO NOT DELETE metadata yet. Only delete after successful profile creation.
+                // await storage.removeItem('exSimulator_analyzeData'); 
 
                 // 🔒 CHECK MONTHLY PROFILE LIMIT BEFORE PROCEEDING
                 const { data: { user } } = await supabase.auth.getUser();
@@ -132,7 +154,7 @@ export default function AnalysisScreen() {
                     const { data: profile } = await supabase
                         .from('profiles')
                         .select('subscription_tier')
-                        .eq('user_id', user.id)
+                        .eq('id', user.id)
                         .single();
                     subscriptionTier = profile?.subscription_tier || 'survivor';
                 }
@@ -140,15 +162,13 @@ export default function AnalysisScreen() {
                 const limitCheck = await canCreateProfileThisMonth(subscriptionTier);
                 if (!limitCheck.canCreate) {
                     setLoading(false);
-                    showAlert(
-                        '🚫 Límite Alcanzado',
-                        limitCheck.message || `Has alcanzado tu límite de perfiles este mes.`,
-                        [
-                            { text: 'Ver Planes', onPress: () => router.push('/paywall') },
-                            { text: 'OK', onPress: () => router.back() }
-                        ],
-                        'warning'
-                    );
+                    setPremiumModalData({
+                        currentTier: subscriptionTier,
+                        limitType: 'profiles',
+                        currentCount: limitCheck.currentCount,
+                        maxAllowed: limitCheck.maxAllowed
+                    });
+                    setShowPremiumModal(true);
                     return;
                 }
 
@@ -186,10 +206,14 @@ export default function AnalysisScreen() {
                             .then(() => console.log('[AnalysisScreen] Monthly profile count incremented'))
                             .catch(err => console.error('[AnalysisScreen] Failed to increment profile count:', err));
 
+                        // 🧹 CLEANUP: Remove analysis data to prevent restarts on return
+                        storage.removeItem('exSimulator_analyzeData').catch(err => console.warn('Failed to cleanup analyzeData:', err));
+
                         // Navigate to chat after completion
-                        setTimeout(() => {
-                            router.replace('/');
-                        }, 1000); // 1 second for state to settle
+                        // setTimeout(() => {
+                        //     router.replace('/');
+                        // }, 1000); 
+                        // Instead of auto-redirect, we stay in 'completed' state to show the Success Screen
                     }
 
                     if (state.status === 'error') {
@@ -198,40 +222,15 @@ export default function AnalysisScreen() {
                     }
                 });
 
-                // ✨ VALIDATE RELATIONSHIP TYPE BEFORE ANALYSIS
-                const validation = validateRelationshipType(parsedMessages, relationshipType || 'ex', exName);
-                console.log('[Analysis] Validation result:', validation);
-
-                if (!validation.isValid && validation.detectedType !== 'unknown') {
-                    // Show custom warning UI instead of Alert (safer for Web)
-                    setValidationWarning({
-                        validation,
-                        onConfirm: async () => {
-                            setValidationWarning(null); // Clear warning
-                            // Start the analysis
-                            await BackgroundAnalysisManager.startAnalysis(
-                                profileId,
-                                parsedMessages,
-                                exName,
-                                relationshipType || 'ex'
-                            );
-                        },
-                        onCancel: () => {
-                            setIsAnalyzing(false);
-                            setLoading(false);
-                            setValidationWarning(null);
-                            router.back();
-                        }
-                    });
-                } else {
-                    // Validation passed or unknown - start analysis
-                    await BackgroundAnalysisManager.startAnalysis(
-                        profileId,
-                        parsedMessages,
-                        exName,
-                        relationshipType || 'ex'
-                    );
-                }
+                // ✨ VALIDATE RELATIONSHIP TYPE - DISABLED TO PREVENT "DOUBLE PREVIEW"
+                // The user already selected the relationship type in the Import screen.
+                // We trust the user's selection over the AI heuristic here.
+                await BackgroundAnalysisManager.startAnalysis(
+                    profileId,
+                    parsedMessages,
+                    exName,
+                    relationshipType || 'ex'
+                );
 
                 return;
             }
@@ -247,10 +246,17 @@ export default function AnalysisScreen() {
                 if (stored) {
                     const parsed = JSON.parse(stored);
                     setProfile(parsed.profile ? { ...parsed, ...parsed.profile } : parsed);
+                } else {
+                    // NO PROFILE FOUND - Redirect to import instead of showing "No hay perfiles"
+                    console.log('[Analysis] No profile data found, redirecting to import...');
+                    router.replace('/tools/ex-simulator/import');
+                    return;
                 }
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error loading:', error);
+            setLoadError(error.message || 'Error desconocido');
+            Alert.alert('Error', ' Detalles: ' + (error.message || 'Desconocido'));
         } finally {
             setLoading(false);
         }
@@ -267,64 +273,49 @@ export default function AnalysisScreen() {
         );
     }
 
-    // === VALIDATION WARNING (Anti-Crash for Web) ===
-    if (validationWarning) {
+    // === VALIDATION WARNING REMOVED ===
+
+    // === SUCCESS SCREEN ===
+    if (analysisState?.status === 'completed') {
         return (
             <View style={styles.container}>
                 <StatusBar style="light" />
                 <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
                     <View style={{
-                        width: 80, height: 80, borderRadius: 40,
-                        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                        width: 100, height: 100, borderRadius: 50,
+                        backgroundColor: 'rgba(34, 197, 94, 0.2)',
                         alignItems: 'center', justifyContent: 'center', marginBottom: 24
                     }}>
-                        <AlertTriangle size={40} color="#ef4444" />
+                        <Sparkles size={48} color="#22c55e" />
                     </View>
 
-                    <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' }}>
-                        ⚠️ Tipo de Relación Dudoso
+                    <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>
+                        ¡Análisis Completado!
+                    </Text>
+                    <Text style={{ color: '#9ca3af', fontSize: 16, marginBottom: 40, textAlign: 'center' }}>
+                        Hemos procesado {(analysisState as any).totalMessages || 'miles de'} mensajes y detectado los patrones de comportamiento.
                     </Text>
 
-                    <View style={{ backgroundColor: '#1a1a1a', padding: 16, borderRadius: 12, width: '100%', marginBottom: 32 }}>
-                        <Text style={{ color: '#d1d5db', fontSize: 16, lineHeight: 24, textAlign: 'center' }}>
-                            {formatValidationMessage(validationWarning.validation)}
+                    <TouchableOpacity
+                        onPress={() => router.replace('/')}
+                        style={{
+                            backgroundColor: '#22c55e',
+                            paddingVertical: 16,
+                            paddingHorizontal: 32,
+                            borderRadius: 12,
+                            width: '100%',
+                            alignItems: 'center',
+                            shadowColor: '#22c55e',
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.3,
+                            shadowRadius: 8,
+                            elevation: 5
+                        }}
+                    >
+                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>
+                            Hablar con la IA
                         </Text>
-                        <Text style={{ color: '#9ca3af', fontSize: 14, marginTop: 16, textAlign: 'center' }}>
-                            ¿Quieres continuar de todos modos?
-                        </Text>
-                    </View>
-
-                    <View style={{ width: '100%', gap: 12 }}>
-                        <TouchableOpacity
-                            onPress={validationWarning.onConfirm}
-                            style={{
-                                backgroundColor: '#7c3aed',
-                                padding: 16,
-                                borderRadius: 12,
-                                alignItems: 'center'
-                            }}
-                        >
-                            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>
-                                Continuar Análisis
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={validationWarning.onCancel}
-                            style={{
-                                backgroundColor: 'transparent',
-                                padding: 16,
-                                borderRadius: 12,
-                                alignItems: 'center',
-                                borderWidth: 1,
-                                borderColor: '#374151'
-                            }}
-                        >
-                            <Text style={{ color: '#9ca3af', fontSize: 16 }}>
-                                Cancelar y Corregir
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
+                    </TouchableOpacity>
                 </SafeAreaView>
             </View>
         );
@@ -418,28 +409,84 @@ export default function AnalysisScreen() {
                         REMI AI ENGINE 2.0
                     </Text>
 
-                    {/* DEBUG PANEL - Show logs for Web debugging */}
+                    {/* DEBUG PANEL REMOVED */}
+                </SafeAreaView>
+            </View>
+        );
+    }
+
+    // === ANALYSIS ERROR SCREEN ===
+    // Show this if analysis failed (before checking for profile)
+    if (analysisState?.status === 'error') {
+        return (
+            <View style={styles.container}>
+                <StatusBar style="light" />
+                <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+                    <View style={{
+                        width: 100, height: 100, borderRadius: 50,
+                        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                        alignItems: 'center', justifyContent: 'center', marginBottom: 24
+                    }}>
+                        <AlertTriangle size={48} color="#ef4444" />
+                    </View>
+
+                    <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>
+                        Error en el Análisis
+                    </Text>
+                    <Text style={{ color: '#9ca3af', fontSize: 14, marginBottom: 24, textAlign: 'center', paddingHorizontal: 16 }}>
+                        {analysisState.error || 'Ocurrió un error durante el análisis. Por favor intenta de nuevo.'}
+                    </Text>
+
+                    {/* Debug logs for troubleshooting */}
                     {analysisLogs.length > 0 && (
                         <View style={{
-                            marginTop: 24,
-                            padding: 16,
                             backgroundColor: 'rgba(0,0,0,0.3)',
-                            borderRadius: 12,
-                            width: '100%',
-                            maxHeight: 200
+                            borderRadius: 12, padding: 16, width: '100%', marginBottom: 24, maxHeight: 150
                         }}>
-                            <Text style={{ color: '#a855f7', fontWeight: 'bold', marginBottom: 8, fontSize: 12 }}>
-                                📋 Debug Log:
+                            <Text style={{ color: '#ef4444', fontWeight: 'bold', marginBottom: 8, fontSize: 12 }}>
+                                📋 Últimos pasos antes del error:
                             </Text>
-                            <ScrollView style={{ maxHeight: 150 }}>
-                                {analysisLogs.slice(-10).map((log, i) => (
-                                    <Text key={i} style={{ color: '#9ca3af', fontSize: 11, marginBottom: 4, fontFamily: 'monospace' }}>
+                            <ScrollView style={{ maxHeight: 100 }}>
+                                {analysisLogs.slice(-5).map((log, i) => (
+                                    <Text key={i} style={{ color: '#9ca3af', fontSize: 11, marginBottom: 4 }}>
                                         {log}
                                     </Text>
                                 ))}
                             </ScrollView>
                         </View>
                     )}
+
+                    <View style={{ width: '100%', gap: 12 }}>
+                        <TouchableOpacity
+                            onPress={() => router.replace('/tools/ex-simulator/import')}
+                            style={{
+                                backgroundColor: '#7c3aed',
+                                padding: 16,
+                                borderRadius: 12,
+                                alignItems: 'center'
+                            }}
+                        >
+                            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>
+                                Intentar de Nuevo
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            onPress={() => router.push('/')}
+                            style={{
+                                backgroundColor: 'transparent',
+                                padding: 16,
+                                borderRadius: 12,
+                                alignItems: 'center',
+                                borderWidth: 1,
+                                borderColor: '#374151'
+                            }}
+                        >
+                            <Text style={{ color: '#9ca3af', fontSize: 16 }}>
+                                Volver al Inicio
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
                 </SafeAreaView>
             </View>
         );
@@ -457,9 +504,38 @@ export default function AnalysisScreen() {
                     <View style={styles.headerSpacer} />
                 </SafeAreaView>
                 <View style={styles.emptyContainer}>
-                    <Brain size={64} color="#6b7280" />
-                    <Text style={styles.emptyText}>No hay perfil para analizar</Text>
+                    {loadError ? (
+                        <>
+                            <AlertTriangle size={64} color="#ef4444" />
+                            <Text style={[styles.emptyText, { color: '#ef4444', marginTop: 16 }]}>Error: {loadError}</Text>
+                            <TouchableOpacity
+                                onPress={() => { setLoadError(null); setLoading(true); checkForAnalysisOrProfile(); }}
+                                style={{ marginTop: 20, backgroundColor: '#374151', padding: 12, borderRadius: 8 }}
+                            >
+                                <Text style={{ color: '#fff' }}>Reintentar</Text>
+                            </TouchableOpacity>
+                        </>
+                    ) : (
+                        <>
+                            <Brain size={64} color="#6b7280" />
+                            <Text style={styles.emptyText}>No hay perfil para analizar</Text>
+                            <Text style={{ color: '#6b7280', fontSize: 12, marginTop: 10, textAlign: 'center' }}>Debug: IsAnalyzing={String(isAnalyzing)}{'\n'}Loading={String(loading)}</Text>
+                        </>
+                    )}
                 </View>
+
+                <PremiumUpgradeModal
+                    visible={showPremiumModal}
+                    onClose={() => {
+                        setShowPremiumModal(false);
+                        router.back();
+                    }}
+                    onUpgrade={() => {
+                        setShowPremiumModal(false);
+                        router.push('/paywall');
+                    }}
+                    {...premiumModalData}
+                />
             </View>
         );
     }
@@ -583,6 +659,7 @@ export default function AnalysisScreen() {
     // 2. linguistics.overallStyle
     // 3. communication.style nested object
     const communicationStyle = analysisData.communicationStyle ||
+        analysisData.profile?.communicationStyle ||
         linguistics.overallStyle ||
         (analysisData.communication && analysisData.communication.style) ||
         'No disponible';
@@ -591,7 +668,10 @@ export default function AnalysisScreen() {
     // Order of preference:
     // 1. eq.emotionalRange
     // 2. inferred from dominantPartner boolean
-    const emotionalPattern = eq.emotionalRange || (dynamics.dominantPartner ? 'variable' : 'estable');
+    const emotionalPattern = eq.emotionalRange ||
+        analysisData.emotionalPattern ||
+        analysisData.profile?.emotionalTone ||
+        (dynamics.dominantPartner ? 'variable' : 'estable');
 
     // Helper: Safely get score (number) from value that might be number or object
     const getScore = (val: any): number => {
@@ -765,7 +845,7 @@ export default function AnalysisScreen() {
                             </Text>
                         </View>
                         <Text style={styles.simpleCardValue}>
-                            {attachment.style || 'No disponible'}
+                            {attachment.style || analysisData.attachmentStyle || analysisData.profile?.attachment?.style || 'No disponible'}
                         </Text>
                     </View>
                 )}
@@ -779,7 +859,7 @@ export default function AnalysisScreen() {
                         </Text>
                     </View>
                     <Text style={styles.simpleCardValue}>
-                        {dynamics.conflictStyle || 'No disponible'}
+                        {dynamics.conflictStyle || analysisData.conflictManagement || analysisData.profile?.relationshipDynamics?.conflictStyle || 'No disponible'}
                     </Text>
                 </View>
 

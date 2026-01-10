@@ -14,7 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Crown, Check, Sparkles, Star, Flame, HelpCircle, X, LogOut } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getOfferings, purchasePackage } from '../lib/revenuecat';
+import { getOfferings, purchasePackage, restorePurchases } from '../lib/revenuecat';
 import { PurchasesPackage } from 'react-native-purchases';
 import { supabase } from '../lib/supabase';
 
@@ -402,6 +402,28 @@ export default function PremiumScreen() {
                 <Text style={styles.disclaimer}>
                     Se renovará automáticamente. Cancela cuando quieras desde Google Play.
                 </Text>
+
+                <TouchableOpacity
+                    style={styles.restoreButton}
+                    onPress={async () => {
+                        setLoading(true);
+                        try {
+                            const result = await restorePurchases();
+                            if (result.success) {
+                                showAlert('Compras Restauradas', 'Tus compras han sido restauradas exitosamente.', [{ text: 'OK' }], 'success');
+                            } else {
+                                showAlert('Aviso', 'No se encontraron compras activas para restaurar.', [{ text: 'OK' }], 'info');
+                            }
+                        } catch (e) {
+                            console.error(e);
+                            showAlert('Error', 'No se pudieron restaurar las compras.', [{ text: 'OK' }], 'error');
+                        } finally {
+                            setLoading(false);
+                        }
+                    }}
+                >
+                    <Text style={styles.restoreButtonText}>Restaurar Compras</Text>
+                </TouchableOpacity>
             </ScrollView>
 
             {/* Custom Alert Modal */}
@@ -673,6 +695,17 @@ const styles = StyleSheet.create({
         color: '#6b7280',
         textAlign: 'center',
         marginTop: 20,
+        marginBottom: 10,
+    },
+    restoreButton: {
+        paddingVertical: 12,
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    restoreButtonText: {
+        color: '#9ca3af',
+        fontSize: 14,
+        textDecorationLine: 'underline',
     },
     // Custom Alert Styles
     alertOverlay: {

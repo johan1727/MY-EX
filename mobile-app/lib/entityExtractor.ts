@@ -3,6 +3,7 @@
  * Feature #3: Extracts entities (pets, places, dates, people) from chat
  */
 
+import { generateAIResponse } from './gemini';
 import type { ParsedMessage } from './exSimulator';
 
 export interface RelationshipEntity {
@@ -19,8 +20,7 @@ export interface RelationshipEntity {
  */
 export async function extractEntities(
     messages: ParsedMessage[],
-    exName: string,
-    model: any
+    exName: string
 ): Promise<RelationshipEntity[]> {
     // Sample messages for analysis (first 1000 + middle 500 + last 500)
     const sampleMessages = [
@@ -74,8 +74,7 @@ REGLAS:
 Responde SOLO con el JSON, sin explicaciones.`;
 
     try {
-        const result = await model.generateContent(prompt);
-        const response = result.response.text();
+        const response = await generateAIResponse(prompt);
 
         // Parse JSON response
         const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();

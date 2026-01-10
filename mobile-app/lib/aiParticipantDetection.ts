@@ -1,5 +1,5 @@
 import { ParsedMessage } from './exSimulator';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateAIResponse } from './gemini';
 
 // ===============================================
 // 🤖 DETECCIÓN DE PARTICIPANTES CON IA
@@ -21,12 +21,9 @@ export interface ParticipantAnalysis {
 export async function detectParticipantsWithAI(
     messages: ParsedMessage[]
 ): Promise<ParticipantAnalysis[]> {
-    const ENV_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-    const FALLBACK_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-    const apiKey = ENV_KEY && ENV_KEY.length > 10 ? ENV_KEY : FALLBACK_KEY;
 
-    if (!apiKey || messages.length < 50) {
-        console.warn('[ParticipantAI] Usando fallback algoritm ico');
+    if (messages.length < 50) {
+        console.warn('[ParticipantAI] Usando fallback algorítmico');
         return detectParticipantsFallback(messages);
     }
 
@@ -38,9 +35,6 @@ export async function detectParticipantsWithAI(
         const sampleText = sample
             .map(m => `[${m.sender}]: ${m.content.substring(0, 100)}`)
             .join('\n');
-
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         const prompt = `Analiza esta conversación de WhatsApp y determina quiénes son los participantes y sus roles.
 
@@ -55,7 +49,7 @@ Tu tarea:
    - ¿Quién inicia más conversaciones?
    - ¿Hay terceras personas mencionadas que participen?
 
-Responde SOLO con JSON arrayя de participantes:
+Responde SOLO con JSON array de participantes:
 [
   {
     "name": "María",
@@ -77,8 +71,7 @@ Responde SOLO con JSON arrayя de participantes:
   }
 ]`;
 
-        const response = await model.generateContent(prompt);
-        const responseText = response.response.text();
+        const responseText = await generateAIResponse(prompt);
 
         // Parsear JSON
         const jsonMatch = responseText.match(/\[[\s\S]*\]/);
@@ -145,14 +138,6 @@ export async function extractKeyEventsWithAI(
     messages: ParsedMessage[],
     exName: string
 ): Promise<MemoryExtraction> {
-    const ENV_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-    const FALLBACK_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-    const apiKey = ENV_KEY && ENV_KEY.length > 10 ? ENV_KEY : FALLBACK_KEY;
-
-    if (!apiKey) {
-        console.warn('[MemoryAI] No API key');
-        return getEmptyMemory();
-    }
 
     try {
         // Muestrear mensajes emocionales
@@ -165,9 +150,6 @@ export async function extractKeyEventsWithAI(
         const chatText = sample
             .map(m => `[${m.timestamp}] ${m.sender}: ${m.content}`)
             .join('\n');
-
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         const prompt = `Analiza esta conversación y extrae la MEMORIA de eventos importantes.
 
@@ -209,8 +191,7 @@ Responde SOLO con JSON:
   ]
 }`;
 
-        const response = await model.generateContent(prompt);
-        const responseText = response.response.text();
+        const responseText = await generateAIResponse(prompt);
 
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {

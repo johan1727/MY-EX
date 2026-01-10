@@ -18,8 +18,12 @@ import { AnalysisProgressIndicator } from '../components/AnalysisProgressIndicat
 
 // Conditionally import share intent (not available on web)
 let useShareIntent: any = () => ({ hasShareIntent: false, shareIntent: null, resetShareIntent: () => { } });
-if (Platform.OS !== 'web') {
-    useShareIntent = require('expo-share-intent').useShareIntent;
+try {
+    if (Platform.OS !== 'web') {
+        useShareIntent = require('expo-share-intent').useShareIntent;
+    }
+} catch (e) {
+    console.warn('[RootLayout] expo-share-intent not available:', e);
 }
 
 // Import global CSS for web-specific styles

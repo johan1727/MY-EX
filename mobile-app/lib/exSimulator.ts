@@ -1,4 +1,4 @@
-﻿import { GoogleGenerativeAI } from '@google/generative-ai';
+﻿import { generateAIResponse } from './gemini';
 import { intelligentTokenSampling } from './messageSampling';
 import { extractConversationContext } from './conversationHelpers';
 import { extractMessageSamples, MessageSamples } from './messageSampleExtractor';
@@ -7,18 +7,10 @@ import { getRelevantFactsForMessage } from './factEmbeddings';
 import { storage } from './storage';
 import { supabase } from './supabase';
 
-// FALLBACK: Use env var with fallback for production builds
-const ENV_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-const FALLBACK_KEY = ''; // Removed for GitHub security
-const GEMINI_API_KEY = ENV_KEY && ENV_KEY.length > 10 ? ENV_KEY : FALLBACK_KEY;
-console.log('[DEBUG] Loaded API Key start:', GEMINI_API_KEY.substring(0, 10), ENV_KEY ? '(from env)' : '(FALLBACK)');
-
-
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 // Rate limiting helper - wait between API calls to prevent 429 errors
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-const STAGE_DELAY_MS = 5000; // 5s between stages (paid tier allows 60 RPM)
+const STAGE_DELAY_MS = 100; // Faster delays for Flash modelier allows 60 RPM)
 
 // Types
 export interface ParsedMessage {
@@ -620,11 +612,6 @@ async function detectExSenderWithAI(
             `${m.sender}: ${m.content.substring(0, 100)}`
         ).join('\n');
 
-        const model = genAI.getGenerativeModel({
-            model: 'gemini-2.0-flash',
-            generationConfig: { temperature: 0.1, maxOutputTokens: 200 }
-        });
-
         const prompt = `Hay una conversación entre estas 2 personas: ${participants.join(' y ')}.
 
 El usuario quiere simular a la persona que él/ella llama "${userInputName}" (puede ser un apodo, alias o nombre cariñoso).
@@ -638,9 +625,8 @@ Responde SOLO con JSON:
 {"exSender": "nombre exacto del participante a simular", "userSender": "nombre del otro participante", "confidence": 0.0-1.0}`;
 
         try {
-            const result = await model.generateContent(prompt);
-            const response = result.response.text();
-            const jsonMatch = response.match(/\{[\s\S]*\}/);
+            const responseText = await generateAIResponse(prompt);
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
 
             if (jsonMatch) {
                 const parsed = JSON.parse(jsonMatch[0]);
@@ -681,13 +667,15 @@ Responde SOLO con JSON:
 
 // Internal helper for retrying AI calls with timeout and exponential backoff
 // Optimized for paid tier with better error handling
-async function generateWithRetry(model: any, prompt: string, retries = 3, timeoutMs = 90000): Promise<string> {
+// Internal helper for retrying AI calls with timeout and exponential backoff
+// Optimized for paid tier with better error handling
+async function generateWithRetry(prompt: string, model: string = 'gemini-2.0-flash', retries = 3, timeoutMs = 90000): Promise<string> {
     let lastError: any;
     const errors: string[] = [];
 
     for (let i = 0; i <= retries; i++) {
         try {
-            console.log(`[AI Call] Attempt ${i + 1}/${retries + 1}, timeout: ${timeoutMs}ms, prompt: ${prompt.length} chars`);
+            console.log(`[AI Call] Attempt ${i + 1}/${retries + 1}, model: ${model}, timeout: ${timeoutMs}ms, prompt: ${prompt.length} chars`);
 
             // Create timeout promise
             const timeoutPromise = new Promise<never>((_, reject) =>
@@ -695,12 +683,12 @@ async function generateWithRetry(model: any, prompt: string, retries = 3, timeou
             );
 
             // Race between API call and timeout
-            const result = await Promise.race([
-                model.generateContent(prompt),
+            const resultPromise = generateAIResponse(prompt, undefined, undefined, model);
+            const text = await Promise.race([
+                resultPromise,
                 timeoutPromise
             ]);
 
-            const text = result.response.text();
             console.log(`[AI Call] ✅ Success! Response length: ${text.length} chars`);
             return text;
         } catch (error: any) {
@@ -755,9 +743,7 @@ export async function analyzePersonality(
     const isFriend = relationshipType === 'friend';
     console.log(`[analyzePersonality] 🚀 STARTING OPTIMIZED 6-STAGE ANALYSIS (type: ${relationshipType || 'ex'})`);
 
-    if (!GEMINI_API_KEY) {
-        throw new Error('API Key de Gemini no configurada.');
-    }
+    // API Key check removed - using Edge Functions now
 
     // 🌍 NUEVO: Detectar idioma del chat
     const detectedLanguage = detectLanguage(messages);
@@ -833,103 +819,69 @@ export async function analyzePersonality(
 
     const exMessages = sampledMessages.filter(m => m.sender === exSenderName);
 
-    // Prepare styles sample for prompt
-    const firstMessages = exMessages.slice(0, Math.min(200, Math.floor(exMessages.length * 0.1)));
-    const lastMessages = exMessages.slice(-Math.min(300, Math.floor(exMessages.length * 0.15)));
+    // Prepare styles sample for prompt - STABLE LIMIT (150k tokens)
+    // 400k tokens caused Edge Function timeouts (>50% failure rate).
+    // Reverting to ~15,000 messages which is the "Sweet Spot" for max context vs reliability.
+    const firstMessages = exMessages.slice(0, Math.min(3000, Math.floor(exMessages.length * 0.2)));
+    const lastMessages = exMessages.slice(-Math.min(3000, Math.floor(exMessages.length * 0.3)));
     const middleStart = Math.floor(exMessages.length * 0.3);
     const middleMessages = exMessages.slice(middleStart, Math.floor(exMessages.length * 0.7));
-    const randomMiddle = middleMessages.sort(() => Math.random() - 0.5).slice(0, Math.min(200, middleMessages.length));
+    const randomMiddle = middleMessages.sort(() => Math.random() - 0.5).slice(0, Math.min(9000, middleMessages.length));
     const promptSample = [...firstMessages, ...randomMiddle, ...lastMessages];
     const styleSample = promptSample.map(m => m.content).join('\n');
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = 'gemini-2.0-flash'; // Using the fast, new model
 
-    // --- REQUEST 1: DEEP PSYCHOLOGICAL PROFILE ---
-    onProgress?.(15, 'Analizando perfil psicológico profundo...');
+    // --- REQUEST 1: DEEP PSYCHOLOGICAL PROFILE (REAL AI WITH GEMINI 2.0 FLASH) ---
+    onProgress?.(15, 'Analizando perfil psicológico profundo (Contexto ampliado)...');
 
-    // Note: allParticipants and userSenderName are already defined above from AI detection
-
-    // Get sample of the full conversation with context
-    const contextSample = sampledMessages.slice(0, 50).map(m => `${m.sender}: ${m.content.substring(0, 200)}`).join('\n');
-
-    // Extract context for enhanced analysis
-    const context = extractConversationContext(sampledMessages, exName);
-
-    const request1Prompt = `Analiza profundamente a "${exName}" basándote EXCLUSIVAMENTE en estos mensajes REALES.
-
-⚠️ REGLAS CRÍTICAS - CUMPLIMIENTO OBLIGATORIO:
-1. TODA conclusión DEBE tener 3+ CITAS LITERALES del chat
-2. Si NO encuentras evidencia → pon "No detectado" (NO inventes)
-3. Las citas deben ser EXACTAS (copia/pega del chat)
-4. PROHIBIDO usar valores genéricos o especular
-
-CONTEXTO CRÍTICO:
-- Persona a simular: ${context.participants.target}
-- Usuario real: ${context.participants.user}
-
-HUELLA LINGÜÍSTICA DETECTADA:
-- Emojis favoritos: ${context.fingerprint.topEmojis.join(' ') || 'ninguno'}
-- Palabras signature: ${context.fingerprint.signatureWords.join(', ') || 'ninguna'}
-- Estilo de risa: ${context.fingerprint.laughStyle.join(', ') || 'jajaja'}
+    const request1Prompt = `Analiza el perfil psicológico de "${exName}" basado en estos mensajes de chat.
     
-    CONTEXTO IMPORTANTE:
-    - La persona a analizar es: ${exSenderName}
-    - La otra persona en la conversación (usuario) es: ${userSenderName}
-    - Total de participantes detectados: ${allParticipants.join(', ')}
-    - La simulación será para que el usuario (${userSenderName}) pueda hablar con una IA que imita a ${exSenderName}
+    Identidad: ${relationshipType || 'pareja/ex'}
     
-    MUESTRA DE CONVERSACIÓN PARA ENTENDER EL CONTEXTO:
-    ${contextSample}
-    
-    MENSAJES:
-    ${styleSample.slice(0, 30000)} // Limit to fit context
-
-    INSTRUCCIONES DE ANÁLISIS:
-
-    Para CADA campo, DEBES:
-    1. Leer los mensajes y buscar EVIDENCIA REAL
-    2. Citar AL MENOS 3 ejemplos textuales
-    3. Si no hay evidencia → pon score=5 (neutral) y reason="No hay suficiente información"
+    MENSAJES DEL SUJETO:
+    ${styleSample}
 
     Responde con un JSON válido que incluya:
-    1. relationshipType: (ex|partner|friend|etc) con confidence y evidence (3+ citas literales).
-    2. bigFive: (openness, conscientiousness, extraversion, agreeableness, neuroticism) con scores 1-10, reasons Y evidence (3+ citas literales CADA UNO).
-    3. attachment: style (seguro|ansioso|evitativo|desorganizado) con spectrum (anxiety 1-10, avoidance 1-10), analysis Y evidence (3+ citas).
-    4. emotionalTone: primary, secondary, stability (1-10), intensity (1-10) Y evidence (3+ citas).
-    5. communication: style (directo|pasivo-agresivo|etc), verbosity (1-10), formality (formal|casual|vulgar) Y evidence (3+ citas).
-    6. linguistics: vocabularyComplexity (1-10), emojiFrequency (high|med|low), signatureWords (array string) Y evidence (3+ citas).
+    1. relationshipType: type (ex|partner|friend|family|deceased), confidence (0-1), evidence (array).
+    2. bigFive: puntuación 1-10 para openness, conscientiousness, extraversion, agreeableness, neuroticism.
+    3. attachment: style (seguro|ansioso|evitativo|desorganizado), scores 1-10 para miedos.
+    4. emotionalTone: primary (calido|frio|variable|hostil), stability (1-10).
+    5. communication: style (directo|pasivo|agresivo|mixto), verbosity (1-10).
+    6. linguistics: formality, emojiFrequency, etc.
 
-    Formato JSON esperado (CON EVIDENCIA LITERAL OBLIGATORIA):
+    FORMATO JSON:
     {
-      "relationshipType": { "type": "ex", "confidence": 8, "evidence": ["Literal del chat 1", "Literal 2", "Literal 3"] },
-      "bigFive": {
-        "openness": { "score": 7, "reason": "Explicación basada en evidencia", "evidence": ["Dijo: '...'", "También: '...'", "Y: '...'"] },
-        "conscientiousness": { "score": 5, "reason": "...", "evidence": ["...", "...", "..."] },
-        "extraversion": { "score": 6, "reason": "...", "evidence": ["...", "...", "..."] },
-        "agreeableness": { "score": 5, "reason": "...", "evidence": ["...", "...", "..."] },
-        "neuroticism": { "score": 7, "reason": "...", "evidence": ["...", "...", "..."] }
-      },
-      "attachment": { "style": "ansioso", "spectrum": { "anxiety": 7, "avoidance": 3 }, "analysis": "...", "evidence": ["Cuando le dejaron de hablar: '...'", "Al enfrentar conflicto: '...'", "Sobre compromiso: '...'"] },
-      "emotionalTone": { "primary": "ansioso", "secondary": "nostálgico", "stability": 4, "intensity": 7, "evidence": ["Frecuentemente dice: '...'", "Tono general: '...'", "Reacciona con: '...'"] },
-      "communication": { "style": "pasivo-agresivo", "verbosity": 6, "formality": "casual", "evidence": ["Ejemplo: '...'", "Palabras que usa: '...'", "Nunca dice: '...'"] },
-      "linguistics": { "vocabularyComplexity": 5, "emojiFrequency": "high", "signatureWords": ["ntp", "aja", "sip"], "evidence": ["Usa constantemente: '...'", "Nunca: '...'", "Característica: '...'"] }
-    }
+        "relationshipType": { "type": "ex", "confidence": 0.9, "evidence": ["..."] },
+        "bigFive": { "openness": 5, "conscientiousness": 5, "extraversion": 5, "agreeableness": 5, "neuroticism": 5 },
+        "attachment": { "style": "ansioso", "fearOfAbandonment": 8, "avoidanceOfIntimacy": 3 },
+        "emotionalTone": { "primary": "variable", "stability": 4 },
+        "communication": { "style": "mixto", "verbosity": 7 },
+        "linguistics": { 
+             "formality": "informal", 
+             "avgMessageLength": "medio", 
+             "emojiFrequency": "frecuente",
+             "pronounUsage": { "firstPerson": "alto", "secondPerson": "medio", "weUs": "bajo" }
+        }
+    }`;
 
-    ⚠️ RECORDATORIO FINAL: Sin evidencia = NO inventes. Toda conclusión necesita 3+ citas LITERALES del chat.
-    `;
-
-    const result1Str = await generateWithRetry(model, request1Prompt);
+    // Executing Real AI Analysis
+    const result1Str = await generateWithRetry(request1Prompt, model); // Pass model
     const result1 = safeParseJSON(result1Str, {
-        relationshipType: { type: 'acquaintance', confidence: 5, evidence: [] },
+        relationshipType: { type: 'ex', confidence: 0.5 },
         bigFive: {}, attachment: {}, emotionalTone: {}, communication: {}, linguistics: {}
     });
+
 
     await delay(STAGE_DELAY_MS);
 
     // --- REQUEST 2: BEHAVIORAL PATTERNS ---
     onProgress?.(45, 'Analizando patrones de comportamiento...');
 
-    const request2Prompt = `Basado en el mismo perfil de "${exName}", analiza sus patrones de comportamiento CON EVIDENCIA LITERAL.
+    const request2Prompt = `Basado en los mensajes de chat de "${exName}", analiza sus patrones de comportamiento CON EVIDENCIA LITERAL.
+
+    MENSAJES:
+    ${styleSample}
     
     ⚠️ REGLA CRÍTICA: Para CADA patrón, cita EJEMPLOS REALES del chat.
     
@@ -980,7 +932,7 @@ HUELLA LINGÜÍSTICA DETECTADA:
     ⚠️ CRÍTICO: Sin ejemplos literales = respuesta no válida.
     `;
 
-    const result2Str = await generateWithRetry(model, request2Prompt);
+    const result2Str = await generateWithRetry(request2Prompt);
     const result2 = safeParseJSON(result2Str, {
         activityPatterns: {}, topics: {}, triggers: {}, commitment: {}, conflict: {}
     });
@@ -1017,7 +969,7 @@ HUELLA LINGÜÍSTICA DETECTADA:
     }
     `;
 
-    const result3Str = await generateWithRetry(model, request3Prompt);
+    const result3Str = await generateWithRetry(request3Prompt);
     const result3 = safeParseJSON(result3Str, {
         affection: {}, stress: {}, redFlags: [], greenFlags: [], summary: "Perfil generado", masterPrompt: ""
     });
@@ -1028,6 +980,9 @@ HUELLA LINGÜÍSTICA DETECTADA:
     onProgress?.(78, 'Analizando memoria y evolución temporal...');
 
     const request4Prompt = `Analiza la MEMORIA de eventos y la EVOLUCIÓN TEMPORAL de la relación de "${exName}" CON FECHAS Y CITAS LITERALES.
+
+    MENSAJES:
+    ${styleSample}
 
 ⚠️ REGLAS CRÍTICAS:
 1. Si encuentras una fecha EN EL CHAT ("15 de agosto", "mi cumpleaños es el 5 de marzo") → USALA TAL CUAL
@@ -1144,7 +1099,7 @@ FORMATO JSON REQUERIDO:
 - MÍNIMO 15 keyMoments con literales
 - Cada fase CON 3+ mensajes literales de ejemplo`;
 
-    const result4Str = await generateWithRetry(model, request4Prompt);
+    const result4Str = await generateWithRetry(request4Prompt);
     const result4 = safeParseJSON(result4Str, {
         keyMoments: [], importantDates: {}, importantPeople: [], temporalEvolution: {}
     });
@@ -1154,7 +1109,10 @@ FORMATO JSON REQUERIDO:
     // --- REQUEST 5: MICRO-BEHAVIORS + DELAY PATTERNS (COMBINED) ---
     onProgress?.(85, 'Analizando micro-comportamientos y patrones de respuesta...');
 
-    const request5Prompt = `Analiza los MICRO-COMPORTAMIENTOS de escritura y PATRONES DE DELAY de "${exName}".
+    const request5Prompt = `Analiza los MICRO-COMPORTAMIENTOS de escritura y PATRONES DE DELAY de "${exName}" basados en los siguientes mensajes.
+
+    MENSAJES:
+    ${styleSample}
 
 MICRO-COMPORTAMIENTOS a detectar:
 1. Puntuación emotiva: ¿Usa ". . ." para suspenso? ¿"ok." significa molestia?
@@ -1187,7 +1145,7 @@ Responde con JSON:
     }
 }`;
 
-    const result5Str = await generateWithRetry(model, request5Prompt);
+    const result5Str = await generateWithRetry(request5Prompt);
     const result5 = safeParseJSON(result5Str, {
         microBehaviors: {}, delayPatterns: {}
     });
@@ -1260,7 +1218,10 @@ ESCENARIOS DE EX-PAREJA - ¿Cómo reaccionaría "${exName}" en estos escenarios?
         "ifCongratulatedOnBirthday": "Respondería con cariño genuino, momento vulnerable..."
     }`;
 
-    const request6Prompt = `Genera PREDICCIONES de comportamiento y extrae HECHOS CLAVE sobre "${exName}".
+    const request6Prompt = `Genera PREDICCIONES de comportamiento y extrae HECHOS CLAVE sobre "${exName}" basados en los mensajes.
+
+    MENSAJES:
+    ${styleSample}
 
 ${predictionScenarios}
 
@@ -1290,7 +1251,7 @@ ${predictionExamples},
     }
 }`;
 
-    const result6Str = await generateWithRetry(model, request6Prompt);
+    const result6Str = await generateWithRetry(request6Prompt);
     const result6 = safeParseJSON(result6Str, {
         predictions: {}, extractedFacts: [], memorySelectivity: {}
     });
@@ -1306,7 +1267,7 @@ ${predictionExamples},
 
     const request7Prompt = `Analiza PATRONES AVANZADOS de "${exName}" basándote en estos mensajes:
 
-${styleSample.substring(0, 8000)}
+${styleSample}
 
 CONTEXTO: ${isDeceased ? 'Esta persona falleció - sé respetuoso y enfócate en cómo era en vida.' :
             isFamily ? 'Es un familiar del usuario.' :
@@ -1369,7 +1330,7 @@ Responde SOLO con JSON:
     }
 }`;
 
-    const result7Str = await generateWithRetry(model, request7Prompt);
+    const result7Str = await generateWithRetry(request7Prompt);
     const result7 = safeParseJSON(result7Str, {
         conflictResolution: { style: 'resolve', typicalPhrases: [], coolingOffTime: 'horas', apologizesFirst: false, holdsGrudges: false },
         loveLanguageDetailed: { primary: 'words', secondary: 'time', examples: [], preferredExpressions: [] },
@@ -1389,6 +1350,9 @@ Responde SOLO con JSON:
                 'PERSONA FALLECIDA (MEMORIAL)';
 
     const request8Prompt = `Analiza la PSICOLOGÍA DE LA RELACIÓN y el ADN LINGÜÍSTICO de "${exName}" basándote en los mensajes previos.
+
+    MENSAJES:
+    ${styleSample}
     
     CONTEXTO: ${psychContext}
     
@@ -1492,7 +1456,7 @@ Examples (MÍNIMO 5): ["Me dejó en visto 3 días", "Respondió solo: 'ok.'"]
 
     let result8: any = { relationshipPsychology: {}, linguisticAnalysis: {}, intimateDetails: {}, psychologicalXRay: {} };
     try {
-        const result8Str = await generateWithRetry(model, request8Prompt);
+        const result8Str = await generateWithRetry(request8Prompt);
         result8 = safeParseJSON(result8Str, {
             relationshipPsychology: { reciprocityScore: 50, powerBalance: 'balanced' },
             linguisticAnalysis: { subtext: 'Normal', intellectualization: 5, toneShiftUnderStress: 'Ninguno', psychologicalCrutches: [] },
@@ -1662,12 +1626,8 @@ Responde SOLO con un JSON v�lido con esta estructura:
 }`;
 
         try {
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-            const result = await model.generateContent([
-                prompt,
-                { inlineData: { data: base64, mimeType: 'image/jpeg' } }
-            ]);
-            const response = result.response.text();
+            // Use Edge Function for image analysis
+            const response = await generateAIResponse(prompt, undefined, base64);
             const jsonMatch = response.match(/\{[\s\S]*\}/);
 
             if (jsonMatch) {
@@ -1802,11 +1762,11 @@ export async function simulateResponse(
     promptParts[0] = fullPrompt; // Update text part
 
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-        const result = await model.generateContent(promptParts);
-        let response = result.response.text().trim();
+        // Use Edge Function - pass image if present
+        const imageData = userImage || null;
+        let response = await generateAIResponse(fullPrompt, undefined, imageData);
 
-        // 🐛 FIX: Prevent empty or "." only messages
+        // FIX: Prevent empty or "." only messages
         if (!response || response === '.' || response === '...' || response.length < 2) {
             console.warn('[Simulator] AI returned invalid response:', response);
             response = '...'; // Fallback: typing indicator
@@ -1863,19 +1823,17 @@ Enf�cate en:
 Responde SOLO con el JSON.`;
 
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-        const result = await model.generateContent(prompt);
-        const response = result.response.text();
+        const response = await generateAIResponse(prompt);
 
         const jsonMatch = response.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
-            throw new Error('No se pudo generar el an�lisis');
+            throw new Error('No se pudo generar el análisis');
         }
 
         return JSON.parse(jsonMatch[0]);
     } catch (error) {
         console.error('Error analyzing conversation:', error);
-        throw new Error('Error al analizar la conversaci�n. Intenta de nuevo.');
+        throw new Error('Error al analizar la conversación. Intenta de nuevo.');
     }
 }
 
@@ -1955,7 +1913,17 @@ export async function getMonthlyProfileCount(userId?: string): Promise<number> {
         // If no userId provided, try to get current user
         if (!targetId) {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return 0;
+            if (!user) {
+                // GUEST MODE: Check local storage
+                const stored = await storage.getItem('guest_profile_tracking');
+                if (!stored) return 0;
+
+                const tracking = JSON.parse(stored);
+                const currentMonth = getCurrentMonthKey();
+
+                if (tracking.month !== currentMonth) return 0;
+                return tracking.count || 0;
+            }
             targetId = user.id;
         }
 
@@ -1991,11 +1959,29 @@ export async function getMonthlyProfileCount(userId?: string): Promise<number> {
 export async function incrementMonthlyProfileCount(userId?: string): Promise<void> {
     try {
         let targetId = userId;
+        const currentMonth = getCurrentMonthKey();
 
         if (!targetId) {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) {
-                console.warn('[ProfileLimit] Cannot increment: No user logged in');
+                // GUEST MODE: Increment local storage
+                console.log('[ProfileLimit] Incrementing GUEST count');
+                const stored = await storage.getItem('guest_profile_tracking');
+                let newCount = 1;
+
+                if (stored) {
+                    const tracking = JSON.parse(stored);
+                    if (tracking.month === currentMonth) {
+                        newCount = (tracking.count || 0) + 1;
+                    }
+                }
+
+                await storage.setItem('guest_profile_tracking', JSON.stringify({
+                    month: currentMonth,
+                    count: newCount
+                }));
+
+                console.log(`[ProfileLimit] Guest count incremented to ${newCount}`);
                 return;
             }
             targetId = user.id;
@@ -2010,7 +1996,6 @@ export async function incrementMonthlyProfileCount(userId?: string): Promise<voi
 
         if (fetchError) throw fetchError;
 
-        const currentMonth = getCurrentMonthKey();
         let newCount = 1;
 
         // If same month, increment. If different (or null), start at 1.
@@ -2050,7 +2035,29 @@ export async function canCreateProfileThisMonth(subscriptionTier: string, userId
         return { canCreate: true, currentCount: 0, maxAllowed: -1 };
     }
 
-    const currentCount = await getMonthlyProfileCount(userId);
+    // CHECK GUEST LIMIT (AsyncStorage) or AUTH LIMIT (Supabase)
+    let currentCount = 0;
+
+    if (!userId) {
+        // GUEST MODE: Check local storage
+        try {
+            const stored = await storage.getItem('guest_monthly_profile_count');
+            const data = stored ? JSON.parse(stored) : null;
+            const currentMonth = new Date().toISOString().slice(0, 7); // "2024-05"
+
+            if (data && data.month === currentMonth) {
+                currentCount = data.count || 0;
+            } else {
+                currentCount = 0; // Reset for new month
+            }
+        } catch (e) {
+            console.error('[LimitCheck] Error reading guest limit:', e);
+            currentCount = 0;
+        }
+    } else {
+        // AUTH MODE: Check Supabase
+        currentCount = await getMonthlyProfileCount(userId);
+    }
 
     if (currentCount >= limits.maxProfiles) {
         const nextMonth = new Date();
@@ -2128,9 +2135,7 @@ export async function refineProfileWithChat(
     Si no hay cambios significativos, responde JSON vacío: {}`;
 
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-        const result = await model.generateContent(prompt);
-        const response = result.response.text();
+        const response = await generateAIResponse(prompt);
 
         const updates = safeParseJSON(response, {});
         if (Object.keys(updates).length === 0) return null;

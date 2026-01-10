@@ -26,7 +26,7 @@ import {
     ChevronUp,
     ChevronDown,
     Eye,
-
+    RefreshCw,
     Trash2,
     HelpCircle,
 } from 'lucide-react-native';
@@ -36,6 +36,18 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Linking } from 'react-native';
 import { useSubscription } from '@/lib/SubscriptionContext';
 import { SUBSCRIPTION_CONFIG, SubscriptionTier } from '../lib/subscriptions';
+import PremiumUpgradeModal from './PremiumUpgradeModal';
+
+
+// Dynamic import for Google Sign-In
+let GoogleSignin: any = null;
+try {
+    if (Platform.OS !== 'web') {
+        GoogleSignin = require('@react-native-google-signin/google-signin').GoogleSignin;
+    }
+} catch (e) {
+    console.log('[ProfileDrawer] GoogleSignin not available');
+}
 
 interface Profile {
     id: string;
@@ -50,17 +62,19 @@ interface ProfileDrawerProps {
     onClose: () => void;
     currentProfileId?: string | null;
     onProfileDeleted?: () => void;
+    onProfileSwitch?: () => void; // Callback to trigger reload in parent
 }
 
 export default function ProfileDrawer({
     visible,
     onClose,
     currentProfileId,
-    onProfileDeleted
+    onProfileDeleted,
+    onProfileSwitch
 }: ProfileDrawerProps) {
     const router = useRouter();
     const [profiles, setProfiles] = useState<Profile[]>([]);
-    const { tier } = useSubscription();
+    const { tier, checkSubscriptionStatus } = useSubscription();
     const isPremium = tier !== 'survivor';
     const [isGuest, setIsGuest] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
@@ -71,32 +85,14 @@ export default function ProfileDrawer({
     const [profileToDelete, setProfileToDelete] = useState<Profile | null>(null);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-    // Custom Alert State
-    interface AlertConfig {
-        visible: boolean;
-        title: string;
-        message: string;
-        buttons?: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' | 'confirm' }[];
-        type?: 'success' | 'error' | 'info' | 'warning';
-    }
-    const [customAlert, setCustomAlert] = useState<AlertConfig>({ visible: false, title: '', message: '' });
+    // Premium Modal State
+    const [showPremiumModal, setShowPremiumModal] = useState(false);
+    const [premiumLimitMessage, setPremiumLimitMessage] = useState('');
 
-    const showAlert = (title: string, message: string, buttons?: AlertConfig['buttons'], type: AlertConfig['type'] = 'info') => {
-        setCustomAlert({
-            visible: true,
-            title,
-            message,
-            buttons,
-            type
-        });
-    };
-
-    const closeAlert = () => {
-        setCustomAlert(prev => ({ ...prev, visible: false }));
-    };
 
     useEffect(() => {
         if (visible) {
+            checkSubscriptionStatus(); // Force sync with Supabase/RevenueCat
             loadProfiles();
             Animated.spring(slideAnim, {
                 toValue: 0,
@@ -175,26 +171,58 @@ export default function ProfileDrawer({
             // Clear cached analysis view to force reload of selected profile
             await storage.removeItem('analysis_view_profile');
 
-            // In guest mode, load the FULL profile from allProfiles (not just the minimal data)
-            const allProfilesJson = await storage.getItem('exSimulator_allProfiles');
-            if (allProfilesJson) {
-                const allProfiles = JSON.parse(allProfilesJson);
-                const fullProfile = allProfiles.find((p: any) => p.id === profile.id);
-                if (fullProfile) {
-                    console.log('[ProfileDrawer] Loading full profile:', fullProfile.id, 'with', Object.keys(fullProfile).length, 'keys');
-                    await storage.setItem('exSimulator_currentProfile', JSON.stringify(fullProfile));
-                } else {
-                    // Fallback to minimal profile if not found
-                    console.warn('[ProfileDrawer] Full profile not found, using minimal');
-                    await storage.setItem('exSimulator_currentProfile', JSON.stringify(profile));
+            let fullProfileData = null;
+
+            // 1. Try to fetch from Supabase if we have a valid ID
+            if (profile.supabaseId || (profile.id && profile.id.length > 30)) {
+                try {
+                    const { data, error } = await supabase
+                        .from('ex_profiles')
+                        .select('profile_data')
+                        .eq('id', profile.supabaseId || profile.id)
+                        .single();
+
+                    if (data && data.profile_data) {
+                        console.log('[ProfileDrawer] fetched full profile for chat:', profile.exName);
+                        fullProfileData = {
+                            ...data.profile_data,
+                            id: profile.id,
+                            supabaseId: profile.supabaseId || profile.id
+                        };
+                    }
+                } catch (err) {
+                    console.error('[ProfileDrawer] Supabase fetch error:', err);
                 }
-            } else {
-                await storage.setItem('exSimulator_currentProfile', JSON.stringify(profile));
             }
 
+            // 2. Fallback to Local Storage (exSimulator_allProfiles)
+            if (!fullProfileData) {
+                const allProfilesJson = await storage.getItem('exSimulator_allProfiles');
+                if (allProfilesJson) {
+                    const allProfiles = JSON.parse(allProfilesJson);
+                    const fullProfile = allProfiles.find((p: any) => p.id === profile.id);
+                    if (fullProfile) {
+                        console.log('[ProfileDrawer] Loading full profile from storage:', fullProfile.id);
+                        fullProfileData = fullProfile;
+                    }
+                }
+            }
+
+            // 3. Last fallback
+            if (!fullProfileData) {
+                console.warn('[ProfileDrawer] Full profile not found for chat, using minimal');
+                fullProfileData = profile;
+            }
+
+            await storage.setItem('exSimulator_currentProfile', JSON.stringify(fullProfileData));
+
             onClose();
-            // Router should already be on /(tabs) which is the chat
-            router.replace('/(tabs)');
+            // Trigger parent reload if callback provided
+            if (onProfileSwitch) {
+                onProfileSwitch();
+            } else {
+                router.replace('/(tabs)');
+            }
         } catch (error) {
             console.error('[ProfileDrawer] Error selecting profile:', error);
         }
@@ -203,35 +231,23 @@ export default function ProfileDrawer({
 
 
 
-    const handleNewSimulation = () => {
+    const handleNewSimulation = async () => {
         // Enforce profile limits
         const limit = SUBSCRIPTION_CONFIG[tier as SubscriptionTier]?.limits?.simulatorAnalyses || 1;
 
         // If unlimited (-1) or not reached limit, proceed
         if (limit === -1 || profiles.length < limit) {
+            // Clear previous state to avoid confusion
+            await storage.removeItem('exSimulator_analyzeData');
+            await storage.removeItem('analysis_view_profile');
             onClose();
             router.push('/tools/ex-simulator/import');
             return;
         }
 
-        // Limit reached
-        showAlert(
-            'Límite de perfiles alcanzado',
-            `Tu plan actual (${SUBSCRIPTION_CONFIG[tier as SubscriptionTier]?.name}) solo permite ${limit} perfil(es). Mejora a Premium para crear más y analizar múltiples relaciones.`,
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Mejorar Plan',
-                    style: 'default',
-                    onPress: () => {
-                        closeAlert();
-                        onClose();
-                        router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
-                    }
-                }
-            ],
-            'warning'
-        );
+        // 🚨 LIMIT REACHED - Show attractive upgrade modal
+        // 🚨 LIMIT REACHED - Show attractive upgrade modal
+        setShowPremiumModal(true);
     };
 
     const handleCoachPress = () => {
@@ -250,6 +266,38 @@ export default function ProfileDrawer({
         setProfiles([]);
         onClose();
         router.replace('/auth');
+    };
+
+    // 🔄 Switch Account - Forces full Google logout to allow different account login
+    const handleSwitchAccount = async () => {
+        try {
+            // First, sign out from Supabase
+            await supabase.auth.signOut();
+
+            // Then, fully revoke Google access to force account picker on next login
+            if (GoogleSignin && Platform.OS !== 'web') {
+                try {
+                    await GoogleSignin.signOut();
+                    await GoogleSignin.revokeAccess(); // This forces account picker next time
+                    console.log('[ProfileDrawer] ✅ Google access revoked');
+                } catch (googleErr) {
+                    console.log('[ProfileDrawer] Google signOut skipped:', googleErr);
+                }
+            }
+
+            // Clear local storage
+            await storage.removeItem('exSimulator_currentProfile');
+            await storage.removeItem('exSimulator_allProfiles');
+
+            setProfiles([]);
+            onClose();
+            router.replace('/auth');
+        } catch (error) {
+            console.error('[ProfileDrawer] Switch account error:', error);
+            // Still try to navigate even if error
+            onClose();
+            router.replace('/auth');
+        }
     };
 
     const performDelete = async (profile: Profile) => {
@@ -309,7 +357,7 @@ export default function ProfileDrawer({
 
         } catch (error) {
             console.error('Error deleting profile:', error);
-            showAlert('Error', 'No se pudo eliminar el perfil completamente. Intenta de nuevo.', [{ text: 'OK' }], 'error');
+            Alert.alert('Error', 'No se pudo eliminar el perfil.');
         }
     };
 
@@ -379,32 +427,7 @@ export default function ProfileDrawer({
 
                                         {/* Action Buttons */}
                                         <View style={styles.profileActions}>
-                                            {/* Analysis Button */}
-                                            <TouchableOpacity
-                                                style={styles.analysisBtn}
-                                                onPress={async () => {
-                                                    onClose();
-                                                    // Load FULL profile from allProfiles, not just the minimal {id, exName}
-                                                    const allProfilesJson = await storage.getItem('exSimulator_allProfiles');
-                                                    if (allProfilesJson) {
-                                                        const allProfiles = JSON.parse(allProfilesJson);
-                                                        const fullProfile = allProfiles.find((p: any) => p.id === profile.id);
-                                                        if (fullProfile) {
-                                                            console.log('[ProfileDrawer] Setting full analysis profile:', fullProfile.id, 'with', Object.keys(fullProfile).length, 'keys');
-                                                            await storage.setItem('analysis_view_profile', JSON.stringify(fullProfile));
-                                                        } else {
-                                                            console.warn('[ProfileDrawer] Full profile not found for analysis view');
-                                                            await storage.setItem('analysis_view_profile', JSON.stringify(profile));
-                                                        }
-                                                    } else {
-                                                        await storage.setItem('analysis_view_profile', JSON.stringify(profile));
-                                                    }
-                                                    router.push('/tools/ex-simulator/analysis');
-                                                }}
-                                            >
-                                                <Eye size={14} color="#a855f7" />
-                                                <Text style={styles.analysisBtnText}>Ver análisis de personalidad</Text>
-                                            </TouchableOpacity>
+
 
 
                                             {/* Delete Button */}
@@ -484,13 +507,22 @@ export default function ProfileDrawer({
                                         <Text style={[styles.userMenuText, { color: '#22c55e' }]}>Iniciar sesión</Text>
                                     </TouchableOpacity>
                                 ) : (
-                                    <TouchableOpacity
-                                        style={styles.userMenuItem}
-                                        onPress={handleLogout}
-                                    >
-                                        <LogOut size={16} color="#ef4444" />
-                                        <Text style={[styles.userMenuText, { color: '#ef4444' }]}>Cerrar sesión</Text>
-                                    </TouchableOpacity>
+                                    <>
+                                        <TouchableOpacity
+                                            style={styles.userMenuItem}
+                                            onPress={handleSwitchAccount}
+                                        >
+                                            <RefreshCw size={16} color="#06b6d4" />
+                                            <Text style={[styles.userMenuText, { color: '#06b6d4' }]}>Cambiar de cuenta</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.userMenuItem}
+                                            onPress={handleLogout}
+                                        >
+                                            <LogOut size={16} color="#ef4444" />
+                                            <Text style={[styles.userMenuText, { color: '#ef4444' }]}>Cerrar sesión</Text>
+                                        </TouchableOpacity>
+                                    </>
                                 )}
                             </View>
                         )}
@@ -587,6 +619,21 @@ export default function ProfileDrawer({
                     </View>
                 </View>
             </Modal>
+
+            {/* Premium Upgrade Modal used for Limits */}
+            <PremiumUpgradeModal
+                visible={showPremiumModal}
+                onClose={() => setShowPremiumModal(false)}
+                onUpgrade={() => {
+                    setShowPremiumModal(false);
+                    onClose(); // Close drawer
+                    router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
+                }}
+                currentTier={tier as string}
+                limitType="profiles"
+                currentCount={profiles.length}
+                maxAllowed={SUBSCRIPTION_CONFIG[tier as SubscriptionTier]?.limits?.simulatorAnalyses || 1}
+            />
         </Modal>
     );
 }

@@ -13,13 +13,22 @@ export interface NicknameEvolution {
     frequency: number;
 }
 
+import { generateAIResponse } from './gemini';
+
+export interface NicknameEvolution {
+    nickname: string;
+    startPeriod: string;
+    endPeriod: string;
+    phase: 'honeymoon' | 'stable' | 'crisis' | 'breakup';
+    frequency: number;
+}
+
 /**
  * Detect nickname evolution using AI
  */
 export async function detectNicknameEvolution(
     messages: ParsedMessage[],
-    exName: string,
-    model: any
+    exName: string
 ): Promise<NicknameEvolution[]> {
     // Split messages into time periods
     const totalMessages = messages.length;
@@ -79,8 +88,7 @@ REGLAS:
 Responde SOLO con el JSON.`;
 
     try {
-        const result = await model.generateContent(prompt);
-        const response = result.response.text();
+        const response = await generateAIResponse(prompt);
 
         const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
         const data = JSON.parse(cleaned);

@@ -328,9 +328,7 @@ export default function AuthScreen() {
                             </>
                         )}
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.emailButton} onPress={() => setShowEmailForm(true)}>
-                        <Text style={styles.emailButtonText}>Continuar con Email</Text>
-                    </TouchableOpacity>
+
                 </View>
             </View>
         </View>

@@ -45,7 +45,7 @@ import { SimulationSession } from '../../lib/simulationState';
 import { refineProfileWithChat } from '../../lib/exSimulator';
 import { checkDefensiveTrigger } from '../../lib/defensiveTopicsDetector';
 import { checkJealousyTrigger } from '../../lib/jealousyDetector';
-import { generateChatResponse } from '../../lib/edgeFunctions';
+import { generateAIResponse } from '../../lib/gemini';
 import { retrieveRelevantMemories, detectDetailedEmotion } from '../../lib/emotionalRAG';
 
 console.log('[ExChat] Using secure Edge Functions for AI');
@@ -133,6 +133,7 @@ export default function ExSimulatorChat() {
                 if (data.userName) setUserName(data.userName);
 
                 // Load conversation
+                setMessages([]); // Clear previous profile messages immediately
                 let loadedMessages: Message[] = [];
 
                 // Try cloud first
@@ -448,8 +449,21 @@ export default function ExSimulatorChat() {
             setMessages([...newMessages]);
             setIsTyping(true);
 
-            console.log('[Chat] Calling Edge Function...');
-            const aiResponse = await generateChatResponse(currentInput, systemPrompt);
+            console.log('[Chat] Calling Edge Function (Gemini 2.0)...');
+            // Explicitly use gemini-2.0-flash as it is proven to work in Analysis
+            let aiResponse = await generateAIResponse(currentInput, systemPrompt, null, 'gemini-2.0-flash');
+
+            // Limit emojis to max 2 per message for natural conversation
+            const emojiRegex = /[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu;
+            const emojis = aiResponse.match(emojiRegex) || [];
+            if (emojis.length > 2) {
+                let emojiCount = 0;
+                aiResponse = aiResponse.replace(emojiRegex, (match) => {
+                    emojiCount++;
+                    return emojiCount <= 2 ? match : '';
+                });
+            }
+
             console.log('[Chat] Edge Function response received');
 
             const assistantMsg: Message = {
@@ -598,6 +612,11 @@ export default function ExSimulatorChat() {
                             setProfileData(null);
                             setMessages([]);
                             // Do not reload profile immediately
+                        }}
+                        onProfileSwitch={() => {
+                            console.log('[ExChat] Profile switched, reloading...');
+                            setMessages([]); // Clear current chat
+                            loadProfile(); // Reload new profile
                         }}
                     />
                 </SafeAreaView >
@@ -768,22 +787,7 @@ export default function ExSimulatorChat() {
                             )}
                         </View>
                     </View>
-                    {/* Gemini-style Preview Bubble */}
-                    {inputText.trim() !== '' && (
-                        <Animated.View
-                            style={[
-                                styles.previewBubble,
-                                {
-                                    opacity: new Animated.Value(1), // Simple fade could be enhanced with useEffect
-                                    transform: [{ translateY: 0 }]
-                                }
-                            ]}
-                        >
-                            <Text style={styles.previewText} numberOfLines={1} ellipsizeMode="tail">
-                                {inputText}
-                            </Text>
-                        </Animated.View>
-                    )}
+
                 </SafeAreaView>
             </KeyboardAvoidingView>
 
@@ -872,6 +876,12 @@ export default function ExSimulatorChat() {
                     setUserName('');
                     setPastSummaries('');
                     // Do not reload profile immediately, stick to empty state
+                }}
+                onProfileSwitch={() => {
+                    console.log('[ExChat] Switch requested, reloading...');
+                    setProfileData(null); // Force loading state
+                    setMessages([]); // Clear chat immediately
+                    loadProfile();
                 }}
             />
         </View>

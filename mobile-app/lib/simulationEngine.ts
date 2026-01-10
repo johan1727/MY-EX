@@ -11,7 +11,7 @@
  * - Persistencia
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateAIResponse } from './gemini';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
@@ -110,9 +110,7 @@ import { supabase } from './supabase';
 // Type alias for convenience
 type ExProfile = ExProfileWithMasterPrompt;
 
-// ===== CONFIGURACIÓN =====
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+// Gemini is now accessed via Edge Functions through generateAIResponse
 
 // ===== TIPOS =====
 interface Message {
@@ -409,16 +407,7 @@ async function analyzeEmotionalImpact(
     try {
         const prompt = buildEmotionAnalysisPrompt(userMessage, currentEmotion, profile);
 
-        const model = genAI.getGenerativeModel({
-            model: 'gemini-2.0-flash',
-            generationConfig: {
-                temperature: 0.3,
-                maxOutputTokens: 200
-            }
-        });
-
-        const result = await model.generateContent(prompt);
-        const response = result.response.text();
+        const response = await generateAIResponse(prompt);
 
         // Parsear JSON de la respuesta
         const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -524,20 +513,11 @@ function updateConversationMemory(
 }
 
 /**
- * Genera la respuesta usando Gemini
+ * Genera la respuesta usando Gemini via Edge Function
  */
 async function generateResponse(prompt: string, maxLength: number): Promise<string> {
     try {
-        const model = genAI.getGenerativeModel({
-            model: 'gemini-2.0-flash',
-            generationConfig: {
-                temperature: 0.8, // Más variabilidad para respuestas naturales
-                maxOutputTokens: Math.ceil(maxLength / 3) // Aproximado
-            }
-        });
-
-        const result = await model.generateContent(prompt);
-        let response = result.response.text().trim();
+        let response = await generateAIResponse(prompt);
 
         // Truncar si es muy largo
         if (response.length > maxLength) {

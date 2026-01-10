@@ -1,10 +1,5 @@
-import OpenAI from 'openai';
+import { generateAIResponse } from './gemini';
 import { supabase } from './supabase';
-
-const openai = new OpenAI({
-    apiKey: process.env.EXPO_PUBLIC_OPENAI_API_KEY,
-    dangerouslyAllowBrowser: true,
-});
 
 export interface JournalEntry {
     id: string;
@@ -127,6 +122,8 @@ Emotions: ${e.emotions?.join(', ') || 'none'}
 Text: ${e.entry_text}`;
         }).join('\n\n');
 
+        const systemPrompt = 'You are an empathetic therapist analyzing journal entries to help someone heal from a breakup. Provide insights that are honest but encouraging.';
+
         const prompt = `Analyze these journal entries from the past week for someone healing from a breakup:
 
 ${entriesText}
@@ -148,24 +145,12 @@ Focus on:
 - Progress or setbacks
 - Actionable, specific recommendations`;
 
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                {
-                    role: 'system',
-                    content: 'You are an empathetic therapist analyzing journal entries to help someone heal from a breakup. Provide insights that are honest but encouraging.'
-                },
-                {
-                    role: 'user',
-                    content: prompt
-                }
-            ],
-            temperature: 0.7,
-            max_tokens: 800,
-            response_format: { type: 'json_object' }
-        });
+        const responseText = await generateAIResponse(prompt, systemPrompt);
 
-        const analysis = JSON.parse(response.choices[0].message.content || '{}');
+        // Clean markdown if present
+        const jsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const analysis = JSON.parse(jsonText);
+
         return analysis as WeeklyAnalysis;
 
     } catch (error) {

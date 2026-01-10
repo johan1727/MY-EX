@@ -1,8 +1,7 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateAIResponse } from './gemini';
 import { supabase } from './supabase';
 
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
 
 interface Message {
     role: 'system' | 'user' | 'assistant';
@@ -147,9 +146,7 @@ Keep it concise (3-4 sentences max).
 Conversation:
 ${conversationText}`;
 
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-        const result = await model.generateContent(prompt);
-        const summary = result.response.text() || 'Unable to generate summary.';
+        const summary = (await generateAIResponse(prompt)) || 'Unable to generate summary.';
 
         // Save summary to database
         await supabase.from('conversation_summaries').insert({

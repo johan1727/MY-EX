@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Alert, Platform, Share, Linking, StyleSheet, Modal, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert, Platform, Share, Linking, StyleSheet, Modal, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { useSubscription } from '../lib/SubscriptionContext';
 import { SUBSCRIPTION_CONFIG, SubscriptionTier } from '../lib/subscriptions';
-import { User, LogOut, LogIn, Mail, Calendar, Settings, Shield, ChevronRight, Edit2, Share2, Star, ArrowLeft, Sparkles, Trash2, Download, HelpCircle, X, Zap, Crown, Heart } from 'lucide-react-native';
+// import { restorePurchases } from '../lib/revenuecat';
+import { User, LogOut, LogIn, Mail, Calendar, Settings, Shield, ChevronRight, Edit2, Share2, Star, ArrowLeft, Sparkles, Trash2, Download, HelpCircle, X, Zap, Crown, Heart, RefreshCw } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const SettingItem = ({ label, icon: Icon, onPress, danger = false, highlight = false, badge }: any) => (
@@ -25,7 +27,7 @@ export default function ProfileScreen() {
     const [joined, setJoined] = useState('');
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [isGuest, setIsGuest] = useState(true);
-    const { tier, isLoading } = useSubscription(); // Use context for tier
+    const { tier, isLoading, restorePurchases, checkSubscriptionStatus } = useSubscription(); // Use context for tier
     const isPremium = tier !== SubscriptionTier.SURVIVOR;
     // Badge State
     const [badgeModalVisible, setBadgeModalVisible] = useState(false);
@@ -57,9 +59,15 @@ export default function ProfileScreen() {
         setCustomAlert(prev => ({ ...prev, visible: false }));
     };
 
-    useEffect(() => {
-        loadProfile();
-    }, []);
+    // Use focus effect to refresh data when screen is focused
+    useFocusEffect(
+        React.useCallback(() => {
+            loadProfile();
+            // Force refresh subscription status from server whenever profile is focused
+            // This ensures if a webhook updated Supabase, we see it immediately
+            checkSubscriptionStatus();
+        }, [])
+    );
 
     const loadProfile = async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -170,14 +178,31 @@ export default function ProfileScreen() {
         }
     };
 
+    const handleRestorePurchases = async () => {
+        showAlert('Restaurando...', 'Buscando compras anteriores...', [], 'info');
+        try {
+            await restorePurchases();
+
+            closeAlert();
+            showAlert('✅ Proceso Finalizado', 'Si tenías compras, tu perfil se ha actualizado.', [{ text: 'OK' }], 'success');
+        } catch (error) {
+            console.error(error);
+            closeAlert();
+            showAlert('Error', 'No se pudieron restaurar las compras.', [{ text: 'OK' }], 'error');
+        }
+    };
+
+
     return (
         <View style={styles.container}>
             <StatusBar style="light" backgroundColor="#000000" />
-            <SafeAreaView style={styles.safeArea}>
+            <StatusBar style="light" backgroundColor="#000000" />
+            <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
+                    <TouchableOpacity onPress={() => router.back()} style={[styles.iconButton, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
                         <ArrowLeft size={24} color="#fff" />
+                        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '500' }}>Volver</Text>
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Perfil</Text>
                     <TouchableOpacity onPress={() => router.push('/preferences')} style={styles.iconButton}>
@@ -256,7 +281,7 @@ export default function ProfileScreen() {
                     <View style={styles.menuContainer}>
                         <SettingItem label="Preferencias" icon={Settings} onPress={() => router.push('/preferences')} />
                         <SettingItem label="Ayuda y Soporte" icon={HelpCircle} onPress={() => Linking.openURL('mailto:support@soyremi.app')} />
-                        <SettingItem label="Insignias" icon={Star} badge="Nuevo" onPress={() => setBadgeModalVisible(true)} />
+                        <SettingItem label="Restaurar Compras" icon={RefreshCw} onPress={handleRestorePurchases} />
 
                         <View style={styles.menuSpacer} />
 

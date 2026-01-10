@@ -18,7 +18,7 @@ export default function UpgradeBanner({
     const router = useRouter();
 
     const handleUpgrade = () => {
-        router.push('/premium' as any);
+        router.push('/paywall' as any);
     };
 
     // Header badge style - like ChatGPT "Upgrade to Plus"

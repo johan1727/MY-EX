@@ -7,10 +7,7 @@
  */
 
 import { supabase } from './supabase';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+import { generateAIResponse } from './gemini';
 
 // Timeout helper
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -235,8 +232,6 @@ export async function extractAndSaveFacts(
     if (messages.length < 5) return; // Need enough context
 
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
         // Take last 30 messages for analysis
         const recentMsgs = messages.slice(-30).map(m =>
             `${m.role === 'user' ? 'Usuario' : exName}: ${m.content}`
@@ -260,8 +255,7 @@ Ejemplos:
 
 Responde SOLO con el JSON array válido, sin explicaciones. Si no hay hechos relevantes, responde []:`;
 
-        const result = await model.generateContent(extractPrompt);
-        let responseText = result.response.text().trim();
+        let responseText = await generateAIResponse(extractPrompt);
 
         // Clean response - remove markdown code blocks if present
         responseText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -368,8 +362,6 @@ export async function generateSessionSummary(
     if (messages.length < 10) return '';
 
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
         const allMsgs = messages.map(m =>
             `${m.role === 'user' ? 'Usuario' : exName}: ${m.content}`
         ).join('\n');
@@ -385,8 +377,7 @@ Incluye:
 
 Responde solo con el resumen:`;
 
-        const result = await model.generateContent(summaryPrompt);
-        const summary = result.response.text().trim();
+        const summary = (await generateAIResponse(summaryPrompt)).trim();
 
         // Save summary to cloud
         const { data: existing } = await supabase

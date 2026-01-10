@@ -70,16 +70,12 @@ export default function SubscribePage() {
     const router = useRouter();
     const [loading, setLoading] = useState<string | null>(null);
     const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('monthly');
-    const { tier, isLoading: tierLoading } = useSubscription();
+    const { tier, isLoading: tierLoading, packages, purchasePackage } = useSubscription();
     const isPremium = tier !== 'survivor';
     const currentPlanIndex = PLANS.findIndex(p => p.id === tier);
 
     const handleSubscribe = async (plan: typeof PLANS[0]) => {
-        if (Platform.OS !== 'web') {
-            alert('Los pagos web solo funcionan en navegador. Por favor usa la app móvil para suscribirte.');
-            return;
-        }
-
+        if (loading) return;
         setLoading(plan.id);
 
         try {
@@ -91,34 +87,76 @@ export default function SubscribePage() {
                 return;
             }
 
-            // Determine correct Price ID based on selection
-            const selectedPriceId = billingPeriod === 'monthly' ? plan.priceId : plan.annualPriceId;
+            // ==========================================
+            // 🌐 WEB PAYMENT (STRIPE)
+            // ==========================================
+            if (Platform.OS === 'web') {
+                // Determine correct Price ID based on selection
+                const selectedPriceId = billingPeriod === 'monthly' ? plan.priceId : plan.annualPriceId;
 
-            // Call API to create checkout session
-            const response = await fetch('/api/stripe/create-checkout', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    priceId: selectedPriceId,
-                    userId: user.id,
-                }),
+                // Call API to create checkout session
+                const response = await fetch('/api/stripe/create-checkout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        priceId: selectedPriceId,
+                        userId: user.id,
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Error al crear sesión de pago');
+                }
+
+                // Redirect to Stripe Checkout
+                window.location.href = data.sessionUrl;
+                return;
+            }
+
+            // ==========================================
+            // 📱 MOBILE PAYMENT (REVENUECAT)
+            // ==========================================
+            if (!packages || packages.length === 0) {
+                alert('No se encontraron paquetes de suscripción disponibles. Por favor intenta más tarde o contacta soporte.');
+                return;
+            }
+
+            // Find matching package
+            // Look for a package that contains the plan ID (e.g. 'warrior') and billing period
+            // This assumes RC identifiers contain the plan name. Only safest best without knowing exact IDs.
+            const targetPackage = packages.find(pkg => {
+                const identifier = pkg.product.identifier.toLowerCase();
+                const planId = plan.id.toLowerCase();
+
+                // Check if identifier contains plan name (e.g. "remi_warrior_monthly")
+                const matchesPlan = identifier.includes(planId);
+
+                // Check periodicity
+                const isAnnual = identifier.includes('annual') || identifier.includes('yearly') || pkg.product.description?.toLowerCase().includes('annual');
+                const isMonthly = !isAnnual;
+
+                return matchesPlan && (billingPeriod === 'annual' ? isAnnual : isMonthly);
             });
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Error al crear sesión de pago');
+            if (!targetPackage) {
+                console.log('Available packages:', packages.map(p => p.product.identifier));
+                alert(`No se encontró el paquete para ${plan.name} (${billingPeriod}). Verifique la configuración.`);
+                return;
             }
 
-            // Redirect to Stripe Checkout
-            if (Platform.OS === 'web') {
-                window.location.href = data.sessionUrl;
-            }
+            // Execute Purchase
+            await purchasePackage(targetPackage);
+            alert('¡Suscripción exitosa! Bienvenido a ' + plan.name);
+
         } catch (error: any) {
             console.error('Error subscribing:', error);
-            alert(error.message || 'Error al procesar el pago');
+            if (!error.userCancelled) {
+                alert(error.message || 'Error al procesar el pago');
+            }
         } finally {
             setLoading(null);
         }

@@ -18,13 +18,15 @@ import { detectJealousyTriggers } from './jealousyDetector';
 import { detectNicknameEvolution } from './nicknameEvolutionTracker';
 import { detectTopConflicts } from './topConflictsDetector';
 import type { ParsedMessage, ExProfile } from './exSimulator';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateAIResponse } from './gemini';
 import { analyzeActivityPeaks } from './activityAnalyzer';
 import { detectConflicts } from './conflictDetector';
 import { getRelationshipPreset, buildEnhancedAIInstructions } from './relationshipPresets';
 import { supabase } from './supabase';
 import { extractImportantDates, saveImportantDates } from './dateExtractor';
 import { embedMessages, getEmbeddingStats } from './vectorRAG';
+import { createEmotionalMemories } from './emotionalRAG';
+// import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // ===============================================
 // TYPES
@@ -130,8 +132,15 @@ export class BackgroundAnalysisManager {
                 this.emitProgress(profileId, state);
             };
 
+            // ... other code ...
+
             // CHECKPOINT 0: Sanitize PII (SECURITY)
             await onProgress(2, '🔒 Protegiendo datos sensibles...');
+
+            // Initialize Model for Analysis (Legacy local processing REMOVED)
+            // const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
+            // const genAI = new GoogleGenerativeAI(apiKey);
+            // const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
             const { messages: sanitizedMessages, reverseMap } = sanitizeChat(messages);
             console.log('[BackgroundAnalysis] Sanitized', reverseMap.size, 'PII items');
@@ -214,10 +223,9 @@ export class BackgroundAnalysisManager {
 
             let entities = [];
             try {
-                const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+                // Using Edge Functions via imports
 
-                entities = await extractEntities(messages, exName, model);
+                entities = await extractEntities(messages, exName);
                 console.log('[BackgroundAnalysis] Extracted', entities.length, 'entities');
             } catch (entityErr) {
                 console.error('[BackgroundAnalysis] Entity extraction failed:', entityErr);
@@ -228,10 +236,9 @@ export class BackgroundAnalysisManager {
 
             let defensiveTopics = [];
             try {
-                const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+                // Using Edge Functions via imports
 
-                defensiveTopics = await detectDefensiveTopics(messages, exName, exSenderName, model);
+                defensiveTopics = await detectDefensiveTopics(messages, exName, exSenderName);
                 console.log('[BackgroundAnalysis] Found', defensiveTopics.length, 'defensive topics');
             } catch (defErr) {
                 console.error('[BackgroundAnalysis] Defensive topics detection failed:', defErr);
@@ -242,10 +249,9 @@ export class BackgroundAnalysisManager {
 
             let jealousyTriggers = [];
             try {
-                const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+                // Using Edge Functions via imports
 
-                jealousyTriggers = await detectJealousyTriggers(messages, exName, exSenderName, model);
+                jealousyTriggers = await detectJealousyTriggers(messages, exName, exSenderName);
                 console.log('[BackgroundAnalysis] Found', jealousyTriggers.length, 'jealousy triggers');
             } catch (jealErr) {
                 console.error('[BackgroundAnalysis] Jealousy detection failed:', jealErr);
@@ -256,10 +262,9 @@ export class BackgroundAnalysisManager {
 
             let nicknameEvolution = [];
             try {
-                const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+                // Using Edge Functions via imports
 
-                nicknameEvolution = await detectNicknameEvolution(messages, exName, model);
+                nicknameEvolution = await detectNicknameEvolution(messages, exName);
                 console.log('[BackgroundAnalysis] Tracked', nicknameEvolution.length, 'nickname changes');
             } catch (nickErr) {
                 console.error('[BackgroundAnalysis] Nickname evolution failed:', nickErr);
@@ -270,10 +275,9 @@ export class BackgroundAnalysisManager {
 
             let topConflicts = [];
             try {
-                const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+                // Using Edge Functions via imports
 
-                topConflicts = await detectTopConflicts(messages, exName, model);
+                topConflicts = await detectTopConflicts(messages, exName);
                 console.log('[BackgroundAnalysis] Found', topConflicts.length, 'recurring conflicts');
             } catch (confErr) {
                 console.error('[BackgroundAnalysis] Top conflicts detection failed:', confErr);
@@ -379,12 +383,14 @@ export class BackgroundAnalysisManager {
 
             let emotionalMemories = [];
             try {
-                const { createEmotionalMemories } = await import('./emotionalRAG');
-
                 // Crear memorias emocionales con progress tracking
-                if (messages.length >= 20 && user?.id) {
+                // LIMIT: Restrict to last 50 messages to avoid long processing times (User Report: 1144 messages > 2h)
+                const RECENT_MSG_LIMIT = 50;
+                const recentMessages = messages.slice(-RECENT_MSG_LIMIT);
+
+                if (messages.length >= 10 && user?.id) {
                     emotionalMemories = await createEmotionalMemories(
-                        messages,
+                        recentMessages,
                         profileId,
                         user.id,
                         (current, total) => {
@@ -478,7 +484,6 @@ export class BackgroundAnalysisManager {
             // CHECKPOINT 6: Save entities to Supabase (if user is logged in)
             if (user?.id && entities.length > 0 && saved?.id) {
                 try {
-                    const { supabase } = await import('./supabase');
                     await saveEntitiesToSupabase(entities, saved.id, user.id, supabase);
                     console.log('[BackgroundAnalysis] ✅ Entities saved to Supabase');
                 } catch (entitySaveErr) {

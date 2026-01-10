@@ -7,6 +7,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import JSZip from 'jszip';
 import { parseWhatsAppExport, analyzePersonality, ParsedMessage } from '../../../lib/exSimulator';
+import { sendMessageToGemini } from '../../../lib/gemini';
 import { intelligentTokenSampling, aiPoweredSampling } from '../../../lib/messageSampling';
 import { validateOneOnOneChat } from '../../../lib/chatValidation';
 import { anonymizeMessages } from '../../../lib/anonymization';
@@ -125,7 +126,15 @@ export default function ImportChat() {
     };
 
 
-
+    // Clear stale analysis state on mount to prevent "No hay perfiles" confusion
+    useEffect(() => {
+        const clearPreviousState = async () => {
+            console.log('[Import] Clearing stale analysis state on mount...');
+            await storage.removeItem('exSimulator_analyzeData');
+            await storage.removeItem('analysis_view_profile');
+        };
+        clearPreviousState();
+    }, []);
 
     // Check for shared file on mount
     useEffect(() => {
@@ -189,47 +198,26 @@ export default function ImportChat() {
 
                             if (extractedText) {
                                 text = extractedText;
-                                // Apply tail limit if text is too large
-                                const MAX_TEXT_SIZE = 10 * 1024 * 1024; // 10MB
-                                if (text.length > MAX_TEXT_SIZE) {
-                                    addDebug(`✂️ Optimizando texto extraído...`);
-                                    text = text.slice(-MAX_TEXT_SIZE);
-                                    const firstNewline = text.indexOf('\n');
-                                    if (firstNewline > 0 && firstNewline < 1000) {
-                                        text = text.slice(firstNewline + 1);
-                                    }
+                                // 20MB Safety Limit for ZIP extracted text
+                                if (text.length > 20 * 1024 * 1024) {
+                                    console.log('[ZIP] Text too large, taking last 20MB');
+                                    text = text.slice(-20 * 1024 * 1024);
                                 }
-                                addDebug(`✅ Texto extraído: ${(text.length / 1024 / 1024).toFixed(1)}MB`);
                             } else {
-                                setStep('error');
-                                setErrorMessage('No se encontró archivo de chat (.txt) dentro del ZIP. Intenta exportar sin medios.');
-                                addDebug('❌ No se encontró .txt en el ZIP');
-                                return;
+                                throw new Error('No se encontró archivo de texto válido en el ZIP (normalmente _chat.txt)');
                             }
                         } else {
-                            // Regular text file - decode from base64
-                            addDebug('📄 Leyendo archivo de texto...');
-
-                            try {
-                                // Decode base64 to text
-                                text = atob(base64Data);
-                            } catch (decodeError) {
-                                // If atob fails, try reading as UTF-8 directly
-                                addDebug('⚠️ Intentando lectura directa...');
-                                text = await FileSystem.readAsStringAsync(cacheUri, { encoding: FileSystem.EncodingType.UTF8 });
+                            // It's a regular text file
+                            // Check size again before reading string to avoid OOM
+                            if (fileSizeBytes > 30 * 1024 * 1024) { // 30MB limit for raw read
+                                throw new Error('El archivo es demasiado grande (>30MB). Por favor exporta un chat más reciente o sin multimedia.');
                             }
 
-                            // Apply tail limit if text is too large
-                            const MAX_TEXT_SIZE = 10 * 1024 * 1024; // 10MB
-                            if (text.length > MAX_TEXT_SIZE) {
-                                addDebug(`✂️ Optimizando (${fileSizeMB.toFixed(1)}MB → 10MB)...`);
-                                text = text.slice(-MAX_TEXT_SIZE);
-                                const firstNewline = text.indexOf('\n');
-                                if (firstNewline > 0 && firstNewline < 1000) {
-                                    text = text.slice(firstNewline + 1);
-                                }
-                            }
+                            addDebug('📄 Leyendo texto plano...');
+                            await new Promise(resolve => setTimeout(resolve, 50));
+                            text = await FileSystem.readAsStringAsync(cacheUri);
                         }
+
 
                         addDebug(`📄 Texto final: ${(text.length / 1024 / 1024).toFixed(2)}MB`);
                         await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
@@ -592,6 +580,44 @@ export default function ImportChat() {
             setParsedMessages(anonymizedMessages);
             addDebug('✅ Datos anonimizados correctamente');
 
+            // ----------------------------------------------------
+            // 🤖 GEMINI 2.0 FLASH: DETECCIÓN AUTOMÁTICA
+            // ----------------------------------------------------
+            try {
+                // Tomar muestra para análisis (primeros 50 mensajes)
+                const sampleForDetection = parsedMessages.slice(0, 50).map(m => `${m.sender}: ${m.content}`).join('\n');
+
+                // Prompt Rápido
+                const detectionPrompt = `Analiza estos primeros mensajes de un chat exportado. 
+                Identifica:
+                1. Nombre del EX (la otra persona).
+                2. Nombre del DUENO del chat (user).
+                3. Tipo de relación (pareja, ex, amigo, familia, desconocido).
+                
+                Chat:
+                ${sampleForDetection}
+                
+                Responde JSON: { "exName": "string", "userRole": "string", "relationshipType": "ex"|"partner"|"friend"|"family", "confidence": number }`;
+
+                // Llamada a Gemini 2.0 Flash Lite (Cost-efficient)
+                const detectionRes = await sendMessageToGemini(detectionPrompt, null, 'gemini-2.0-flash-lite-preview-02-05');
+
+                if (!detectionRes.error && detectionRes.text) {
+                    // Parseo básico de JSON
+                    const jsonMatch = detectionRes.text.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        const metadata = JSON.parse(jsonMatch[0]);
+                        console.log('[Import] AI Detection:', metadata);
+
+                        if (metadata.exName) setExName(metadata.exName);
+                        if (metadata.relationshipType) setRelationshipType(metadata.relationshipType);
+                    }
+                }
+            } catch (err) {
+                console.warn('[Import] AI Detection failed, falling back to manual detection', err);
+            }
+            // ----------------------------------------------------
+
             setStep('preview');
         } catch (e: any) {
             setStep('error');
@@ -697,9 +723,9 @@ export default function ImportChat() {
         }
 
         // Navigate to analysis screen with data for hybrid progress display
-        // CHUNKED STORAGE: Split 20k messages into 4 chunks of 5k each
+        // CHUNKED STORAGE: Split 50k messages into chunks of 5k each
         // This avoids AsyncStorage "Row too big" error on Android
-        const messageLimit = 20000;
+        const messageLimit = 50000;
         const chunkSize = 5000;
         const limitedMessages = parsedMessages.slice(0, messageLimit);
         const totalChunks = Math.ceil(limitedMessages.length / chunkSize);
@@ -726,7 +752,7 @@ export default function ImportChat() {
     const continueAnalysis = async () => {
         // Navigate to analysis screen with data for hybrid progress display
         // CHUNKED STORAGE: Same as handleAnalyze
-        const messageLimit = 20000;
+        const messageLimit = 50000;
         const chunkSize = 5000;
         const limitedMessages = parsedMessages.slice(0, messageLimit);
         const totalChunks = Math.ceil(limitedMessages.length / chunkSize);
@@ -1053,10 +1079,14 @@ export default function ImportChat() {
                                 </View>
                             )}
 
+                            {/* 🕊️ Detección IA Automática (Gemini 2.0 Flash) */}
                             {exName && (
                                 <View style={styles.confirmationBox}>
                                     <Text style={styles.confirmationText}>
                                         🔮 Creando simulación de: <Text style={{ fontWeight: 'bold', color: '#fff' }}>{exName}</Text>
+                                    </Text>
+                                    <Text style={{ color: '#aaa', fontSize: 10, marginTop: 4 }}>
+                                        🤖 Relación detectada con Flash-Lite
                                     </Text>
                                 </View>
                             )}

@@ -1,10 +1,9 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ParsedMessage } from './exSimulator';
 import { supabase } from './supabase';
 
-// Usar Gemini para embeddings (GRATIS y 768 dimensiones)
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+// Usar Edge Function para embeddings (Seguro)
+// const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
+// const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 export interface MessageEmbedding {
     id?: string;
@@ -26,24 +25,32 @@ export interface SemanticMatch {
 }
 
 /**
- * Convierte un texto a embedding usando Gemini (GRATIS!)
- * Modelo: text-embedding-004 (768 dimensiones)
+ * Convierte un texto a embedding usando Edge Function (Seguro)
  */
 export async function createEmbedding(text: string): Promise<number[]> {
     try {
-        const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+        const { data, error } = await supabase.functions.invoke('embeddings', {
+            body: { input: text }
+        });
 
-        const result = await model.embedContent(text);
+        if (error) {
+            console.error('[VectorRAG] Edge Function Error:', error);
+            throw new Error(error.message);
+        }
 
-        return result.embedding.values;
+        if (!data || !data.embedding) {
+            throw new Error('Invalid response from embedding service');
+        }
+
+        return data.embedding;
     } catch (error) {
-        console.error('[VectorRAG] Error creating Gemini embedding:', error);
+        console.error('[VectorRAG] Error creating embedding:', error);
         throw error;
     }
 }
 
 /**
- * Convierte múltiples mensajes a embeddings (procesa uno por uno con Gemini)
+ * Convierte múltiples mensajes a embeddings (procesa por lotes en Edge Function)
  */
 export async function embedMessages(
     messages: ParsedMessage[],
@@ -51,23 +58,42 @@ export async function embedMessages(
     userId: string,
     onProgress?: (current: number, total: number) => void
 ): Promise<void> {
-    console.log(`[VectorRAG] Embedding ${messages.length} messages with Gemini...`);
+    console.log(`[VectorRAG] Embedding ${messages.length} messages...`);
 
-    const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
     const total = messages.length;
 
-    // Procesar en lotes de 10 para no sobrecargar
+    // Procesar en lotes de 10
     const BATCH_SIZE = 10;
 
     for (let i = 0; i < messages.length; i += BATCH_SIZE) {
         const batch = messages.slice(i, i + BATCH_SIZE);
+        const batchTexts = batch.map(m => m.content);
 
         onProgress?.(Math.min(i + BATCH_SIZE, total), total);
 
-        // Crear embeddings para cada mensaje del lote
-        const embeddingPromises = batch.map(async (msg) => {
-            try {
-                const result = await model.embedContent(msg.content);
+        try {
+            // Llamar a Edge Function con el lote de textos
+            const { data, error } = await supabase.functions.invoke('embeddings', {
+                body: { batch: batchTexts }
+            });
+
+            if (error) {
+                console.error('[VectorRAG] Edge Function Batch Error:', error);
+                // Skip batch on error
+                continue;
+            }
+
+            const embeddingsList = data?.embeddings;
+
+            if (!embeddingsList || !Array.isArray(embeddingsList) || embeddingsList.length !== batch.length) {
+                console.error('[VectorRAG] Mismatch in embeddings count');
+                continue;
+            }
+
+            // Mapear resultados a objetos para insertar
+            const embeddingsToInsert = batch.map((msg, index) => {
+                const embedding = embeddingsList[index];
+                if (!embedding) return null;
 
                 return {
                     profile_id: profileId,
@@ -75,41 +101,38 @@ export async function embedMessages(
                     content: msg.content,
                     sender: msg.sender,
                     timestamp: msg.timestamp,
-                    embedding: result.embedding.values,
+                    embedding: embedding,
                     emotional_tone: detectBasicEmotion(msg.content),
                     emotional_score: calculateEmotionalScore(msg.content),
-                    role: msg.sender, // Para compatibilidad con tu schema
-                    ex_profile_id: profileId // Tu schema usa esto
+                    role: msg.sender,
+                    ex_profile_id: profileId
                 };
-            } catch (error) {
-                console.error(`[VectorRAG] Error embedding message ${i}:`, error);
-                return null;
+            }).filter(e => e !== null);
+
+            // Insertar en Supabase
+            if (embeddingsToInsert.length > 0) {
+                const { error: insertError } = await supabase
+                    .from('message_embeddings')
+                    .insert(embeddingsToInsert);
+
+                if (insertError) {
+                    console.error(`[VectorRAG] Error inserting batch at ${i}:`, insertError);
+                } else {
+                    console.log(`[VectorRAG] Batch ${i}-${i + embeddingsToInsert.length} completed`);
+                }
             }
-        });
 
-        const embeddings = (await Promise.all(embeddingPromises)).filter(e => e !== null);
-
-        // Insertar en Supabase
-        if (embeddings.length > 0) {
-            const { error } = await supabase
-                .from('message_embeddings')
-                .insert(embeddings);
-
-            if (error) {
-                console.error(`[VectorRAG] Error inserting batch at ${i}:`, error);
-                // Continuar con el siguiente lote
-            } else {
-                console.log(`[VectorRAG] Batch ${i}-${i + embeddings.length} completed`);
-            }
+        } catch (err) {
+            console.error(`[VectorRAG] Error processing batch ${i}:`, err);
         }
 
-        // Delay entre lotes
+        // Delay entre lotes para no saturar Rate Limits de Supabase/Gemini
         if (i + BATCH_SIZE < messages.length) {
             await new Promise(resolve => setTimeout(resolve, 500));
         }
     }
 
-    console.log(`[VectorRAG] ✅ All ${messages.length} messages embedded successfully`);
+    console.log(`[VectorRAG] ✅ All ${messages.length} messages process completed`);
 }
 
 /**

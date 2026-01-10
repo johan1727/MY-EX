@@ -7,7 +7,7 @@
  */
 
 import { supabase } from './supabase';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateAIResponse } from './gemini';
 
 // ===== TIPOS DE EMOCIONES =====
 export type PrimaryEmotion =
@@ -324,17 +324,7 @@ export async function calculateTensionWithAI(
     conversationHistory: { role: 'user' | 'assistant'; content: string }[],
     currentTension: number
 ): Promise<{ tensionLevel: number; reason: string; emotionalShift: PrimaryEmotion | null }> {
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-
-    if (!apiKey) {
-        console.warn('[TensionAI] No API key, using algorithmic fallback');
-        return { tensionLevel: currentTension, reason: 'Sin API', emotionalShift: null };
-    }
-
     try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
         // Construir contexto de últimos 5 mensajes
         const recentMessages = conversationHistory.slice(-5)
             .map(m => `${m.role === 'user' ? 'Usuario' : 'Ex'}: ${m.content}`)
@@ -363,8 +353,7 @@ Responde SOLO con JSON:
     "emotionalShift": "happy" | "sad" | "angry" | "jealous" | "defensive" | "loving" | null
 }`;
 
-        const response = await model.generateContent(prompt);
-        const responseText = response.response.text();
+        const responseText = await generateAIResponse(prompt);
 
         // Parsear respuesta
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -468,10 +457,9 @@ export async function reevaluateEmotionalStateWithAI(
     session: SimulationSession,
     conversationHistory: { role: 'user' | 'assistant'; content: string }[]
 ): Promise<SimulationSession> {
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 
-    if (!apiKey || conversationHistory.length < 5) {
-        console.warn('[EmotionalAI] Skipping (not enough history or no API)');
+    if (conversationHistory.length < 5) {
+        console.warn('[EmotionalAI] Skipping (not enough history)');
         return session;
     }
 
@@ -480,9 +468,6 @@ export async function reevaluateEmotionalStateWithAI(
         const recentMessages = conversationHistory.slice(-10)
             .map(m => `${m.role === 'user' ? 'Usuario' : 'Ex'}: ${m.content}`)
             .join('\n');
-
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
         const prompt = `Analiza el estado emocional actual de "Ex" en esta conversación.
 
@@ -510,8 +495,7 @@ Responde SOLO con JSON:
     "prediction": "Si la conversación sigue así, probablemente..."
 }`;
 
-        const response = await model.generateContent(prompt);
-        const responseText = response.response.text();
+        const responseText = await generateAIResponse(prompt);
 
         // Parsear JSON
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);

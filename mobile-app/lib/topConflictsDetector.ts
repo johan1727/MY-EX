@@ -12,13 +12,21 @@ export interface TopConflict {
     examples: string[];
 }
 
+import { generateAIResponse } from './gemini';
+
+export interface TopConflict {
+    topic: string;
+    occurrences: number;
+    severity: number;
+    examples: string[];
+}
+
 /**
  * Detect top 5 recurring conflicts using AI
  */
 export async function detectTopConflicts(
     messages: ParsedMessage[],
-    exName: string,
-    model: any
+    exName: string
 ): Promise<TopConflict[]> {
     // Filter messages that look like conflicts
     const conflictMessages = messages.filter(m => {
@@ -72,8 +80,7 @@ REGLAS:
 Responde SOLO con el JSON.`;
 
     try {
-        const result = await model.generateContent(prompt);
-        const response = result.response.text();
+        const response = await generateAIResponse(prompt);
 
         const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
         const data = JSON.parse(cleaned);

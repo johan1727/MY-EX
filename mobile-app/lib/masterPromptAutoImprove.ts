@@ -6,7 +6,7 @@
  */
 
 import { supabase } from './supabase';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateAIResponse } from './gemini';
 import { storage } from './storage';
 
 // ===============================================
@@ -111,21 +111,8 @@ async function analyzeCorrection(correction: UserCorrection): Promise<{
     confidence: number;
     pattern_detected: string;
 }> {
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-
-    if (!apiKey) {
-        return {
-            understood_issue: correction.userFeedback,
-            improvement_applied: 'Pendiente de revisión',
-            confidence: 0.5,
-            pattern_detected: correction.category
-        };
-    }
 
     try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
         const prompt = `Analiza esta corrección de usuario a una simulación de ex-pareja:
 
 CATEGORÍA: ${correction.category}
@@ -141,8 +128,7 @@ Responde SOLO con JSON:
     "pattern_detected": "patrón general si existe (ej: 'demasiado formal', 'falta de emojis', 'tono incorrecto')"
 }`;
 
-        const response = await model.generateContent(prompt);
-        const text = response.response.text();
+        const text = await generateAIResponse(prompt);
         const jsonMatch = text.match(/\{[\s\S]*\}/);
 
         if (jsonMatch) {
@@ -201,23 +187,13 @@ export async function updateMasterPromptWithCorrections(
         return null;
     }
 
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-    if (!apiKey) {
-        console.warn('[AutoMejora] No API key');
-        return null;
-    }
-
     try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        // UPGRADE: Gemini 2.0 Flash (más rápido y mejor)
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-
         // Construir resumen de correcciones
         const correctionsSummary = corrections.map((c, i) =>
             `${i + 1}. Categoría: ${c.category}
    IA dijo: "${c.originalResponse.substring(0, 150)}..."
    Usuario: "${c.userFeedback}"
-   Correcto: "${c.correctedBehavior || 'No especificado'}"`
+   Correcto: "${c.correctedBehavior || 'No especificado'}`
         ).join('\n\n');
 
         // NUEVO: Agregar contexto conversacional si existe
@@ -270,8 +246,7 @@ Responde con JSON:
 }`;
 
         console.log('[AutoMejora] 🤖 Enviando prompt a IA para análisis...');
-        const response = await model.generateContent(prompt);
-        const responseText = response.response.text();
+        const responseText = await generateAIResponse(prompt);
 
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
@@ -449,15 +424,11 @@ export async function analyzeConversationPatterns(
     detectedIssues?: string[];
     confidence?: number;
 } | null> {
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-    if (!apiKey || conversation.length < 10) {
+    if (conversation.length < 10) {
         return null;
     }
 
     try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-
         // Tomar últimos 20 mensajes para análisis
         const recentConvo = conversation.slice(-20);
         const convoText = recentConvo.map((msg, i) =>
@@ -503,8 +474,7 @@ Responde con JSON:
 }`;
 
         console.log('[AutoMejora] 🔍 Analizando conversación proactivamente...');
-        const response = await model.generateContent(prompt);
-        const responseText = response.response.text();
+        const responseText = await generateAIResponse(prompt);
 
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {

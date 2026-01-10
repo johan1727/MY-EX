@@ -1,9 +1,4 @@
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-    apiKey: process.env.EXPO_PUBLIC_OPENAI_API_KEY,
-    dangerouslyAllowBrowser: true,
-});
+import { generateAIResponse } from './gemini';
 
 interface DecoderResult {
     analysis: string;
@@ -19,6 +14,8 @@ interface DecoderResult {
 
 export async function analyzeMessage(message: string): Promise<DecoderResult> {
     try {
+        const systemPrompt = `You are an expert relationship coach who provides honest, compassionate analysis of messages from exes. You help people see manipulation, set boundaries, and make healthy decisions.`;
+
         const prompt = `You are an expert relationship coach analyzing a message from someone's ex. Provide a brutally honest but compassionate analysis.
 
 Message from ex: "${message}"
@@ -53,24 +50,12 @@ Return ONLY valid JSON in this exact format:
 
 Be empathetic but honest. Help them see the truth without being cruel.`;
 
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                {
-                    role: 'system',
-                    content: 'You are an expert relationship coach who provides honest, compassionate analysis of messages from exes. You help people see manipulation, set boundaries, and make healthy decisions.'
-                },
-                {
-                    role: 'user',
-                    content: prompt
-                }
-            ],
-            temperature: 0.7,
-            max_tokens: 1000,
-            response_format: { type: 'json_object' }
-        });
+        // Using the secure Edge Function via gemini wrapper
+        const responseText = await generateAIResponse(prompt, systemPrompt);
 
-        const result = JSON.parse(response.choices[0].message.content || '{}');
+        // Clean up markdown code blocks if present
+        const jsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(jsonText);
 
         // Validate the response has all required fields
         if (!result.analysis || !result.emotionalTone || !result.suggestedResponses) {

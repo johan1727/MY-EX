@@ -1,5 +1,6 @@
 import { ParsedMessage } from './exSimulator';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+
+
 
 /**
  * Token-based sampling strategy
@@ -263,25 +264,30 @@ export function intelligentTokenSampling(
         random: []
     };
 
-    // 1. First messages (inicio de relación) - MINIMAL for performance
-    samples.first = workingMessages.slice(0, Math.min(200, workingMessages.length));
+    // 500k tokens ~= 25,000 messages (approx 20 tokens/msg)
+
+    // 1. First messages (ORIGIN STORY)
+    // Keep generous start context
+    samples.first = workingMessages.slice(0, Math.min(2000, workingMessages.length));
     console.log(`[TokenSampling] First: ${samples.first.length} messages`);
 
-    // 2. Recent messages (estado actual) - INCREASED for better context
-    samples.recent = workingMessages.slice(-Math.min(1500, workingMessages.length)); // Changed from 500 to 1500
-    console.log(`[TokenSampling] Recent: ${samples.recent.length} messages`);
+    // 2. Recent messages (CURRENT STATE) - MASSIVE CHUNK
+    // If we have 500k tokens, we can afford ~15,000 recent messages easily.
+    samples.recent = workingMessages.slice(-Math.min(15000, workingMessages.length));
+    console.log(`[TokenSampling] Recent (Context King): ${samples.recent.length} messages`);
 
-    // 3. Long messages - MINIMAL for performance
-    samples.long = filterLongMessages(workingMessages, 200);
+    // 3. Long messages (Detail)
+    samples.long = filterLongMessages(workingMessages, 1000);
     console.log(`[TokenSampling] Long: ${samples.long.length} messages`);
 
-    // 4. Emotional messages - MINIMAL for performance
-    samples.emotional = filterEmotionalMessages(workingMessages, 300);
+    // 4. Emotional messages (Key moments)
+    samples.emotional = filterEmotionalMessages(workingMessages, 2000);
     console.log(`[TokenSampling] Emotional: ${samples.emotional.length} messages`);
 
-    // 5. Stratified random - REDUCED from 5k to 2k for performance
-    samples.random = stratifiedSample(workingMessages, 2000);
-    console.log(`[TokenSampling] Middle (random stratified): ${samples.random.length} messages`);
+    // 5. Stratified random (Middle Context)
+    // Fill remaining gaps in the timeline
+    samples.random = stratifiedSample(workingMessages, 5000);
+    console.log(`[TokenSampling] Middle (Timeline): ${samples.random.length} messages`);
 
     // Merge and deduplicate
     const allSamples = [
@@ -491,8 +497,7 @@ export async function aiPoweredSampling(
             .join('\n');
 
         // Paso 3: Llamar a IA para identificar patrones de importancia
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
 
         const prompt = `Analiza estos mensajes de una conversación de WhatsApp y determina criterios de importancia.
 
@@ -512,8 +517,8 @@ Responde en JSON:
     "emotionalPeaks": [12, 45, 78] // Índices de mensajes con mayor carga emocional (de la muestra)
 }`;
 
-        const response = await model.generateContent(prompt);
-        const responseText = response.response.text();
+        const { generateAIResponse } = await import('./gemini');
+        const responseText = await generateAIResponse(prompt);
 
         // Parsear respuesta de IA
         let aiCriteria: {

@@ -6,10 +6,8 @@
  */
 
 import { supabase } from './supabase';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+import { createEmbedding } from './vectorRAG'; // Use vectorRAG for embeddings, which uses Edge Functions
+import { generateAIResponse } from './gemini';
 
 // Gemini embedding model outputs 768 dimensions
 const EMBEDDING_MODEL = 'text-embedding-004';
@@ -39,18 +37,8 @@ export interface ConversationSummary {
  * Generate embedding vector for a text using Gemini
  */
 export async function generateEmbedding(text: string): Promise<number[] | null> {
-    try {
-        const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
-
-        const result = await model.embedContent(text);
-        const embedding = result.embedding.values;
-
-        console.log('[RAG] Generated embedding, dimensions:', embedding.length);
-        return embedding;
-    } catch (error) {
-        console.error('[RAG] Error generating embedding:', error);
-        return null;
-    }
+    // Use vectorRAG's createEmbedding which calls Edge Function
+    return createEmbedding(text);
 }
 
 /**
@@ -168,8 +156,6 @@ export async function createSessionSummary(
     if (messages.length < 10) return null;
 
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
         const msgText = messages.map(m =>
             `${m.role === 'user' ? 'Usuario' : exName}: ${m.content}`
         ).join('\n');
@@ -189,8 +175,7 @@ Genera un JSON con este formato exacto:
 
 Responde SOLO con el JSON válido:`;
 
-        const result = await model.generateContent(prompt);
-        let responseText = result.response.text().trim();
+        let responseText = await generateAIResponse(prompt);
         responseText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
         const parsed = JSON.parse(responseText);

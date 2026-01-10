@@ -1,8 +1,5 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateAIResponse } from './gemini';
 import { ParsedMessage } from './exSimulator';
-
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 /**
  * MASTER PROMPT GENERATOR
@@ -238,14 +235,6 @@ export async function generateMasterPrompt(
         throw new Error(`Se necesitan al menos 50 mensajes del ex para crear una persona completa. Encontrados: ${exMessages.length}`);
     }
 
-    const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
-        generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 8000 // Máximo por llamada
-        }
-    });
-
     // Objeto para almacenar resultados de cada categoría
     const analysisResults: Record<string, string> = {};
     const categoriesAnalyzed: Record<string, boolean> = {};
@@ -259,7 +248,7 @@ export async function generateMasterPrompt(
     onProgress?.(5, 'Analizando identidad y datos personales...', estimatedSeconds * 0.95);
     currentPhase++;
 
-    analysisResults.CORE_IDENTITY = await analyzeCoreIdentity(model, exMessages, exName);
+    analysisResults.CORE_IDENTITY = await analyzeCoreIdentity(exMessages, exName);
     categoriesAnalyzed.CORE_IDENTITY = true;
     console.log(`[MasterPrompt] ✅ Phase ${currentPhase}/${totalPhases}: Core Identity`);
 
@@ -267,7 +256,7 @@ export async function generateMasterPrompt(
     onProgress?.(15, 'Extrayendo vida personal y rutinas...', estimatedSeconds * 0.85);
     currentPhase++;
 
-    analysisResults.PERSONAL_LIFE = await analyzePersonalLife(model, exMessages, exName);
+    analysisResults.PERSONAL_LIFE = await analyzePersonalLife(exMessages, exName);
     categoriesAnalyzed.PERSONAL_LIFE = true;
     console.log(`[MasterPrompt] ✅ Phase ${currentPhase}/${totalPhases}: Personal Life`);
 
@@ -275,7 +264,7 @@ export async function generateMasterPrompt(
     onProgress?.(30, 'Análisis psicológico profundo...', estimatedSeconds * 0.70);
     currentPhase++;
 
-    analysisResults.DEEP_PSYCHOLOGY = await analyzeDeepPsychology(model, exMessages, exName);
+    analysisResults.DEEP_PSYCHOLOGY = await analyzeDeepPsychology(exMessages, exName);
     categoriesAnalyzed.DEEP_PSYCHOLOGY = true;
     console.log(`[MasterPrompt] ✅ Phase ${currentPhase}/${totalPhases}: Deep Psychology`);
 
@@ -284,7 +273,7 @@ export async function generateMasterPrompt(
     currentPhase++;
 
     analysisResults.RELATIONSHIP_HISTORY = await analyzeRelationshipHistory(
-        model, messages, exSenderName, exName, userMessages[0]?.sender || 'Usuario', relationshipType
+        messages, exSenderName, exName, userMessages[0]?.sender || 'Usuario', relationshipType
     );
     categoriesAnalyzed.RELATIONSHIP_HISTORY = true;
     console.log(`[MasterPrompt] ✅ Phase ${currentPhase}/${totalPhases}: Relationship History`);
@@ -293,7 +282,7 @@ export async function generateMasterPrompt(
     onProgress?.(65, 'Identificando patrones de comportamiento...', estimatedSeconds * 0.35);
     currentPhase++;
 
-    analysisResults.BEHAVIORAL_PATTERNS = await analyzeBehavioralPatterns(model, exMessages, exName);
+    analysisResults.BEHAVIORAL_PATTERNS = await analyzeBehavioralPatterns(exMessages, exName);
     categoriesAnalyzed.BEHAVIORAL_PATTERNS = true;
     console.log(`[MasterPrompt] ✅ Phase ${currentPhase}/${totalPhases}: Behavioral Patterns`);
 
@@ -301,7 +290,7 @@ export async function generateMasterPrompt(
     onProgress?.(75, 'Extrayendo conocimientos y opiniones...', estimatedSeconds * 0.25);
     currentPhase++;
 
-    analysisResults.KNOWLEDGE_OPINIONS = await analyzeKnowledgeOpinions(model, exMessages, exName);
+    analysisResults.KNOWLEDGE_OPINIONS = await analyzeKnowledgeOpinions(exMessages, exName);
     categoriesAnalyzed.KNOWLEDGE_OPINIONS = true;
     console.log(`[MasterPrompt] ✅ Phase ${currentPhase}/${totalPhases}: Knowledge & Opinions`);
 
@@ -309,7 +298,7 @@ export async function generateMasterPrompt(
     onProgress?.(85, 'Analizando estilo de comunicación...', estimatedSeconds * 0.15);
     currentPhase++;
 
-    analysisResults.COMMUNICATION_STYLE = await analyzeCommunicationStyle(model, exMessages, exName);
+    analysisResults.COMMUNICATION_STYLE = await analyzeCommunicationStyle(exMessages, exName);
     categoriesAnalyzed.COMMUNICATION_STYLE = true;
     console.log(`[MasterPrompt] ✅ Phase ${currentPhase}/${totalPhases}: Communication Style`);
 
@@ -317,7 +306,7 @@ export async function generateMasterPrompt(
     onProgress?.(92, 'Determinando contexto actual...', estimatedSeconds * 0.08);
     currentPhase++;
 
-    analysisResults.TEMPORAL_CONTEXT = await analyzeTemporalContext(model, messages, exName);
+    analysisResults.TEMPORAL_CONTEXT = await analyzeTemporalContext(messages, exName);
     categoriesAnalyzed.TEMPORAL_CONTEXT = true;
     console.log(`[MasterPrompt] ✅ Phase ${currentPhase}/${totalPhases}: Temporal Context`);
 
@@ -348,14 +337,13 @@ export async function generateMasterPrompt(
  * Helper para retry con exponential backoff
  */
 async function callGeminiWithRetry(
-    model: any,
     prompt: string,
     maxRetries: number = 3
 ): Promise<string> {
     for (let i = 0; i < maxRetries; i++) {
         try {
-            const result = await model.generateContent(prompt);
-            return result.response.text();
+            const result = await generateAIResponse(prompt);
+            return result;
         } catch (error: any) {
             console.warn(`[Gemini] Retry ${i + 1}/${maxRetries}:`, error.message);
             if (i < maxRetries - 1) {
@@ -376,7 +364,6 @@ async function callGeminiWithRetry(
  * Fase 1: Identidad Core
  */
 async function analyzeCoreIdentity(
-    model: any,
     exMessages: ParsedMessage[],
     exName: string
 ): Promise<string> {
@@ -432,14 +419,13 @@ Formato de respuesta (markdown, detallado):
 
 IMPORTANTE: Si no hay evidencia de algo, escribe "No determinado de los mensajes". NO inventes.`;
 
-    return await callGeminiWithRetry(model, prompt);
+    return await callGeminiWithRetry(prompt);
 }
 
 /**
  * Fase 2: Vida Personal
  */
 async function analyzePersonalLife(
-    model: any,
     exMessages: ParsedMessage[],
     exName: string
 ): Promise<string> {
@@ -480,14 +466,13 @@ Extrae información sobre:
 
 Responde en formato markdown estructurado. Solo información explícita o fuertemente implicada.`;
 
-    return await callGeminiWithRetry(model, prompt);
+    return await callGeminiWithRetry(prompt);
 }
 
 /**
  * Fase 3: Psicología Profunda (MUY IMPORTANTE)
  */
 async function analyzeDeepPsychology(
-    model: any,
     exMessages: ParsedMessage[],
     exName: string
 ): Promise<string> {
@@ -525,14 +510,13 @@ Realiza un análisis exhaustivo de:
 
 Genera un perfil psicológico COMPLETO en markdown. Fundamenta cada afirmación con evidencia de los mensajes.`;
 
-    return await callGeminiWithRetry(model, prompt);
+    return await callGeminiWithRetry(prompt);
 }
 
 /**
  * Fase 4: Historia de la Relación
  */
 async function analyzeRelationshipHistory(
-    model: any,
     messages: ParsedMessage[],
     exSender: string,
     exName: string,
@@ -578,14 +562,13 @@ async function analyzeRelationshipHistory(
     
     Responde en formato markdown estructurado.`;
 
-    return await callGeminiWithRetry(model, prompt);
+    return await callGeminiWithRetry(prompt);
 }
 
 /**
  * Fase 5: Patrones Comportamentales
  */
 async function analyzeBehavioralPatterns(
-    model: any,
     exMessages: ParsedMessage[],
     exName: string
 ): Promise<string> {
@@ -626,14 +609,13 @@ Identifica patrones en:
 
 Responde en formato markdown con ejemplos específicos cuando sea posible.`;
 
-    return await callGeminiWithRetry(model, prompt);
+    return await callGeminiWithRetry(prompt);
 }
 
 /**
  * Fase 6: Conocimiento y Opiniones
  */
 async function analyzeKnowledgeOpinions(
-    model: any,
     exMessages: ParsedMessage[],
     exName: string
 ): Promise<string> {
@@ -673,14 +655,13 @@ Identifica:
 
 Responde en markdown. Solo incluye información explícita o fuertemente implicada.`;
 
-    return await callGeminiWithRetry(model, prompt);
+    return await callGeminiWithRetry(prompt);
 }
 
 /**
  * Fase 7: Estilo de Comunicación (CRÍTICO para simulación)
  */
 async function analyzeCommunicationStyle(
-    model: any,
     exMessages: ParsedMessage[],
     exName: string
 ): Promise<string> {
@@ -732,14 +713,13 @@ Extrae con PRECISIÓN:
 
 Responde en markdown con EJEMPLOS REALES de sus mensajes cuando sea posible.`;
 
-    return await callGeminiWithRetry(model, prompt);
+    return await callGeminiWithRetry(prompt);
 }
 
 /**
  * Fase 8: Contexto Temporal y Estado Actual
  */
 async function analyzeTemporalContext(
-    model: any,
     messages: ParsedMessage[],
     exName: string
 ): Promise<string> {
@@ -779,7 +759,7 @@ Determina:
 
 Responde en markdown. Enfócate en el estado ACTUAL basado en mensajes recientes.`;
 
-    return await callGeminiWithRetry(model, prompt);
+    return await callGeminiWithRetry(prompt);
 }
 
 /**

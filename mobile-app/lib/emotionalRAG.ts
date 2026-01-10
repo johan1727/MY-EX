@@ -1,10 +1,7 @@
 import { supabase } from './supabase';
-import { createEmbedding, SemanticMatch } from './vectorRAG'; // Ahora usa Gemini
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { createEmbedding, SemanticMatch } from './vectorRAG'; // Ahora usa Gemini via Edge Functions
+import { generateAIResponse } from './gemini';
 import { ParsedMessage } from './exSimulator';
-
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 export type EmotionType = 'happy' | 'sad' | 'angry' | 'anxious' | 'nostalgic' | 'loving' | 'neutral';
 
@@ -309,33 +306,52 @@ export async function createEmotionalMemories(
     console.log(`[EmotionalMemories] Created ${clusters.length} clusters`);
 
     // PASO 3: Generar memorias solo para clusters significativos
-    const significantClusters = clusters.filter(c => c.messages.length >= 5);
-    const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
-        generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
+    // Filter to ensure we have meaningful clusters
+    // PERFORMANCE FIX: Increased threshold from 5 to 7 messages to reduce noise
+    let significantClusters = clusters.filter(c => c.messages.length >= 7);
+
+    console.log(`[EmotionalMemories] Found ${significantClusters.length} significant clusters (>=7 msgs)`);
+
+    // OPTIMIZATION: Limit to top 5 most significant memories (was 15) to reduce analysis time
+    // Sort by size (number of messages) and then by intensity
+    significantClusters.sort((a, b) => {
+        if (b.messages.length !== a.messages.length) {
+            return b.messages.length - a.messages.length; // More messages = more important
+        }
+        return b.avgIntensity - a.avgIntensity; // Higher intensity = more important
     });
 
-    let processed = 0;
-    for (const cluster of significantClusters) {
+    // Take only top 5 - Process in Parallel
+    const MAX_MEMORIES = 5;
+    if (significantClusters.length > MAX_MEMORIES) {
+        console.log(`[EmotionalMemories] Limiting ${significantClusters.length} clusters to top ${MAX_MEMORIES}`);
+        significantClusters = significantClusters.slice(0, MAX_MEMORIES);
+    }
+
+    // Parallel processing with Promise.all
+    const memoryPromises = significantClusters.map(async (cluster, index) => {
         try {
-            // Generar resumen con Gemini
-            const memory = await generateMemorySummary(cluster, model, profileId, userId);
+            // Generar resumen con Gemini via Edge Function
+            const memory = await generateMemorySummary(cluster, profileId, userId);
             if (memory) {
-                memories.push(memory);
+                // Update progress based on COMPLETED count (approximate)
+                onProgress?.(index + 1, significantClusters.length);
 
-                // Guardar en Supabase
-                await saveEmotionalMemory(memory);
+                // Guardar en Supabase - Async, don't block
+                saveEmotionalMemory(memory).catch(e => console.error('[EmotionalMemories] Save error:', e));
+                return memory;
             }
-
-            processed++;
-            onProgress?.(processed, significantClusters.length);
         } catch (err) {
             console.error('[EmotionalMemories] Error generating memory:', err);
         }
-    }
+        return null;
+    });
 
-    console.log(`[EmotionalMemories] Created ${memories.length} memories`);
-    return memories;
+    const results = await Promise.all(memoryPromises);
+    const validMemories = results.filter(m => m !== null) as EmotionalMemory[];
+
+    console.log(`[EmotionalMemories] Created ${validMemories.length} memories in parallel`);
+    return validMemories;
 }
 
 /**
@@ -409,7 +425,6 @@ function createEmotionalClusters(
  */
 async function generateMemorySummary(
     cluster: EmotionalCluster,
-    model: any,
     profileId: string,
     userId: string
 ): Promise<EmotionalMemory | null> {
@@ -455,8 +470,7 @@ IMPORTANTE:
 - NO inventes detalles que no estén en los mensajes`;
 
     try {
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
+        const text = await generateAIResponse(prompt);
 
         // Intentar parsear JSON
         const jsonMatch = text.match(/\{[\s\S]*\}/);

@@ -1,0 +1,348 @@
+﻿> Task :gradle-plugin:settings-plugin:checkKotlinGradlePluginConfigurationErrors
+> Task :gradle-plugin:shared:checkKotlinGradlePluginConfigurationErrors
+> Task :gradle-plugin:shared:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:shared:compileJava NO-SOURCE
+> Task :gradle-plugin:shared:processResources NO-SOURCE
+> Task :gradle-plugin:shared:classes UP-TO-DATE
+> Task :gradle-plugin:shared:jar UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:jar UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:checkKotlinGradlePluginConfigurationErrors
+> Task :gradle-plugin:react-native-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:react-native-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:jar UP-TO-DATE
+
+> Configure project :expo
+
+Using expo modules
+  - [32mexpo-asset[0m (11.0.5)
+  - [32mexpo-av[0m (15.0.2)
+  - [32mexpo-blur[0m (14.0.3)
+  - [32mexpo-clipboard[0m (7.0.1)
+  - [32mexpo-constants[0m (17.0.8)
+  - [32mexpo-device[0m (7.0.3)
+  - [32mexpo-document-picker[0m (13.0.3)
+  - [32mexpo-file-system[0m (18.0.12)
+  - [32mexpo-font[0m (13.0.4)
+  - [32mexpo-haptics[0m (14.0.1)
+  - [32mexpo-image-loader[0m (5.0.0)
+  - [32mexpo-image-picker[0m (16.0.6)
+  - [32mexpo-keep-awake[0m (14.0.3)
+  - [32mexpo-linear-gradient[0m (14.0.2)
+  - [32mexpo-linking[0m (7.0.5)
+  - [32mexpo-local-authentication[0m (15.0.2)
+  - [32mexpo-modules-core[0m (2.2.3)
+  - [32mexpo-secure-store[0m (14.0.1)
+  - [32mexpo-share-intent[0m (3.2.3)
+  - [32mexpo-sharing[0m (13.0.1)
+  - [32mexpo-speech[0m (13.0.1)
+  - [32mexpo-system-ui[0m (4.0.9)
+  - [32mexpo-web-browser[0m (14.0.2)
+
+
+> Configure project :react-native-reanimated
+Android gradle plugin: 8.6.0
+Gradle: 8.10.2
+
+> Task :app:signingReport
+Variant: debug
+Config: debug
+Store: D:\TODO\MY EX\my-ex-coach\mobile-app\android\app\debug.keystore
+Alias: androiddebugkey
+MD5: 20:F4:61:48:B7:2D:8E:5E:5C:A2:3D:37:A4:F4:14:90
+SHA1: 5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
+SHA-256: FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C
+Valid until: martes, 30 de abril de 2052
+----------
+Variant: release
+Config: debug
+Store: D:\TODO\MY EX\my-ex-coach\mobile-app\android\app\debug.keystore
+Alias: androiddebugkey
+MD5: 20:F4:61:48:B7:2D:8E:5E:5C:A2:3D:37:A4:F4:14:90
+SHA1: 5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
+SHA-256: FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C
+Valid until: martes, 30 de abril de 2052
+----------
+Variant: debugAndroidTest
+Config: debug
+Store: D:\TODO\MY EX\my-ex-coach\mobile-app\android\app\debug.keystore
+Alias: androiddebugkey
+MD5: 20:F4:61:48:B7:2D:8E:5E:5C:A2:3D:37:A4:F4:14:90
+SHA1: 5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
+SHA-256: FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C
+Valid until: martes, 30 de abril de 2052
+----------
+
+> Task :expo:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-asset:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-av:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-blur:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-clipboard:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-constants:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-device:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-document-picker:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-file-system:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-font:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-haptics:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-image-loader:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-image-picker:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-keep-awake:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-linear-gradient:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-linking:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-local-authentication:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-modules-core:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-secure-store:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-share-intent:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-sharing:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-speech:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-system-ui:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :expo-web-browser:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :lottie-react-native:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :react-native-async-storage_async-storage:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :react-native-community_datetimepicker:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :react-native-google-signin_google-signin:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :react-native-purchases:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :react-native-reanimated:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :react-native-safe-area-context:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :react-native-screens:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+> Task :react-native-svg:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\USER\.android\debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+BUILD SUCCESSFUL in 31s
+47 actionable tasks: 37 executed, 10 up-to-date

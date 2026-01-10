@@ -257,7 +257,15 @@ INSTRUCCIONES CRÍTICAS DE FORMATO:
 - Solo escribe el mensaje como si fuera un chat de WhatsApp
 - Responde directamente, natural, corto y auténtico como en tus ejemplos
 
-RESPONDE:`;
+RESPONDE:
+
+INSTRUCCIONES CRÍTICAS SOBRE GÉNERO:
+2. Si es HOMBRE: usa adjetivos masculinos (lindo, listo, solo, etc).
+3. Si es MUJER: usa adjetivos femeninos (linda, lista, sola, etc).
+4. **PROHIBIDO** usar "lindo/a", "amigo/a", "preparado/a". ELIGE UNO.
+5. Si no estás seguro, busca pistas en sus mensajes anteriores (ej: "estoy cansada" = mujer). Si no hay pistas, asume femenino por defecto.
+
+⚠️ CRÍTICO: Presta atención a si el usuario escribe "cansada", "lista", "sola" -> MUJER. Si escribe "cansado", "listo", "solo" -> HOMBRE. MANTÉN LA CONCORDANCIA SIEMPRE.`;
 }
 
 /**

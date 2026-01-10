@@ -12,14 +12,22 @@ export interface JealousyTrigger {
     examples: string[];
 }
 
+import { generateAIResponse } from './gemini';
+
+export interface JealousyTrigger {
+    name: string;
+    context: string;
+    conflictCount: number;
+    examples: string[];
+}
+
 /**
  * Detect jealousy triggers using AI
  */
 export async function detectJealousyTriggers(
     messages: ParsedMessage[],
     exName: string,
-    exSenderName: string,
-    model: any
+    exSenderName: string
 ): Promise<JealousyTrigger[]> {
     // Filter messages with negative sentiment and person names
     const suspiciousMessages = messages.filter(m => {
@@ -68,8 +76,7 @@ REGLAS:
 Responde SOLO con el JSON.`;
 
     try {
-        const result = await model.generateContent(prompt);
-        const response = result.response.text();
+        const response = await generateAIResponse(prompt);
 
         const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
         const data = JSON.parse(cleaned);

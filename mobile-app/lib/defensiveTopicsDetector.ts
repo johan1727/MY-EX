@@ -18,8 +18,7 @@ export interface DefensiveTopic {
 export async function detectDefensiveTopics(
     messages: ParsedMessage[],
     exName: string,
-    exSenderName: string,
-    model: any
+    exSenderName: string
 ): Promise<DefensiveTopic[]> {
     // Sample conversations where conflict arose
     const conflictMessages = messages.filter(m => {
@@ -69,8 +68,7 @@ REGLAS:
 Responde SOLO con el JSON.`;
 
     try {
-        const result = await model.generateContent(prompt);
-        const response = result.response.text();
+        const response = await generateAIResponse(prompt);
 
         const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
         const data = JSON.parse(cleaned);

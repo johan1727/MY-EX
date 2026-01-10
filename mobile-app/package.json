@@ -12,10 +12,9 @@
   "dependencies": {
     "@expo/plist": "^0.4.8",
     "@google/generative-ai": "^0.24.1",
-    "@react-native-async-storage/async-storage": "1.23.1",
+    "@react-native-async-storage/async-storage": "^1.23.1",
     "@react-native-community/datetimepicker": "8.2.0",
     "@react-native-google-signin/google-signin": "^16.1.1",
-    "@stripe/stripe-react-native": "^0.57.2",
     "@supabase/supabase-js": "^2.39.7",
     "date-fns": "^4.1.0",
     "expo": "52",
@@ -40,10 +39,8 @@
     "expo-system-ui": "~4.0.9",
     "expo-web-browser": "~14.0.2",
     "jszip": "^3.10.1",
-    "lottie-react-native": "^7.3.4",
+    "lottie-react-native": "7.1.0",
     "lucide-react-native": "^0.554.0",
-    "micro": "^10.0.1",
-    "openai": "^6.9.1",
     "punycode": "^2.3.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -59,7 +56,6 @@
     "react-native-url-polyfill": "^2.0.0",
     "react-native-web": "~0.19.6",
     "reflect.getprototypeof": "^1.0.10",
-    "stripe": "^20.1.0",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

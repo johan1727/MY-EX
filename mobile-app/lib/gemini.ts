@@ -1,25 +1,36 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { supabase } from "./supabase";
 import { checkProhibitedContent } from "./contentModeration";
 
-// Initialize Gemini
-// FALLBACK: Hardcode key for debugging env loading issues
-const ENV_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-const FALLBACK_KEY = ''; // Removed for GitHub security
-const API_KEY = ENV_KEY && ENV_KEY.length > 10 ? ENV_KEY : FALLBACK_KEY;
-const genAI = new GoogleGenerativeAI(API_KEY);
-console.log('🔑 [DEBUG] Using Gemini API Key ending in:', API_KEY.slice(-4), ENV_KEY ? '(from env)' : '(FALLBACK)');
+// Generic function to allow other modules (deepAnalysis, exSimulator) to use the secure Edge Function
+export async function generateAIResponse(prompt: string, systemPrompt?: string, imageBase64?: string | null, model: string = 'gemini-1.5-flash') {
+    console.log('[Gemini] Invoking secure Edge Function chat-ai...', { hasImage: !!imageBase64, model });
 
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-export async function sendMessageToGemini(message: string, imageBase64?: string | null) {
-    try {
-        if (!API_KEY || API_KEY === "TU_API_KEY_AQUI") {
-            return {
-                text: "⚠️ Missing API Key. Please add your EXPO_PUBLIC_GEMINI_API_KEY in the .env file.",
-                error: true
-            };
+    // Updated for High-Context (400k+ tokens): Relying on server-side timeout configuration
+    const { data, error } = await supabase.functions.invoke('chat-ai', {
+        body: {
+            message: prompt,
+            image: imageBase64,
+            systemPrompt: systemPrompt,
+            model: model
         }
+    });
 
+    if (error) {
+        console.error('[Gemini] Edge Function Error:', error);
+        throw new Error(error.message || 'Error connecting to AI service');
+    }
+
+    if (!data || !data.text) {
+        console.error('[Gemini] Invalid response from Edge Function:', data);
+        throw new Error('Invalid response from AI service');
+    }
+
+    return data.text;
+}
+
+// allow passing model
+export async function sendMessageToGemini(message: string, imageBase64?: string | null, model: string = 'gemini-1.5-flash') {
+    try {
         // Google Play AI Policy: Check for prohibited content
         const contentCheck = checkProhibitedContent(message);
         if (contentCheck.isProhibited) {
@@ -29,47 +40,11 @@ export async function sendMessageToGemini(message: string, imageBase64?: string 
             };
         }
 
-        let prompt = message;
-        let imagePart = null;
-
-        if (imageBase64) {
-            imagePart = {
-                inlineData: {
-                    data: imageBase64,
-                    mimeType: "image/jpeg",
-                },
-            };
-        }
-
         // System instruction to act as a relationship coach
-        const systemPrompt = "You are an empathetic, wise, and supportive relationship coach named 'Ex Coach'. Your goal is to help the user heal from a breakup, maintain no-contact, and grow. Analyze any text or images (like screenshots of texts) they send to provide psychological insight. Be concise but warm.";
+        const defaultSystemPrompt = "You are an empathetic, wise, and supportive relationship coach named 'Ex Coach'. Your goal is to help the user heal from a breakup, maintain no-contact, and grow. Analyze any text or images (like screenshots of texts) they send to provide psychological insight. Be concise but warm.";
 
-        const chat = model.startChat({
-            history: [
-                {
-                    role: "user",
-                    parts: [{ text: systemPrompt }],
-                },
-                {
-                    role: "model",
-                    parts: [{ text: "Understood. I am ready to help you heal and grow." }],
-                },
-            ],
-        });
-
-        let result;
-        if (imagePart) {
-            // For multimodal, we use generateContent directly as startChat doesn't fully support images in history easily in all SDK versions yet, 
-            // or we treat it as a single turn with context.
-            // To keep it simple and robust:
-            const result = await model.generateContent([systemPrompt + "\nUser: " + message, imagePart]);
-            const response = await result.response;
-            return { text: response.text(), error: false };
-        } else {
-            const result = await chat.sendMessage(message);
-            const response = await result.response;
-            return { text: response.text(), error: false };
-        }
+        const text = await generateAIResponse(message, defaultSystemPrompt, imageBase64, model);
+        return { text, error: false };
 
     } catch (error: any) {
         console.error("Gemini Error:", error);

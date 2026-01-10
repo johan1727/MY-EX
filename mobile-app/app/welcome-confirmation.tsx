@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,7 +9,12 @@ import { Shield, AlertTriangle, ArrowRight } from 'lucide-react-native';
 export default function WelcomeConfirmationScreen() {
     const router = useRouter();
 
-    const handleContinue = () => {
+    const handleContinue = async () => {
+        try {
+            await AsyncStorage.setItem('hasSeenWelcome', 'true');
+        } catch (e) {
+            console.error('Error saving welcome status:', e);
+        }
         router.replace('/(tabs)');
     };
 

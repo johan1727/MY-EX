@@ -16,13 +16,10 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Send, Heart, Sparkles, Crown, Image as ImageIcon, X, HelpCircle, LogOut } from 'lucide-react-native';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateAIResponse } from '../lib/gemini';
 import { storage } from '../lib/storage';
 import UpgradeBanner from '../components/UpgradeBanner';
 import { useSubscription } from '@/lib/SubscriptionContext';
-
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 interface Message {
     role: 'user' | 'assistant';
@@ -170,8 +167,6 @@ export default function CoachScreen() {
         }
 
         try {
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
             const context = updatedMessages.slice(-6).map(m =>
                 `${m.role === 'user' ? 'Usuario' : 'Coach'}: ${m.content}${m.image ? ' [imagen]' : ''}`
             ).join('\n');
@@ -194,27 +189,12 @@ ${imageToSend ? '\nNOTA: El usuario te está enviando una imagen. Describe breve
 
 RESPONDE:`;
 
-            let result;
-            if (imageToSend) {
-                // Multimodal request with image
-                const promptParts = [
-                    { text: systemPrompt },
-                    {
-                        inlineData: {
-                            mimeType: "image/jpeg",
-                            data: imageToSend
-                        }
-                    }
-                ];
-                result = await model.generateContent(promptParts as any);
-            } else {
-                result = await model.generateContent(systemPrompt);
-            }
+            // Use Edge Function for AI response
+            const responseText = await generateAIResponse(systemPrompt, undefined, imageToSend || undefined);
 
-            const response = await result.response;
             const assistantMessage: Message = {
                 role: 'assistant',
-                content: response.text(),
+                content: responseText,
             };
             setMessages([...updatedMessages, assistantMessage]);
         } catch (error) {
@@ -347,7 +327,7 @@ RESPONDE:`;
                         </View>
                         <TouchableOpacity
                             style={styles.limitBannerBtn}
-                            onPress={() => router.push('/premium')}
+                            onPress={() => router.push('/paywall')}
                         >
                             <Text style={styles.limitBannerBtnText}>Mejorar</Text>
                         </TouchableOpacity>
@@ -372,16 +352,7 @@ RESPONDE:`;
                         </View>
                     )}
 
-                    {/* Message Preview - Shows while typing */}
-                    {inputText.trim() !== '' && (
-                        <View style={styles.messagePreviewContainer}>
-                            <View style={styles.messagePreviewBubble}>
-                                <Text style={styles.messagePreviewText} numberOfLines={3}>
-                                    {inputText}
-                                </Text>
-                            </View>
-                        </View>
-                    )}
+
 
                     <View style={styles.inputContainer}>
                         {/* Image picker button */}
