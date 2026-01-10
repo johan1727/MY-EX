@@ -410,9 +410,9 @@ export default function ExSimulatorChat() {
                 const recentContext = newMessages.slice(-20).map(m =>
                     `${m.role === 'user' ? userName : (profileData.exName || 'Ex')}: ${m.content}`
                 ).join('\n');
-                systemPrompt = `${profileData.masterPrompt}\n${factsContext}\n${pastSummaries}\n${ragContext}\n${emotionalContext}\n${importantDatesContext}\n${memoryContext}\nCONTEXTO RECIENTE:\n${recentContext}\n\nMENSAJE ACTUAL: "${currentInput}"\n${promptModifier}\n\nRESPONDE (sin poner tu nombre antes):`;
+                systemPrompt = `${profileData.masterPrompt}\n${factsContext}\n${pastSummaries}\n${ragContext}\n${emotionalContext}\n${importantDatesContext}\n${memoryContext}\nCONTEXTO RECIENTE:\n${recentContext}\n\nMENSAJE ACTUAL: "${currentInput}"\n${promptModifier}\n\nINSTRUCCIÓN CRÍTICA: Copia EXACTAMENTE su forma de escribir, sus modismos, groserías (si las usa) y estilo de puntuación. No suenes como un robot.\n\nRESPONDE (sin poner tu nombre antes):`;
             } else {
-                systemPrompt = buildEnhancedPrompt(profileData, userName, currentInput, messages) + promptModifier;
+                systemPrompt = buildEnhancedPrompt(profileData, userName, currentInput, messages) + promptModifier + "\n\nINSTRUCCIÓN CRÍTICA: Copia EXACTAMENTE su forma de escribir, sus modismos y estilo. No suenes como un robot.";
             }
 
             let emotionalDelay = 2000;

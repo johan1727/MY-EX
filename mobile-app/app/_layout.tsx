@@ -46,14 +46,16 @@ export default function RootLayout() {
     // Handle shared files from WhatsApp (only on native)
     const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntent({ debug: true });
 
-    // Process share intent - MINIMAL VERSION
+    // Process share intent - ROBUST VERSION
     useEffect(() => {
-        // Only process after splash and if not already handled
-        if (showSplash || shareIntentHandled) return;
+        // Only process after splash
+        if (showSplash) return;
+
+        // If no intent or already resetting, skip
         if (!hasShareIntent || !shareIntent) return;
 
         try {
-            console.log('[ShareIntent] Detected share intent');
+            console.log('[ShareIntent] Detected NEW share intent (Warm/Cold)');
 
             // Get text content
             const sharedText = shareIntent.text;
@@ -63,7 +65,6 @@ export default function RootLayout() {
 
                 // Save to storage
                 storage.setItem('sharedText', sharedText);
-                setShareIntentHandled(true);
                 resetShareIntent();
 
                 // Show custom modal
@@ -82,7 +83,6 @@ export default function RootLayout() {
                     console.log('[ShareIntent] File path:', path);
                     storage.setItem('sharedFileUri', path);
                     storage.setItem('sharedFileName', file?.fileName || 'chat.txt');
-                    setShareIntentHandled(true);
                     resetShareIntent();
 
                     // Show custom modal
@@ -98,7 +98,7 @@ export default function RootLayout() {
             console.error('[ShareIntent] Error:', err);
             resetShareIntent();
         }
-    }, [showSplash, shareIntentHandled, hasShareIntent, shareIntent]);
+    }, [shareIntent, hasShareIntent, showSplash]);
 
     // AUTO-NAVIGATION: Listen for analysis completions
     useEffect(() => {
