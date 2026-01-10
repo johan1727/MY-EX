@@ -608,11 +608,15 @@ async function analyzeRelationshipHistory(
 /**
  * Fase 5: Patrones Comportamentales
  */
+/**
+ * Fase 5: Patrones Comportamentales
+ */
 async function analyzeBehavioralPatterns(
     exMessages: ParsedMessage[],
     exName: string
 ): Promise<string> {
-    const sample = exMessages.slice(0, 1200).map(m => m.content).join('\n');
+    // Aumentado a 5000 mensajes para mayor profundidad (~150k tokens de contexto)
+    const sample = getBalancedSample(exMessages, 5000);
 
     const prompt = `Analiza los PATRONES DE COMPORTAMIENTO de ${exName} basándote en estos mensajes:
 
@@ -627,27 +631,20 @@ Identifica patrones en:
    - ¿Cómo reacciona cuando está triste o vulnerable?
    - ¿Cómo reacciona cuando está estresada?
 
-2. PATRONES DE EVITACIÓN
-   - ¿Qué temas evita?
-   - ¿Cómo cambia de tema cuando no quiere hablar de algo?
-   - ¿Usa humor para deflectar?
+2. LENGUAJES DEL AMOR (Detector)
+   - ¿Cómo expresa cariño? (Palabras, tiempo de calidad virtual, regalos/detalles mencionados)
+   - ¿Qué demanda/pide más frecuentemente? (Atención, validación, ayuda)
 
-3. CICLOS EMOCIONALES
-   - ¿Hay patrones de hot/cold (caliente/frío)?
-   - ¿Ciclos de cercanía y distancia?
-   - ¿Patrones de ida y vuelta en discusiones?
+3. COMPORTAMIENTO EN CONFLICTOS (Estilo de Pelea)
+   - ¿Explosiva o Pasivo-Agresiva?
+   - ¿Aplica la "ley del hielo" (ignorar) o manda textos infinitos?
+   - ¿Pide perdón o se victimiza?
 
 4. TRIGGERS OBSERVADOS
-   - ¿Qué le molesta consistentemente?
-   - ¿Qué la hace responder de forma negativa?
-   - ¿Qué la hace responder positivamente?
+   - Palabras o acciones que DETONAN una mala reacción inmediata.
+   - Temas sensibles que siempre terminan mal.
 
-5. COMPORTAMIENTO EN CONFLICTOS
-   - ¿Confronta directamente o evita?
-   - ¿Da silent treatment (ignorar)?
-   - ¿Busca resolver o escalar?
-
-Responde en formato markdown con ejemplos específicos cuando sea posible.`;
+Responde en formato markdown con ejemplos específicos.`;
 
     return await callGeminiWithRetry(prompt);
 }
@@ -701,57 +698,47 @@ Responde en markdown. Solo incluye información explícita o fuertemente implica
 /**
  * Fase 7: Estilo de Comunicación (CRÍTICO para simulación)
  */
+/**
+ * Fase 7: Estilo de Comunicación (CRÍTICO para simulación)
+ */
 async function analyzeCommunicationStyle(
     exMessages: ParsedMessage[],
     exName: string
 ): Promise<string> {
-    // Take diverse sample
-    const first = exMessages.slice(0, 300);
-    const middle = exMessages.slice(Math.floor(exMessages.length / 2) - 150, Math.floor(exMessages.length / 2) + 150);
-    const last = exMessages.slice(-300);
-    const sample = [...first, ...middle, ...last].map(m => m.content).join('\n');
+    // Massive sample for style mimickry (5000 messages) to capture rare slang
+    // No manual slicing, use balanced sample
+    const sample = getBalancedSample(exMessages, 5000);
 
-    const prompt = `Analiza el ESTILO DE COMUNICACIÓN ÚNICO de ${exName} para poder replicarlo:
+    const prompt = `Analiza el ESTILO DE COMUNICACIÓN ÚNICO de ${exName} para poder replicarlo PERFECCIÓN:
 
 MENSAJES REALES:
 ${sample}
 
-Extrae con PRECISIÓN:
+Extrae con PRECISIÓN QUIRÚRGICA:
 
-1. PATRONES LINGÜÍSTICOS
-   - Palabras que usa frecuentemente
-   - Muletillas y expresiones únicas
-   - Errores ortográficos o abreviaciones características
-   - ¿Usa mayúsculas? ¿Cómo?
+1. DICCIONARIO DE MODISMOS Y SLANG
+   - Lista TODAS las palabras únicas, jerga o "chistes locales" que usa.
+   - Groserías favoritas y en qué contexto las usa.
+   - Apodos específicos.
 
-2. FRASES SIGNATURE
-   - 5-10 frases exactas que usa repetidamente
-   - Formas de saludar
-   - Formas de despedirse
-   - Expresiones de cariño/enojo/sorpresa
+2. PATRONES DE EMOJIS AVANZADOS
+   - Top emojis.
+   - **Combos de emojis**: ¿Cuáles usa juntos? (ej: 😭💀, 🥺👉👈, 😡🤬).
+   - ¿Usa emojis irónicamente?
 
-3. USO DE EMOJIS
-   - Emojis más frecuentes (lista los top 10)
-   - ¿Cuándo los usa?
-   - ¿Cuántos por mensaje típicamente?
+3. ESTRUCTURA Y "VIBE" DE TEXTO
+   - ¿Escribe "jajaja", "hahaha", "JAJAJA", "kjsakjsa"? (Risa exacta).
+   - ¿Usa puntuación perfecta o la ignora? (Puntos finales, comas).
+   - ¿Usa mayúsculas para gritar?
 
-4. ESTRUCTURA DE MENSAJES
-   - Longitud típica (palabras por mensaje)
-   - ¿Envía muchos mensajes cortos o pocos largos?
-   - ¿Usa puntuación? ¿Qué tipo?
-   - ¿Escribe en minúsculas, mayúsculas, mixto?
+4. FRECUENCIA Y RITMO
+   - ¿Manda muchos mensajitos cortos (1 línea) seguidos?
+   - ¿Manda biblias (párrafos largos)?
 
-5. TIMING Y RITMO
-   - ¿Responde rápido o tarda?
-   - ¿Envía ráfagas de mensajes?
-   - ¿Deja conversaciones sin terminar?
+5. TONO GENERAL
+   - ¿Fría/Seca, Cariñosa/Intensa, Sarcástica/Burlona?
 
-6. TONO GENERAL
-   - Formal vs informal
-   - Sarcástico vs directo
-   - Afectuoso vs distante
-
-Responde en markdown con EJEMPLOS REALES de sus mensajes cuando sea posible.`;
+Responde en markdown con EL "DICCIONARIO DE MODISMOS" como tabla o lista clara.`;
 
     return await callGeminiWithRetry(prompt);
 }
