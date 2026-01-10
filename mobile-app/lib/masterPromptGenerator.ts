@@ -361,17 +361,57 @@ async function callGeminiWithRetry(
 // ========================================
 
 /**
+ * Helper: Smart Balanced Sampling
+ * Extrae una muestra representativa: Inicio (Historia), Medio (Contexto) y FIN (Reciente)
+ * Prioriza el FIN para capturar el estado actual.
+ */
+function getBalancedSample(messages: ParsedMessage[], targetCount: number): string {
+    const total = messages.length;
+    if (total <= targetCount) return messages.map(m => m.content).join('\n');
+
+    // Distribución: 20% Inicio, 30% Random/Medio, 50% Final (Reciente)
+    const startCount = Math.floor(targetCount * 0.2);
+    const endCount = Math.floor(targetCount * 0.5);
+    const middleCount = targetCount - startCount - endCount;
+
+    const startMsgs = messages.slice(0, startCount);
+    const endMsgs = messages.slice(-endCount); // Últimos mensajes (CRÍTICO)
+
+    // Middle selection (randomized to get variety)
+    const middlePool = messages.slice(startCount, total - endCount);
+    const middleMsgs = selectRandomMessages(middlePool, middleCount);
+
+    // Sort valid messages by timestamp/index to maintain flow coherence where possible
+    // (Though for prompt analysis, pure content is key, chronological chunks are better)
+    // For simplicity here, we just join them. 
+
+    return [
+        ...startMsgs,
+        ...middleMsgs,
+        ...endMsgs
+    ].map(m => `[${m.timestamp || 'N/A'}] ${m.content}`).join('\n');
+}
+
+function selectRandomMessages(messages: ParsedMessage[], count: number): ParsedMessage[] {
+    if (messages.length <= count) return messages;
+    // Fisher-Yates shuffle simplified
+    const shuffled = [...messages].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count).sort((a, b) => (1)); // Keep original order relative to each other if possible? No, random is fine for trait extraction.
+}
+
+// ========================================
+// FUNCIONES DE ANÁLISIS POR CATEGORÍA (ACTUALIZADAS)
+// ========================================
+
+/**
  * Fase 1: Identidad Core
  */
 async function analyzeCoreIdentity(
     exMessages: ParsedMessage[],
     exName: string
 ): Promise<string> {
-    // Muestrear mensajes (primeros 500 + últimos 500)
-    const sample = [
-        ...exMessages.slice(0, Math.min(500, exMessages.length / 2)),
-        ...exMessages.slice(-Math.min(500, exMessages.length / 2))
-    ].map(m => m.content).join('\n');
+    // Start + End (Change over time)
+    const sample = getBalancedSample(exMessages, 1000);
 
     const prompt = `Basándote ÚNICAMENTE en estos mensajes reales de ${exName}, extrae información sobre su IDENTIDAD CORE:
 
@@ -383,7 +423,7 @@ Analiza y extrae (SIN inventar, solo lo que esté explícito o fuertemente impl�
 1. DATOS BIOGRÁFICOS
    - Edad (aproximada si no es exacta)
    - Ciudad/país donde vive
-   - Ocupación (trabajo o estudios)
+   - Ocupación (trabajo o estudios) - Prioriza lo más reciente
    - Nivel educativo
 
 2. AUTOPERCEPCIÓN
@@ -723,41 +763,41 @@ async function analyzeTemporalContext(
     messages: ParsedMessage[],
     exName: string
 ): Promise<string> {
-    // Focus on most recent messages
-    const recentMessages = messages.slice(-500).map(m =>
+    // Focus on most recent messages (Increased to 1500 for better context of "Last Activities")
+    const recentMessages = messages.slice(-1500).map(m =>
         `${m.timestamp ? `[${m.timestamp}] ` : ''}${m.sender}: ${m.content}`
     ).join('\n');
 
     const prompt = `Analiza el CONTEXTO TEMPORAL Y ESTADO ACTUAL de ${exName}:
 
-MENSAJES RECIENTES:
+MENSAJES RECIENTES (Últimos ~1500):
 ${recentMessages}
 
-Determina:
+Determina con precisión:
 
 1. ESTADO DE VIDA ACTUAL
    - ¿Dónde está en su vida ahora?
-   - ¿Trabaja/estudia? ¿Qué?
+   - ¿Trabaja/estudia? ¿Qué? (Prioriza info reciente)
    - Situación general observable
 
-2. CAMBIOS RECIENTES
-   - ¿Ha mencionado cambios importantes?
-   - ¿Mudanzas, trabajos nuevos, relaciones?
+2. CAMBIOS RECIENTES DETECTABLES
+   - ¿Ha mencionado cambios importantes en los últimos meses?
+   - ¿Mudanzas, trabajos nuevos, relaciones, viajes?
 
 3. ESTADO EMOCIONAL RECIENTE
-   - ¿Cómo parece estar emocionalmente?
-   - ¿Estresada, feliz, preocupada?
+   - ¿Cómo parece estar emocionalmente en estos últimos mensajes?
+   - ¿Estresada, feliz, preocupada, estable?
 
-4. TEMAS ACTUALES
+4. TEMAS ACTUALES DE CONVERSACIÓN
    - ¿De qué habla últimamente?
-   - ¿Qué le preocupa o emociona?
+   - ¿Qué le preocupa o emociona AHORA MISMO?
 
 5. DINÁMICA ACTUAL CON EL USUARIO
    - ¿Cómo es el tono de conversaciones recientes?
    - ¿Hay distanciamiento o acercamiento?
    - ¿Tension o armonía?
 
-Responde en markdown. Enfócate en el estado ACTUAL basado en mensajes recientes.`;
+Responde en markdown. Enfócate EXCLUSIVAMENTE en lo que dicen estos últimos mensajes.`;
 
     return await callGeminiWithRetry(prompt);
 }
