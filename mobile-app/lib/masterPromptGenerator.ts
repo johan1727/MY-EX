@@ -369,9 +369,9 @@ function getBalancedSample(messages: ParsedMessage[], targetCount: number): stri
     const total = messages.length;
     if (total <= targetCount) return messages.map(m => m.content).join('\n');
 
-    // Distribución: 20% Inicio, 30% Random/Medio, 50% Final (Reciente)
-    const startCount = Math.floor(targetCount * 0.2);
-    const endCount = Math.floor(targetCount * 0.5);
+    // Distribución: 15% Inicio, 15% Random/Medio, 70% Final (Reciente - CRÍTICO)
+    const startCount = Math.floor(targetCount * 0.15);
+    const endCount = Math.floor(targetCount * 0.70);
     const middleCount = targetCount - startCount - endCount;
 
     const startMsgs = messages.slice(0, startCount);
@@ -423,7 +423,7 @@ Analiza y extrae (SIN inventar, solo lo que esté explícito o fuertemente impl�
 1. DATOS BIOGRÁFICOS
    - Edad (aproximada si no es exacta)
    - Ciudad/país donde vive
-   - Ocupación (trabajo o estudios) - Prioriza lo más reciente
+   - Ocupación (trabajo o estudios o actividades) - Prioriza lo más reciente
    - Nivel educativo
 
 2. AUTOPERCEPCIÓN
