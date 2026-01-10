@@ -641,8 +641,14 @@ Identifica patrones en:
    - ¿Pide perdón o se victimiza?
 
 4. TRIGGERS OBSERVADOS
-   - Palabras o acciones que DETONAN una mala reacción inmediata.
-   - Temas sensibles que siempre terminan mal.
+   - ¿Qué le molesta consistentemente?
+   - ¿Qué la hace responder de forma negativa?
+   - ¿Qué la hace responder positivamente?
+
+5. COMPORTAMIENTO EN CONFLICTOS
+   - ¿Confronta directamente o evita?
+   - ¿Da silent treatment (ignorar)?
+   - ¿Busca resolver o escalar?
 
 Responde en formato markdown con ejemplos específicos.`;
 
@@ -725,6 +731,7 @@ Extrae con PRECISIÓN QUIRÚRGICA:
    - Top emojis.
    - **Combos de emojis**: ¿Cuáles usa juntos? (ej: 😭💀, 🥺👉👈, 😡🤬).
    - ¿Usa emojis irónicamente?
+   - pero trata de no usar tantos emojis en las respuestas LIMITADO A 1 POR MENSAJE 
 
 3. ESTRUCTURA Y "VIBE" DE TEXTO
    - ¿Escribe "jajaja", "hahaha", "JAJAJA", "kjsakjsa"? (Risa exacta).
