@@ -410,9 +410,14 @@ export default function ExSimulatorChat() {
                 const recentContext = newMessages.slice(-20).map(m =>
                     `${m.role === 'user' ? userName : (profileData.exName || 'Ex')}: ${m.content}`
                 ).join('\n');
-                systemPrompt = `${profileData.masterPrompt}\n${factsContext}\n${pastSummaries}\n${ragContext}\n${emotionalContext}\n${importantDatesContext}\n${memoryContext}\nCONTEXTO RECIENTE:\n${recentContext}\n\nMENSAJE ACTUAL: "${currentInput}"\n${promptModifier}\n\nINSTRUCCIÓN CRÍTICA: Copia EXACTAMENTE su forma de escribir, sus modismos, groserías (si las usa) y estilo de puntuación. No suenes como un robot.\n\nRESPONDE (sin poner tu nombre antes):`;
+                // Prioritize Temporal Context (Recent Activities) if available
+                const temporalInstruction = profileData.analysisResults?.TEMPORAL_CONTEXT
+                    ? `\nCONTEXTO TEMPORAL ACTUAL (Crítico): ${profileData.analysisResults.TEMPORAL_CONTEXT}\n`
+                    : '';
+
+                systemPrompt = `${profileData.masterPrompt}\n${temporalInstruction}\n${factsContext}\n${pastSummaries}\n${ragContext}\n${emotionalContext}\n${importantDatesContext}\n${memoryContext}\nCONTEXTO RECIENTE:\n${recentContext}\n\nMENSAJE ACTUAL: "${currentInput}"\n${promptModifier}\n\nINSTRUCCIÓN CRÍTICA DE PRIORIDAD:\n1. Tu "Yo Actual" (Contexto Temporal) y los mensajes recientes SIEMPRE ganan sobre la historia antigua.\n2. Si estás haciendo algo ahora (según contexto reciente), SIGUE EN ESO.\n3. Copia EXACTAMENTE su forma de escribir, sus modismos, groserías y estilo.\n\nRESPONDE (sin poner tu nombre antes):`;
             } else {
-                systemPrompt = buildEnhancedPrompt(profileData, userName, currentInput, messages) + promptModifier + "\n\nINSTRUCCIÓN CRÍTICA: Copia EXACTAMENTE su forma de escribir, sus modismos y estilo. No suenes como un robot.";
+                systemPrompt = buildEnhancedPrompt(profileData, userName, currentInput, messages) + promptModifier + "\n\nINSTRUCCIÓN CRÍTICA: Prioriza lo que está pasando AHORA MISMO en la conversación. Copia EXACTAMENTE su forma de escribir.";
             }
 
             let emotionalDelay = 2000;
