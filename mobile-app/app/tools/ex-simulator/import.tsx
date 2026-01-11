@@ -679,236 +679,273 @@ export default function ImportChat() {
 
     // New helper to continue flow
     const processParsedMessages = async (messages: ParsedMessage[]) => {
-        addDebug('⚙️ Optimizando muestra (500k tokens)...');
-        await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
-
-        // CRITICAL: Add timeout for sampling too
-        let finalMessages: ParsedMessage[];
         try {
-            const samplingPromise = new Promise<{ messages: ParsedMessage[]; stats: any }>((resolve) => {
-                const result = intelligentTokenSampling(messages, 250000); // Reduced to 250k tokens for cost optimization
-                resolve(result);
-            });
+            addDebug('⚙️ Optimizando muestra (500k tokens)...');
+            await new Promise(resolve => setTimeout(resolve, 50)); // Yield to UI
 
-            const samplingTimeout = new Promise<{ messages: ParsedMessage[]; stats: any }>((_, reject) => {
-                setTimeout(() => reject(new Error('Sampling timeout')), 30000); // 30s timeout
-            });
+            // CRITICAL: Add timeout for sampling too
+            let finalMessages: ParsedMessage[];
+            try {
+                const samplingPromise = new Promise<{ messages: ParsedMessage[]; stats: any }>((resolve) => {
+                    const result = intelligentTokenSampling(messages, 250000); // Reduced to 250k tokens for cost optimization
+                    resolve(result);
+                });
 
-            const samplingResult = await Promise.race([samplingPromise, samplingTimeout]);
-            finalMessages = samplingResult.messages;
-            addDebug(`📊 ~${samplingResult.stats?.estimatedTokens?.toLocaleString() || 'N/A'} tokens(optimizado a 250k)`);
-        } catch (samplingError: any) {
-            addDebug(`⚠️ Sampling falló, usando mensajes recientes`);
-            // Fallback: take last 25000 messages (enough for good analysis)
-            finalMessages = messages.slice(-25000);
+                const samplingTimeout = new Promise<{ messages: ParsedMessage[]; stats: any }>((_, reject) => {
+                    setTimeout(() => reject(new Error('Sampling timeout')), 30000); // 30s timeout
+                });
+
+                const samplingResult = await Promise.race([samplingPromise, samplingTimeout]);
+                finalMessages = samplingResult.messages;
+                addDebug(`📊 ~${samplingResult.stats?.estimatedTokens?.toLocaleString() || 'N/A'} tokens(optimizado a 250k)`);
+            } catch (samplingError: any) {
+                addDebug(`⚠️ Sampling falló, usando mensajes recientes`);
+                // Fallback: take last 25000 messages (enough for good analysis)
+                finalMessages = messages.slice(-25000);
+            }
+
+            addDebug(`✅ Listo: ${finalMessages.length.toLocaleString()} mensajes`);
+            setParsedMessages(finalMessages);
+            setParsedCount(finalMessages.length);
+
+            // DETECTAR PARTICIPANTES (same as checkSharedFile)
+            const participants = detectParticipants(finalMessages);
+            const participantNames = participants.map(p => p.name);
+            setDetectedParticipants(participants);
+            addDebug(`👥 Detectados: ${participantNames.join(', ')} `);
+
+            // 🛡️ ANONYMIZATION MOVED TO BackgroundAnalysisManager
+            // We pass RAW messages so the manager can identify the correct Ex name
+            // addDebug('🛡️ Anonimizando datos...');
+            // await new Promise(resolve => setTimeout(resolve, 50));
+
+            // const anonymizedMessages = anonymizeMessages(finalMessages, participantNames);
+            // setParsedMessages(anonymizedMessages);
+            // addDebug('✅ Datos anonimizados correctamente');
+
+            // Pass RAW finalMessages
+            setParsedMessages(finalMessages);
+
+            setStep('preview');
+        } catch (e: any) {
+            setStep('error');
+            setErrorMessage(e.message);
+            showPrettyAlert('Error', e.message, 'error');
         }
+    };
 
-        addDebug(`✅ Listo: ${finalMessages.length.toLocaleString()} mensajes`);
+
+    const handleTextPaste = async () => {
+        if (!rawText.trim()) { showPrettyAlert('Error', 'Pega el texto', 'error'); return; }
+        await new Promise(resolve => setTimeout(resolve, 50));
+        const messages = parseWhatsAppExport(rawText);
+        if (messages.length < 5) { Alert.alert('Error', 'Mínimo 5 mensajes'); return; }
+        const { messages: finalMessages } = intelligentTokenSampling(messages);
         setParsedMessages(finalMessages);
-        setParsedCount(finalMessages.length);
-
-        // DETECTAR PARTICIPANTES (same as checkSharedFile)
-        const participants = detectParticipants(finalMessages);
-        const participantNames = participants.map(p => p.name);
-        setDetectedParticipants(participants);
-        addDebug(`👥 Detectados: ${participantNames.join(', ')} `);
-
-        // 🛡️ ANONYMIZATION MOVED TO BackgroundAnalysisManager
-        // We pass RAW messages so the manager can identify the correct Ex name
-        // addDebug('🛡️ Anonimizando datos...');
-        // await new Promise(resolve => setTimeout(resolve, 50));
-
-        // const anonymizedMessages = anonymizeMessages(finalMessages, participantNames);
-        // setParsedMessages(anonymizedMessages);
-        // addDebug('✅ Datos anonimizados correctamente');
-
-        // Pass RAW finalMessages
-        setParsedMessages(finalMessages);
-
         setStep('preview');
-    } catch (e: any) {
-        setStep('error');
-        setErrorMessage(e.message);
-        showPrettyAlert('Error', e.message, 'error');
-    }
-};
+    };
 
+    const handleAnalyze = async () => {
+        if (!exName.trim()) {
+            showPrettyAlert('Falta información', 'Por favor ingresa el nombre de tu Ex (o como quieres que se llame la IA).', 'error');
+            return;
+        }
 
-const handleTextPaste = async () => {
-    if (!rawText.trim()) { showPrettyAlert('Error', 'Pega el texto', 'error'); return; }
-    await new Promise(resolve => setTimeout(resolve, 50));
-    const messages = parseWhatsAppExport(rawText);
-    if (messages.length < 5) { Alert.alert('Error', 'Mínimo 5 mensajes'); return; }
-    const { messages: finalMessages } = intelligentTokenSampling(messages);
-    setParsedMessages(finalMessages);
-    setStep('preview');
-};
+        if (!relationshipType) {
+            showPrettyAlert('Falta información', 'Por favor selecciona el tipo de relación.', 'error');
+            return;
+        }
 
-const handleAnalyze = async () => {
-    if (!exName.trim()) {
-        showPrettyAlert('Falta información', 'Por favor ingresa el nombre de tu Ex (o como quieres que se llame la IA).', 'error');
-        return;
-    }
+        // AI SUGGESTION CHECK
+        if (suggestedRelationshipType && relationshipType !== suggestedRelationshipType) {
+            // User selected something different from AI
+            const translateType = (t: string) =>
+                t === 'partner' ? 'Pareja Actual' :
+                    t === 'ex' ? 'Ex Pareja' :
+                        t === 'friend' ? 'Amigo/a' :
+                            t === 'family' ? 'Familiar' : 'Fallecido';
 
-    if (!relationshipType) {
-        showPrettyAlert('Falta información', 'Por favor selecciona el tipo de relación.', 'error');
-        return;
-    }
+            showPrettyAlert(
+                '¿Confirmar tipo de relación?',
+                `La IA detectó que parece ser "${translateType(suggestedRelationshipType)}", pero tú seleccionaste "${translateType(relationshipType)}".\n\n¿Quieres continuar así ? `,
+                'info',
+                [
+                    { text: 'Corregir', style: 'cancel' }, // Stay
+                    {
+                        text: 'Sí, estoy seguro',
+                        onPress: async () => await executeAnalysis() // Proceed
+                    }
+                ]
+            );
+            return; // Stop here, wait for alert response
+        }
 
-    // AI SUGGESTION CHECK
-    if (suggestedRelationshipType && relationshipType !== suggestedRelationshipType) {
-        // User selected something different from AI
-        const translateType = (t: string) =>
-            t === 'partner' ? 'Pareja Actual' :
-                t === 'ex' ? 'Ex Pareja' :
-                    t === 'friend' ? 'Amigo/a' :
-                        t === 'family' ? 'Familiar' : 'Fallecido';
+        await executeAnalysis();
+    };
 
-        showPrettyAlert(
-            '¿Confirmar tipo de relación?',
-            `La IA detectó que parece ser "${translateType(suggestedRelationshipType)}", pero tú seleccionaste "${translateType(relationshipType)}".\n\n¿Quieres continuar así ? `,
-            'info',
-            [
-                { text: 'Corregir', style: 'cancel' }, // Stay
-                {
-                    text: 'Sí, estoy seguro',
-                    onPress: async () => await executeAnalysis() // Proceed
-                }
-            ]
-        );
-        return; // Stop here, wait for alert response
-    }
+    const executeAnalysis = async () => {
+        console.log('[handleAnalyze] 🚀 STARTING ANALYSIS');
 
-    await executeAnalysis();
-};
+        console.log('[handleAnalyze] exName:', exName);
+        console.log('[handleAnalyze] parsedMessages count:', parsedMessages.length);
 
-const executeAnalysis = async () => {
-    console.log('[handleAnalyze] 🚀 STARTING ANALYSIS');
-
-    console.log('[handleAnalyze] exName:', exName);
-    console.log('[handleAnalyze] parsedMessages count:', parsedMessages.length);
-
-    // GUEST LIMIT CHECK
-    console.log('[handleAnalyze] Checking user auth...');
-    let user;
-    try {
-        const userPromise = supabase.auth.getUser();
-        const timeoutPromise = new Promise<{ data: { user: any }, error: any }>((_, reject) =>
-            setTimeout(() => reject(new Error('Auth check timed out')), 5000)
-        );
-        const result = await Promise.race([userPromise, timeoutPromise]);
-        user = result.data.user;
-    } catch (authErr) {
-        console.log('[handleAnalyze] Auth check failed/timed out, continuing as guest:', authErr);
-        user = null;
-    }
-
-    // const { data: { user } } = await supabase.auth.getUser(); // OLD
-    console.log('[handleAnalyze] User:', user?.id || 'Guest');
-    if (!user) {
+        // GUEST LIMIT CHECK
+        console.log('[handleAnalyze] Checking user auth...');
+        let user;
         try {
-            console.log('[handleAnalyze] Ensuring guest usage check...');
-            // Force a small delay to ensure storage is ready
-            await new Promise(resolve => setTimeout(resolve, 50));
-
-            const guestUsage = await storage.getItem('guest_analysis_count');
-            console.log('[handleAnalyze] Guest usage retrieved:', guestUsage);
-
-            const count = guestUsage ? parseInt(guestUsage) : 0;
-            // Only enforce strict limit if NOT in development mode
-            if (count > 0 && !__DEV__) {
-                console.log('[handleAnalyze] Guest limit reached');
-                showPrettyAlert(
-                    'Límite Gratuito Alcanzado',
-                    'Has utilizado tu análisis gratuito como invitado. Por favor regístrate para continuar (es gratis).',
-                    'info',
-                    [
-                        { text: 'Cancelar', style: 'cancel' },
-                        { text: 'Registrarme', onPress: () => router.push('/auth') }
-                    ]
-                );
-                return;
-            }
-        } catch (guestErr) {
-            console.log('[handleAnalyze] Guest check error (ignoring to proceed):', guestErr);
-            // We proceed if check fails to avoid blocking the user
+            const userPromise = supabase.auth.getUser();
+            const timeoutPromise = new Promise<{ data: { user: any }, error: any }>((_, reject) =>
+                setTimeout(() => reject(new Error('Auth check timed out')), 5000)
+            );
+            const result = await Promise.race([userPromise, timeoutPromise]);
+            user = result.data.user;
+        } catch (authErr) {
+            console.log('[handleAnalyze] Auth check failed/timed out, continuing as guest:', authErr);
+            user = null;
         }
-    }
 
+        // const { data: { user } } = await supabase.auth.getUser(); // OLD
+        console.log('[handleAnalyze] User:', user?.id || 'Guest');
+        if (!user) {
+            try {
+                console.log('[handleAnalyze] Ensuring guest usage check...');
+                // Force a small delay to ensure storage is ready
+                await new Promise(resolve => setTimeout(resolve, 50));
 
+                const guestUsage = await storage.getItem('guest_analysis_count');
+                console.log('[handleAnalyze] Guest usage retrieved:', guestUsage);
 
-    console.log('[handleAnalyze] Auth check done. Checking existing profile...');
-
-    // Check for existing profile with same name (with timeout)
-    try {
-        const checkPromise = async () => {
-            if (user) {
-                const { data: existingProfile } = await supabase
-                    .from('ex_profiles')
-                    .select('id, ex_name')
-                    .eq('user_id', user.id)
-                    .ilike('ex_name', exName)
-                    .maybeSingle();
-                return existingProfile;
+                const count = guestUsage ? parseInt(guestUsage) : 0;
+                // Only enforce strict limit if NOT in development mode
+                if (count > 0 && !__DEV__) {
+                    console.log('[handleAnalyze] Guest limit reached');
+                    showPrettyAlert(
+                        'Límite Gratuito Alcanzado',
+                        'Has utilizado tu análisis gratuito como invitado. Por favor regístrate para continuar (es gratis).',
+                        'info',
+                        [
+                            { text: 'Cancelar', style: 'cancel' },
+                            { text: 'Registrarme', onPress: () => router.push('/auth') }
+                        ]
+                    );
+                    return;
+                }
+            } catch (guestErr) {
+                console.log('[handleAnalyze] Guest check error (ignoring to proceed):', guestErr);
+                // We proceed if check fails to avoid blocking the user
             }
-            return null;
-        };
-
-        const timeoutPromise = new Promise<any>((_, reject) =>
-            setTimeout(() => reject(new Error('Duplicate check timeout')), 5000)
-        );
-
-        // Race query against timeout
-        const existingProfile = await Promise.race([checkPromise(), timeoutPromise]);
-        console.log('[handleAnalyze] Existing profile check result:', existingProfile ? 'Found' : 'Null');
-
-        if (existingProfile) {
-            // Profile exists - ask user what to do
-            return new Promise<void>((resolve) => {
-                showPrettyAlert(
-                    '⚠️ Perfil Existente',
-                    `Ya existe un perfil llamado "${existingProfile.ex_name}".\n\n¿Qué quieres hacer ? `,
-                    'info',
-                    [
-                        { text: 'Cancelar', style: 'cancel', onPress: () => resolve() },
-                        {
-                            text: 'Actualizar',
-                            onPress: async () => {
-                                // Set a flag to update instead of create
-                                (window as any).__updateProfileId = existingProfile.id;
-                                await continueAnalysis();
-                                resolve();
-                            }
-                        },
-                        {
-                            text: 'Crear Nuevo',
-                            onPress: async () => {
-                                // Clear flag to create new
-                                delete (window as any).__updateProfileId;
-                                await continueAnalysis();
-                                resolve();
-                            }
-                        }
-                    ]
-                );
-            });
         }
-    } catch (err) {
-        console.log('[handleAnalyze] Error checking for duplicates:', err);
-        // Continue anyway
-    }
 
-    console.log('[handleAnalyze] Saving chunks to storage...');
 
-    // Navigate to analysis screen with data for hybrid progress display
-    // CHUNKED STORAGE: Split 20k messages into 4 chunks of 5k each
-    // This avoids AsyncStorage "Row too big" error on Android
-    const messageLimit = 20000;
-    const chunkSize = 5000;
-    const limitedMessages = parsedMessages.slice(0, messageLimit);
-    const totalChunks = Math.ceil(limitedMessages.length / chunkSize);
 
-    try {
+        console.log('[handleAnalyze] Auth check done. Checking existing profile...');
+
+        // Check for existing profile with same name (with timeout)
+        try {
+            const checkPromise = async () => {
+                if (user) {
+                    const { data: existingProfile } = await supabase
+                        .from('ex_profiles')
+                        .select('id, ex_name')
+                        .eq('user_id', user.id)
+                        .ilike('ex_name', exName)
+                        .maybeSingle();
+                    return existingProfile;
+                }
+                return null;
+            };
+
+            const timeoutPromise = new Promise<any>((_, reject) =>
+                setTimeout(() => reject(new Error('Duplicate check timeout')), 5000)
+            );
+
+            // Race query against timeout
+            const existingProfile = await Promise.race([checkPromise(), timeoutPromise]);
+            console.log('[handleAnalyze] Existing profile check result:', existingProfile ? 'Found' : 'Null');
+
+            if (existingProfile) {
+                // Profile exists - ask user what to do
+                return new Promise<void>((resolve) => {
+                    showPrettyAlert(
+                        '⚠️ Perfil Existente',
+                        `Ya existe un perfil llamado "${existingProfile.ex_name}".\n\n¿Qué quieres hacer ? `,
+                        'info',
+                        [
+                            { text: 'Cancelar', style: 'cancel', onPress: () => resolve() },
+                            {
+                                text: 'Actualizar',
+                                onPress: async () => {
+                                    // Set a flag to update instead of create
+                                    (window as any).__updateProfileId = existingProfile.id;
+                                    await continueAnalysis();
+                                    resolve();
+                                }
+                            },
+                            {
+                                text: 'Crear Nuevo',
+                                onPress: async () => {
+                                    // Clear flag to create new
+                                    delete (window as any).__updateProfileId;
+                                    await continueAnalysis();
+                                    resolve();
+                                }
+                            }
+                        ]
+                    );
+                });
+            }
+        } catch (err) {
+            console.log('[handleAnalyze] Error checking for duplicates:', err);
+            // Continue anyway
+        }
+
+        console.log('[handleAnalyze] Saving chunks to storage...');
+
+        // Navigate to analysis screen with data for hybrid progress display
+        // CHUNKED STORAGE: Split 20k messages into 4 chunks of 5k each
+        // This avoids AsyncStorage "Row too big" error on Android
+        const messageLimit = 20000;
+        const chunkSize = 5000;
+        const limitedMessages = parsedMessages.slice(0, messageLimit);
+        const totalChunks = Math.ceil(limitedMessages.length / chunkSize);
+
+        try {
+            // Store metadata first
+            await storage.setItem('exSimulator_analyzeData', JSON.stringify({
+                totalChunks,
+                totalMessages: limitedMessages.length,
+                exName,
+                relationshipType
+            }));
+
+            // Store each chunk separately
+            for (let i = 0; i < totalChunks; i++) {
+                const start = i * chunkSize;
+                const end = Math.min(start + chunkSize, limitedMessages.length);
+                console.log(`[handleAnalyze] Saving chunk ${i + 1}/${totalChunks} (${end - start} msgs)`);
+                const chunk = limitedMessages.slice(start, end);
+                await storage.setItem(`exSimulator_chunk_${i}`, JSON.stringify(chunk));
+                // Anti-freeze yield
+                if (i % 2 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+            }
+
+            console.log('[handleAnalyze] Chunks saved. Navigating to analysis...');
+            router.push('/tools/ex-simulator/analysis');
+        } catch (storageErr: any) {
+            console.error('[handleAnalyze] Storage error:', storageErr);
+            console.error('[handleAnalyze] Storage error:', storageErr);
+            showPrettyAlert('Error', 'No se pudo guardar los datos de análisis: ' + storageErr.message, 'error');
+        }
+    };
+
+    const continueAnalysis = async () => {
+        // Navigate to analysis screen with data for hybrid progress display
+        // CHUNKED STORAGE: Same as handleAnalyze
+        const messageLimit = 20000;
+        const chunkSize = 5000;
+        const limitedMessages = parsedMessages.slice(0, messageLimit);
+        const totalChunks = Math.ceil(limitedMessages.length / chunkSize);
+
         // Store metadata first
         await storage.setItem('exSimulator_analyzeData', JSON.stringify({
             totalChunks,
@@ -921,549 +958,513 @@ const executeAnalysis = async () => {
         for (let i = 0; i < totalChunks; i++) {
             const start = i * chunkSize;
             const end = Math.min(start + chunkSize, limitedMessages.length);
-            console.log(`[handleAnalyze] Saving chunk ${i + 1}/${totalChunks} (${end - start} msgs)`);
             const chunk = limitedMessages.slice(start, end);
             await storage.setItem(`exSimulator_chunk_${i}`, JSON.stringify(chunk));
-            // Anti-freeze yield
-            if (i % 2 === 0) await new Promise(resolve => setTimeout(resolve, 0));
         }
 
-        console.log('[handleAnalyze] Chunks saved. Navigating to analysis...');
         router.push('/tools/ex-simulator/analysis');
-    } catch (storageErr: any) {
-        console.error('[handleAnalyze] Storage error:', storageErr);
-        console.error('[handleAnalyze] Storage error:', storageErr);
-        showPrettyAlert('Error', 'No se pudo guardar los datos de análisis: ' + storageErr.message, 'error');
-    }
-};
+    };
 
-const continueAnalysis = async () => {
-    // Navigate to analysis screen with data for hybrid progress display
-    // CHUNKED STORAGE: Same as handleAnalyze
-    const messageLimit = 20000;
-    const chunkSize = 5000;
-    const limitedMessages = parsedMessages.slice(0, messageLimit);
-    const totalChunks = Math.ceil(limitedMessages.length / chunkSize);
+    const handleBack = () => {
+        if (step === 'preview') {
+            setStep('upload');
+        } else if (step === 'upload') {
+            router.back();
+        }
+    };
 
-    // Store metadata first
-    await storage.setItem('exSimulator_analyzeData', JSON.stringify({
-        totalChunks,
-        totalMessages: limitedMessages.length,
-        exName,
-        relationshipType
-    }));
+    // Validation is now handled in analysis.tsx with progress display
 
-    // Store each chunk separately
-    for (let i = 0; i < totalChunks; i++) {
-        const start = i * chunkSize;
-        const end = Math.min(start + chunkSize, limitedMessages.length);
-        const chunk = limitedMessages.slice(start, end);
-        await storage.setItem(`exSimulator_chunk_${i}`, JSON.stringify(chunk));
+    if (step === 'guide') {
+        return <ExportGuide onClose={() => setStep('terms')} onBack={() => router.replace('/(tabs)')} />;
     }
 
-    router.push('/tools/ex-simulator/analysis');
-};
+    if (step === 'terms') {
+        return (
+            <View style={styles.container}>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => setStep('guide')} style={styles.backButton}>
+                        <ArrowLeft size={24} color="white" />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Términos de Uso</Text>
+                </View>
 
-const handleBack = () => {
-    if (step === 'preview') {
-        setStep('upload');
-    } else if (step === 'upload') {
-        router.back();
+                <ScrollView style={{ flex: 1, padding: 24 }}>
+                    <View style={styles.termsCard}>
+                        <Text style={styles.termsTitle}>⚠️ Responsabilidad Legal</Text>
+                        <Text style={styles.termsText}>
+                            Esta herramienta es solo para fines terapéuticos y de auto-análisis ("Coaching").
+                            {"\n\n"}
+                            Al continuar, declaras bajo protesta de decir verdad que:
+                        </Text>
+
+                        <View style={styles.checkItem}>
+                            <CheckCircle size={20} color="#a855f7" />
+                            <Text style={styles.checkText}>Tienes permiso explícito de los participantes para procesar este chat.</Text>
+                        </View>
+
+                        <View style={styles.checkItem}>
+                            <CheckCircle size={20} color="#a855f7" />
+                            <Text style={styles.checkText}>El chat será anonimizado automáticamente antes de enviarse a la IA.</Text>
+                        </View>
+
+                        <View style={styles.checkItem}>
+                            <CheckCircle size={20} color="#a855f7" />
+                            <Text style={styles.checkText}>Asumes total responsabilidad legal por el uso de esta información.</Text>
+                        </View>
+                    </View>
+
+                    <TouchableOpacity
+                        style={styles.acceptButton}
+                        onPress={() => setStep('upload')}
+                    >
+                        <Text style={styles.acceptButtonText}>ACEPTO Y CONTINUAR</Text>
+                    </TouchableOpacity>
+                </ScrollView>
+            </View>
+        );
     }
-};
 
-// Validation is now handled in analysis.tsx with progress display
 
-if (step === 'guide') {
-    return <ExportGuide onClose={() => setStep('terms')} onBack={() => router.replace('/(tabs)')} />;
-}
+    if (step === 'loading' || step === 'analyzing') {
+        const stages = [
+            { label: 'Iniciando análisis...', threshold: 0 },
+            { label: 'Analizando psicología...', threshold: 20 },
+            { label: 'Generando sistema maestro...', threshold: 70 },
+            { label: 'Guardando perfil...', threshold: 95 }
+        ];
 
-if (step === 'terms') {
+        // Display progress - show at least 1% if we're in analyzing mode
+        const displayProgress = step === 'analyzing' && progress === 0 ? 1 : progress;
+
+        return (
+            <View style={styles.loadingContainer}>
+                <View style={styles.loadingIcon}>
+                    <Brain size={48} color="white" />
+                </View>
+                <Text style={styles.loadingTitle}>
+                    {step === 'loading' ? 'Procesando' : 'Analizando'}
+                </Text>
+                <Text style={styles.loadingSubtitle}>Esto puede tomar hasta 5 minutos...</Text>
+
+                {/* Progress Bar */}
+                <View style={styles.progressBarContainer}>
+                    <View style={[styles.progressBarFill, { width: `${Math.max(displayProgress, 3)}%` }]} />
+                </View>
+                <Text style={styles.progressPercentage}>
+                    {displayProgress === 0 ? 'Iniciando...' : `${displayProgress}%`}
+                </Text>
+
+                <View style={styles.stagesCard}>
+                    {stages.map((stage, index) => {
+                        const isActive = displayProgress >= stage.threshold && (index === stages.length - 1 || displayProgress < stages[index + 1].threshold);
+                        const isCompleted = displayProgress >= (index === stages.length - 1 ? 100 : stages[index + 1].threshold);
+
+                        return (
+                            <View key={index} style={styles.stageRow}>
+                                <View style={[styles.stageIndicator, isCompleted && styles.stageIndicatorCompleted, isActive && styles.stageIndicatorActive]}>
+                                    {isCompleted ? (
+                                        <CheckCircle size={14} color="white" />
+                                    ) : isActive ? (
+                                        <ActivityIndicator size={12} color="#a855f7" />
+                                    ) : (
+                                        <View style={styles.stageDot} />
+                                    )}
+                                </View>
+                                <Text style={[styles.stageLabel, (isCompleted || isActive) && styles.stageLabelActive]}>
+                                    {stage.label}
+                                </Text>
+                            </View>
+                        );
+                    })}
+                </View>
+
+                <Text style={styles.engineLabel}>REMI AI ENGINE 2.0</Text>
+
+                {/* Debug panel para ver estado del procesamiento */}
+                {debugLog.length > 0 && (
+                    <View style={{ marginTop: 20, padding: 15, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, maxWidth: '90%' }}>
+                        <Text style={{ color: '#a855f7', fontWeight: 'bold', marginBottom: 8 }}>📋 Estado:</Text>
+                        {debugLog.slice(-5).map((log, i) => (
+                            <Text key={i} style={{ color: '#888', fontSize: 11, marginBottom: 2 }}>{log}</Text>
+                        ))}
+                    </View>
+                )}
+
+            </View>
+        );
+    }
+
+
+    if (step === 'complete') {
+        return (
+            <View style={styles.completeContainer}>
+                <View style={styles.completeIcon}>
+                    <CheckCircle size={48} color="black" />
+                </View>
+                <Text style={styles.completeTitle}>¡Análisis Listo!</Text>
+                <Text style={styles.completeSubtitle}>
+                    {showRegistrationReminder
+                        ? 'Tu perfil se guardó localmente'
+                        : 'Generando simulación...'}
+                </Text>
+
+                {showRegistrationReminder && (
+                    <View style={{ marginTop: 24, alignItems: 'center' }}>
+                        <Text style={{ color: '#fbbf24', fontSize: 14, textAlign: 'center', marginBottom: 16 }}>
+                            💡 Crea una cuenta para guardar tu perfil en la nube y no perderlo
+                        </Text>
+                        <TouchableOpacity
+                            onPress={() => router.push('/auth' as any)}
+                            style={{ backgroundColor: '#8b5cf6', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, marginBottom: 12 }}
+                        >
+                            <Text style={{ color: 'white', fontWeight: 'bold' }}>Crear cuenta gratis</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => router.replace('/(tabs)' as any)}
+                            style={{ padding: 8 }}
+                        >
+                            <Text style={{ color: '#9ca3af' }}>Continuar sin cuenta →</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+            </View>
+        );
+    }
+
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => setStep('guide')} style={styles.backButton}>
-                    <ArrowLeft size={24} color="white" />
+            <LinearGradient colors={['#1a1a2e', '#050505']} style={styles.header}>
+                <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+                    <ArrowLeft size={20} color="white" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Términos de Uso</Text>
-            </View>
-
-            <ScrollView style={{ flex: 1, padding: 24 }}>
-                <View style={styles.termsCard}>
-                    <Text style={styles.termsTitle}>⚠️ Responsabilidad Legal</Text>
-                    <Text style={styles.termsText}>
-                        Esta herramienta es solo para fines terapéuticos y de auto-análisis ("Coaching").
-                        {"\n\n"}
-                        Al continuar, declaras bajo protesta de decir verdad que:
-                    </Text>
-
-                    <View style={styles.checkItem}>
-                        <CheckCircle size={20} color="#a855f7" />
-                        <Text style={styles.checkText}>Tienes permiso explícito de los participantes para procesar este chat.</Text>
-                    </View>
-
-                    <View style={styles.checkItem}>
-                        <CheckCircle size={20} color="#a855f7" />
-                        <Text style={styles.checkText}>El chat será anonimizado automáticamente antes de enviarse a la IA.</Text>
-                    </View>
-
-                    <View style={styles.checkItem}>
-                        <CheckCircle size={20} color="#a855f7" />
-                        <Text style={styles.checkText}>Asumes total responsabilidad legal por el uso de esta información.</Text>
-                    </View>
+                <View>
+                    <Text style={styles.headerTitle}>Nuevo Análisis</Text>
+                    <Text style={styles.headerSubtitle}>REMI</Text>
                 </View>
+            </LinearGradient>
 
-                <TouchableOpacity
-                    style={styles.acceptButton}
-                    onPress={() => setStep('upload')}
-                >
-                    <Text style={styles.acceptButtonText}>ACEPTO Y CONTINUAR</Text>
-                </TouchableOpacity>
-            </ScrollView>
-        </View>
-    );
-}
+            <ScrollView style={styles.scrollView}>
+                {step === 'upload' && (
+                    <>
+                        <Text style={styles.sectionLabel}>SELECCIONA FUENTE DE DATOS</Text>
 
+                        <View style={styles.sourceRow}>
+                            <TouchableOpacity
+                                onPress={() => setImportType('whatsapp')}
+                                style={[styles.sourceCard, styles.sourceCardFull, importType === 'whatsapp' && styles.sourceCardActive]}
+                            >
+                                <View style={[styles.sourceIcon, importType === 'whatsapp' && styles.sourceIconWhatsApp]}>
+                                    <MessageSquare size={24} color={importType === 'whatsapp' ? '#22c55e' : 'white'} />
+                                </View>
+                                <Text style={styles.sourceTitle}>WhatsApp</Text>
+                                <Text style={styles.sourceSubtitle}>Archivo .txt exportado</Text>
+                            </TouchableOpacity>
+                        </View>
 
-if (step === 'loading' || step === 'analyzing') {
-    const stages = [
-        { label: 'Iniciando análisis...', threshold: 0 },
-        { label: 'Analizando psicología...', threshold: 20 },
-        { label: 'Generando sistema maestro...', threshold: 70 },
-        { label: 'Guardando perfil...', threshold: 95 }
-    ];
+                        {/* Old Paste Option Removed as requested */}
 
-    // Display progress - show at least 1% if we're in analyzing mode
-    const displayProgress = step === 'analyzing' && progress === 0 ? 1 : progress;
-
-    return (
-        <View style={styles.loadingContainer}>
-            <View style={styles.loadingIcon}>
-                <Brain size={48} color="white" />
-            </View>
-            <Text style={styles.loadingTitle}>
-                {step === 'loading' ? 'Procesando' : 'Analizando'}
-            </Text>
-            <Text style={styles.loadingSubtitle}>Esto puede tomar hasta 5 minutos...</Text>
-
-            {/* Progress Bar */}
-            <View style={styles.progressBarContainer}>
-                <View style={[styles.progressBarFill, { width: `${Math.max(displayProgress, 3)}%` }]} />
-            </View>
-            <Text style={styles.progressPercentage}>
-                {displayProgress === 0 ? 'Iniciando...' : `${displayProgress}%`}
-            </Text>
-
-            <View style={styles.stagesCard}>
-                {stages.map((stage, index) => {
-                    const isActive = displayProgress >= stage.threshold && (index === stages.length - 1 || displayProgress < stages[index + 1].threshold);
-                    const isCompleted = displayProgress >= (index === stages.length - 1 ? 100 : stages[index + 1].threshold);
-
-                    return (
-                        <View key={index} style={styles.stageRow}>
-                            <View style={[styles.stageIndicator, isCompleted && styles.stageIndicatorCompleted, isActive && styles.stageIndicatorActive]}>
-                                {isCompleted ? (
-                                    <CheckCircle size={14} color="white" />
-                                ) : isActive ? (
-                                    <ActivityIndicator size={12} color="#a855f7" />
-                                ) : (
-                                    <View style={styles.stageDot} />
-                                )}
+                        <TouchableOpacity
+                            onPress={handleFileUpload}
+                            style={styles.uploadArea}
+                        >
+                            <View style={styles.uploadIcon}>
+                                <Upload size={24} color="white" />
                             </View>
-                            <Text style={[styles.stageLabel, (isCompleted || isActive) && styles.stageLabelActive]}>
-                                {stage.label}
+                            <Text style={styles.uploadTitle}>Subir Archivo .txt</Text>
+                            <Text style={styles.uploadSubtitle}>
+                                Soporta historiales completos (10k - 200k+ msgs). Analizamos todo automáticamente.
+                            </Text>
+                        </TouchableOpacity>
+                    </>
+                )}
+
+                {step === 'preview' && (
+                    <View>
+                        <Text style={styles.sectionLabel}>CONFIRMAR IDENTIDAD</Text>
+
+                        <View style={styles.statsCard}>
+                            <Text style={styles.statsTitle}>Conversación detectada</Text>
+                            <Text style={styles.statsValue}>{parsedCount.toLocaleString()} mensajes</Text>
+                            <Text style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
+                                Entre: {detectedParticipants.map(p => p.name).join(' y ')}
                             </Text>
                         </View>
-                    );
-                })}
-            </View>
 
-            <Text style={styles.engineLabel}>REMI AI ENGINE 2.0</Text>
+                        <View style={styles.roleSelectionContainer}>
+                            <Text style={styles.sectionTitle}>¿Quién eres tú?</Text>
+                            <Text style={styles.sectionSubtitle}>Selecciona tu nombre para que la IA simule a la otra persona.</Text>
 
-            {/* Debug panel para ver estado del procesamiento */}
-            {debugLog.length > 0 && (
-                <View style={{ marginTop: 20, padding: 15, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, maxWidth: '90%' }}>
-                    <Text style={{ color: '#a855f7', fontWeight: 'bold', marginBottom: 8 }}>📋 Estado:</Text>
-                    {debugLog.slice(-5).map((log, i) => (
-                        <Text key={i} style={{ color: '#888', fontSize: 11, marginBottom: 2 }}>{log}</Text>
-                    ))}
-                </View>
-            )}
+                            {detectedParticipants.map((participant, index) => {
+                                const isMe = userRole === 'me' && exName !== participant.name;
+                                const isEx = exName === participant.name;
 
-        </View>
-    );
-}
+                                return (
+                                    <TouchableOpacity
+                                        key={index}
+                                        style={[
+                                            styles.roleButton,
+                                            isMe && styles.roleButtonActive,
+                                            isEx && { opacity: 0.5 } // Gray out if selected as ex
+                                        ]}
+                                        onPress={() => {
+                                            // "Yo soy este"
+                                            const other = detectedParticipants.find(p => p.name !== participant.name);
+                                            if (other) {
+                                                setExName(other.name);
+                                                setUserRole('me');
+                                            }
+                                        }}
+                                    >
+                                        <View style={styles.avatarPlaceholder}>
+                                            <Text style={styles.avatarText}>{participant.name.charAt(0)}</Text>
+                                        </View>
+                                        <View style={styles.roleInfo}>
+                                            <Text style={styles.roleName}>
+                                                {participant.name}
+                                                {isMe && <Text style={{ color: '#4fd1c5' }}> (Tú)</Text>}
+                                                {isEx && <Text style={{ color: '#a855f7' }}> (Simulación)</Text>}
+                                            </Text>
+                                            <Text style={styles.roleCount}>{participant.count} mensajes</Text>
+                                        </View>
+                                        {isMe && (
+                                            <View style={styles.checkIcon}>
+                                                <CheckCircle color="#4fd1c5" size={24} />
+                                            </View>
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            })}
 
+                            {/* Fallback manual input if detection fails or users wants to override */}
+                            <TouchableOpacity
+                                style={{ marginTop: 16, padding: 10, alignItems: 'center' }}
+                                onPress={() => setShowManualInput(!showManualInput)}
+                            >
+                                <Text style={{ color: '#666', fontSize: 12, textDecorationLine: 'underline' }}>
+                                    ¿No aparecen los nombres correctos? Ingresar manualmente
+                                </Text>
+                            </TouchableOpacity>
 
-if (step === 'complete') {
-    return (
-        <View style={styles.completeContainer}>
-            <View style={styles.completeIcon}>
-                <CheckCircle size={48} color="black" />
-            </View>
-            <Text style={styles.completeTitle}>¡Análisis Listo!</Text>
-            <Text style={styles.completeSubtitle}>
-                {showRegistrationReminder
-                    ? 'Tu perfil se guardó localmente'
-                    : 'Generando simulación...'}
-            </Text>
+                            {showManualInput && (
+                                <View style={{ marginTop: 12, backgroundColor: 'rgba(168, 85, 247, 0.1)', borderRadius: 12, padding: 16 }}>
+                                    <Text style={{ color: '#fff', fontSize: 14, marginBottom: 8 }}>Escribe el nombre exacto:</Text>
+                                    <TextInput
+                                        style={{
+                                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                            borderRadius: 8,
+                                            padding: 12,
+                                            color: '#fff',
+                                            fontSize: 16,
+                                            borderWidth: 1,
+                                            borderColor: '#a855f7'
+                                        }}
+                                        placeholder="ej: María García"
+                                        placeholderTextColor="#666"
+                                        value={exName}
+                                        onChangeText={setExName}
+                                        autoCapitalize="words"
+                                    />
+                                </View>
+                            )}
 
-            {showRegistrationReminder && (
-                <View style={{ marginTop: 24, alignItems: 'center' }}>
-                    <Text style={{ color: '#fbbf24', fontSize: 14, textAlign: 'center', marginBottom: 16 }}>
-                        💡 Crea una cuenta para guardar tu perfil en la nube y no perderlo
-                    </Text>
-                    <TouchableOpacity
-                        onPress={() => router.push('/auth' as any)}
-                        style={{ backgroundColor: '#8b5cf6', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, marginBottom: 12 }}
-                    >
-                        <Text style={{ color: 'white', fontWeight: 'bold' }}>Crear cuenta gratis</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => router.replace('/(tabs)' as any)}
-                        style={{ padding: 8 }}
-                    >
-                        <Text style={{ color: '#9ca3af' }}>Continuar sin cuenta →</Text>
-                    </TouchableOpacity>
-                </View>
-            )}
-        </View>
-    );
-}
+                            {exName && (
+                                <View style={styles.confirmationBox}>
+                                    <Text style={styles.confirmationText}>
+                                        🔮 Creando simulación de: <Text style={{ fontWeight: 'bold', color: '#fff' }}>{exName}</Text>
+                                    </Text>
+                                </View>
+                            )}
 
-return (
-    <View style={styles.container}>
-        <LinearGradient colors={['#1a1a2e', '#050505']} style={styles.header}>
-            <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-                <ArrowLeft size={20} color="white" />
-            </TouchableOpacity>
-            <View>
-                <Text style={styles.headerTitle}>Nuevo Análisis</Text>
-                <Text style={styles.headerSubtitle}>REMI</Text>
-            </View>
-        </LinearGradient>
+                            {/* 🕊️ SELECTOR DE TIPO DE RELACIÓN - Para evitar confusiones */}
+                            {exName && (
+                                <View style={{ marginTop: 20, marginBottom: 10 }}>
+                                    <Text style={styles.sectionTitle}>¿Qué relación tienes con {exName}?</Text>
+                                    <Text style={{ color: '#888', fontSize: 12, marginBottom: 12, textAlign: 'center' }}>
+                                        Esto ayuda a la IA a ser más precisa y respetuosa
+                                    </Text>
 
-        <ScrollView style={styles.scrollView}>
-            {step === 'upload' && (
-                <>
-                    <Text style={styles.sectionLabel}>SELECCIONA FUENTE DE DATOS</Text>
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+                                        {/* Pareja Actual */}
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.relationTypeButton,
+                                                relationshipType === 'partner' && styles.relationTypeButtonActive
+                                            ]}
+                                            onPress={() => setRelationshipType('partner')}
+                                        >
+                                            <Text style={styles.relationTypeEmoji}>❤️</Text>
+                                            <Text style={[
+                                                styles.relationTypeText,
+                                                relationshipType === 'partner' && styles.relationTypeTextActive
+                                            ]}>Pareja</Text>
+                                        </TouchableOpacity>
 
-                    <View style={styles.sourceRow}>
-                        <TouchableOpacity
-                            onPress={() => setImportType('whatsapp')}
-                            style={[styles.sourceCard, styles.sourceCardFull, importType === 'whatsapp' && styles.sourceCardActive]}
-                        >
-                            <View style={[styles.sourceIcon, importType === 'whatsapp' && styles.sourceIconWhatsApp]}>
-                                <MessageSquare size={24} color={importType === 'whatsapp' ? '#22c55e' : 'white'} />
-                            </View>
-                            <Text style={styles.sourceTitle}>WhatsApp</Text>
-                            <Text style={styles.sourceSubtitle}>Archivo .txt exportado</Text>
-                        </TouchableOpacity>
-                    </View>
+                                        {/* Ex-Pareja */}
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.relationTypeButton,
+                                                relationshipType === 'ex' && styles.relationTypeButtonActive
+                                            ]}
+                                            onPress={() => setRelationshipType('ex')}
+                                        >
+                                            <Text style={styles.relationTypeEmoji}>💔</Text>
+                                            <Text style={[
+                                                styles.relationTypeText,
+                                                relationshipType === 'ex' && styles.relationTypeTextActive
+                                            ]}>Ex-Pareja</Text>
+                                        </TouchableOpacity>
 
-                    {/* Old Paste Option Removed as requested */}
+                                        {/* Amigo/a */}
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.relationTypeButton,
+                                                relationshipType === 'friend' && styles.relationTypeButtonActive
+                                            ]}
+                                            onPress={() => setRelationshipType('friend')}
+                                        >
+                                            <Text style={styles.relationTypeEmoji}>👫</Text>
+                                            <Text style={[
+                                                styles.relationTypeText,
+                                                relationshipType === 'friend' && styles.relationTypeTextActive
+                                            ]}>Amigo/a</Text>
+                                        </TouchableOpacity>
 
-                    <TouchableOpacity
-                        onPress={handleFileUpload}
-                        style={styles.uploadArea}
-                    >
-                        <View style={styles.uploadIcon}>
-                            <Upload size={24} color="white" />
-                        </View>
-                        <Text style={styles.uploadTitle}>Subir Archivo .txt</Text>
-                        <Text style={styles.uploadSubtitle}>
-                            Soporta historiales completos (10k - 200k+ msgs). Analizamos todo automáticamente.
-                        </Text>
-                    </TouchableOpacity>
-                </>
-            )}
+                                        {/* Familiar */}
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.relationTypeButton,
+                                                relationshipType === 'family' && styles.relationTypeButtonActive
+                                            ]}
+                                            onPress={() => setRelationshipType('family')}
+                                        >
+                                            <Text style={styles.relationTypeEmoji}>👨‍👩‍👧</Text>
+                                            <Text style={[
+                                                styles.relationTypeText,
+                                                relationshipType === 'family' && styles.relationTypeTextActive
+                                            ]}>Familiar</Text>
+                                        </TouchableOpacity>
 
-            {step === 'preview' && (
-                <View>
-                    <Text style={styles.sectionLabel}>CONFIRMAR IDENTIDAD</Text>
-
-                    <View style={styles.statsCard}>
-                        <Text style={styles.statsTitle}>Conversación detectada</Text>
-                        <Text style={styles.statsValue}>{parsedCount.toLocaleString()} mensajes</Text>
-                        <Text style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
-                            Entre: {detectedParticipants.map(p => p.name).join(' y ')}
-                        </Text>
-                    </View>
-
-                    <View style={styles.roleSelectionContainer}>
-                        <Text style={styles.sectionTitle}>¿Quién eres tú?</Text>
-                        <Text style={styles.sectionSubtitle}>Selecciona tu nombre para que la IA simule a la otra persona.</Text>
-
-                        {detectedParticipants.map((participant, index) => {
-                            const isMe = userRole === 'me' && exName !== participant.name;
-                            const isEx = exName === participant.name;
-
-                            return (
-                                <TouchableOpacity
-                                    key={index}
-                                    style={[
-                                        styles.roleButton,
-                                        isMe && styles.roleButtonActive,
-                                        isEx && { opacity: 0.5 } // Gray out if selected as ex
-                                    ]}
-                                    onPress={() => {
-                                        // "Yo soy este"
-                                        const other = detectedParticipants.find(p => p.name !== participant.name);
-                                        if (other) {
-                                            setExName(other.name);
-                                            setUserRole('me');
-                                        }
-                                    }}
-                                >
-                                    <View style={styles.avatarPlaceholder}>
-                                        <Text style={styles.avatarText}>{participant.name.charAt(0)}</Text>
+                                        {/* Fallecido - UI sensible */}
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.relationTypeButton,
+                                                relationshipType === 'deceased' && styles.relationTypeButtonDeceased
+                                            ]}
+                                            onPress={() => setRelationshipType('deceased')}
+                                        >
+                                            <Text style={styles.relationTypeEmoji}>🕊️</Text>
+                                            <Text style={[
+                                                styles.relationTypeText,
+                                                relationshipType === 'deceased' && styles.relationTypeTextActive
+                                            ]}>Fallecido/a</Text>
+                                        </TouchableOpacity>
                                     </View>
-                                    <View style={styles.roleInfo}>
-                                        <Text style={styles.roleName}>
-                                            {participant.name}
-                                            {isMe && <Text style={{ color: '#4fd1c5' }}> (Tú)</Text>}
-                                            {isEx && <Text style={{ color: '#a855f7' }}> (Simulación)</Text>}
-                                        </Text>
-                                        <Text style={styles.roleCount}>{participant.count} mensajes</Text>
-                                    </View>
-                                    {isMe && (
-                                        <View style={styles.checkIcon}>
-                                            <CheckCircle color="#4fd1c5" size={24} />
+
+                                    {/* Mensaje especial para fallecidos */}
+                                    {relationshipType === 'deceased' && (
+                                        <View style={{
+                                            marginTop: 12,
+                                            padding: 12,
+                                            backgroundColor: 'rgba(147, 112, 219, 0.15)',
+                                            borderRadius: 12,
+                                            borderWidth: 1,
+                                            borderColor: 'rgba(147, 112, 219, 0.3)'
+                                        }}>
+                                            <Text style={{ color: '#b8a9c9', fontSize: 13, textAlign: 'center', lineHeight: 18 }}>
+                                                💜 Entendemos lo difícil que es. Esta simulación puede ayudarte a procesar emociones,
+                                                recordar momentos o tener conversaciones que quedaron pendientes.
+                                            </Text>
                                         </View>
                                     )}
-                                </TouchableOpacity>
-                            );
-                        })}
-
-                        {/* Fallback manual input if detection fails or users wants to override */}
-                        <TouchableOpacity
-                            style={{ marginTop: 16, padding: 10, alignItems: 'center' }}
-                            onPress={() => setShowManualInput(!showManualInput)}
-                        >
-                            <Text style={{ color: '#666', fontSize: 12, textDecorationLine: 'underline' }}>
-                                ¿No aparecen los nombres correctos? Ingresar manualmente
-                            </Text>
-                        </TouchableOpacity>
-
-                        {showManualInput && (
-                            <View style={{ marginTop: 12, backgroundColor: 'rgba(168, 85, 247, 0.1)', borderRadius: 12, padding: 16 }}>
-                                <Text style={{ color: '#fff', fontSize: 14, marginBottom: 8 }}>Escribe el nombre exacto:</Text>
-                                <TextInput
-                                    style={{
-                                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                                        borderRadius: 8,
-                                        padding: 12,
-                                        color: '#fff',
-                                        fontSize: 16,
-                                        borderWidth: 1,
-                                        borderColor: '#a855f7'
-                                    }}
-                                    placeholder="ej: María García"
-                                    placeholderTextColor="#666"
-                                    value={exName}
-                                    onChangeText={setExName}
-                                    autoCapitalize="words"
-                                />
-                            </View>
-                        )}
-
-                        {exName && (
-                            <View style={styles.confirmationBox}>
-                                <Text style={styles.confirmationText}>
-                                    🔮 Creando simulación de: <Text style={{ fontWeight: 'bold', color: '#fff' }}>{exName}</Text>
-                                </Text>
-                            </View>
-                        )}
-
-                        {/* 🕊️ SELECTOR DE TIPO DE RELACIÓN - Para evitar confusiones */}
-                        {exName && (
-                            <View style={{ marginTop: 20, marginBottom: 10 }}>
-                                <Text style={styles.sectionTitle}>¿Qué relación tienes con {exName}?</Text>
-                                <Text style={{ color: '#888', fontSize: 12, marginBottom: 12, textAlign: 'center' }}>
-                                    Esto ayuda a la IA a ser más precisa y respetuosa
-                                </Text>
-
-                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-                                    {/* Pareja Actual */}
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.relationTypeButton,
-                                            relationshipType === 'partner' && styles.relationTypeButtonActive
-                                        ]}
-                                        onPress={() => setRelationshipType('partner')}
-                                    >
-                                        <Text style={styles.relationTypeEmoji}>❤️</Text>
-                                        <Text style={[
-                                            styles.relationTypeText,
-                                            relationshipType === 'partner' && styles.relationTypeTextActive
-                                        ]}>Pareja</Text>
-                                    </TouchableOpacity>
-
-                                    {/* Ex-Pareja */}
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.relationTypeButton,
-                                            relationshipType === 'ex' && styles.relationTypeButtonActive
-                                        ]}
-                                        onPress={() => setRelationshipType('ex')}
-                                    >
-                                        <Text style={styles.relationTypeEmoji}>💔</Text>
-                                        <Text style={[
-                                            styles.relationTypeText,
-                                            relationshipType === 'ex' && styles.relationTypeTextActive
-                                        ]}>Ex-Pareja</Text>
-                                    </TouchableOpacity>
-
-                                    {/* Amigo/a */}
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.relationTypeButton,
-                                            relationshipType === 'friend' && styles.relationTypeButtonActive
-                                        ]}
-                                        onPress={() => setRelationshipType('friend')}
-                                    >
-                                        <Text style={styles.relationTypeEmoji}>👫</Text>
-                                        <Text style={[
-                                            styles.relationTypeText,
-                                            relationshipType === 'friend' && styles.relationTypeTextActive
-                                        ]}>Amigo/a</Text>
-                                    </TouchableOpacity>
-
-                                    {/* Familiar */}
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.relationTypeButton,
-                                            relationshipType === 'family' && styles.relationTypeButtonActive
-                                        ]}
-                                        onPress={() => setRelationshipType('family')}
-                                    >
-                                        <Text style={styles.relationTypeEmoji}>👨‍👩‍👧</Text>
-                                        <Text style={[
-                                            styles.relationTypeText,
-                                            relationshipType === 'family' && styles.relationTypeTextActive
-                                        ]}>Familiar</Text>
-                                    </TouchableOpacity>
-
-                                    {/* Fallecido - UI sensible */}
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.relationTypeButton,
-                                            relationshipType === 'deceased' && styles.relationTypeButtonDeceased
-                                        ]}
-                                        onPress={() => setRelationshipType('deceased')}
-                                    >
-                                        <Text style={styles.relationTypeEmoji}>🕊️</Text>
-                                        <Text style={[
-                                            styles.relationTypeText,
-                                            relationshipType === 'deceased' && styles.relationTypeTextActive
-                                        ]}>Fallecido/a</Text>
-                                    </TouchableOpacity>
                                 </View>
-
-                                {/* Mensaje especial para fallecidos */}
-                                {relationshipType === 'deceased' && (
-                                    <View style={{
-                                        marginTop: 12,
-                                        padding: 12,
-                                        backgroundColor: 'rgba(147, 112, 219, 0.15)',
-                                        borderRadius: 12,
-                                        borderWidth: 1,
-                                        borderColor: 'rgba(147, 112, 219, 0.3)'
-                                    }}>
-                                        <Text style={{ color: '#b8a9c9', fontSize: 13, textAlign: 'center', lineHeight: 18 }}>
-                                            💜 Entendemos lo difícil que es. Esta simulación puede ayudarte a procesar emociones,
-                                            recordar momentos o tener conversaciones que quedaron pendientes.
-                                        </Text>
-                                    </View>
-                                )}
-                            </View>
-                        )}
-                    </View>
-
-                    <TouchableOpacity
-                        style={[
-                            styles.primaryButton,
-                            (isAnalyzing || !exName || !relationshipType) && styles.disabledButton // Use global isAnalyzing
-                        ]}
-                        disabled={isAnalyzing || !exName || !relationshipType} // Use global isAnalyzing
-                        onPress={handleAnalyze}
-                    >
-                        {isAnalyzing ? (
-                            <ActivityIndicator color="#000" />
-                        ) : (
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Brain color="#000" size={20} style={{ marginRight: 8 }} />
-                                <Text style={styles.primaryButtonText}>Comenzar Análisis IA</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                </View>
-            )}
-
-        </ScrollView >
-
-        {/* Custom Pretty Alert Modal */}
-        {
-            customAlert.visible && (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }]}>
-                    <View style={{ width: '85%', maxWidth: 340, backgroundColor: '#1E1E1E', borderRadius: 20, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#333' }}>
-                        <View style={{
-                            width: 60, height: 60, borderRadius: 30,
-                            backgroundColor: customAlert.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
-                            alignItems: 'center', justifyContent: 'center', marginBottom: 16
-                        }}>
-                            {customAlert.type === 'error' && <View style={{ width: 24, height: 2, backgroundColor: '#ef4444', transform: [{ rotate: '45deg' }], position: 'absolute' }} />}
-                            {customAlert.type === 'error' && <View style={{ width: 24, height: 2, backgroundColor: '#ef4444', transform: [{ rotate: '-45deg' }], position: 'absolute' }} />}
-
-                            {customAlert.type === 'success' && <View style={{ width: 10, height: 18, borderBottomWidth: 3, borderRightWidth: 3, borderColor: '#22c55e', transform: [{ rotate: '45deg' }], marginTop: -2 }} />}
-
-                            {customAlert.type === 'info' && <Text style={{ fontSize: 24 }}>ℹ️</Text>}
-                        </View>
-
-                        <Text style={{ color: '#fff', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 12 }}>
-                            {customAlert.title}
-                        </Text>
-
-                        <Text style={{ color: '#9ca3af', fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 24 }}>
-                            {customAlert.message}
-                        </Text>
-
-                        <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
-                            {customAlert.buttons && customAlert.buttons.length > 0 ? (
-                                customAlert.buttons.map((btn, i) => (
-                                    <TouchableOpacity
-                                        key={i}
-                                        onPress={() => {
-                                            if (btn.onPress) btn.onPress();
-                                            closePrettyAlert();
-                                        }}
-                                        style={{
-                                            flex: 1,
-                                            backgroundColor: btn.style === 'cancel' ? '#333' : '#a855f7',
-                                            padding: 14,
-                                            borderRadius: 12,
-                                            alignItems: 'center'
-                                        }}
-                                    >
-                                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>{btn.text}</Text>
-                                    </TouchableOpacity>
-                                ))
-                            ) : (
-                                <TouchableOpacity
-                                    onPress={closePrettyAlert}
-                                    style={{ flex: 1, backgroundColor: '#a855f7', padding: 14, borderRadius: 12, alignItems: 'center' }}
-                                >
-                                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>OK</Text>
-                                </TouchableOpacity>
                             )}
                         </View>
-                    </View>
-                </View>
-            )
-        }
 
-    </View >
-);
+                        <TouchableOpacity
+                            style={[
+                                styles.primaryButton,
+                                (isAnalyzing || !exName || !relationshipType) && styles.disabledButton // Use global isAnalyzing
+                            ]}
+                            disabled={isAnalyzing || !exName || !relationshipType} // Use global isAnalyzing
+                            onPress={handleAnalyze}
+                        >
+                            {isAnalyzing ? (
+                                <ActivityIndicator color="#000" />
+                            ) : (
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Brain color="#000" size={20} style={{ marginRight: 8 }} />
+                                    <Text style={styles.primaryButtonText}>Comenzar Análisis IA</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+            </ScrollView >
+
+            {/* Custom Pretty Alert Modal */}
+            {
+                customAlert.visible && (
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }]}>
+                        <View style={{ width: '85%', maxWidth: 340, backgroundColor: '#1E1E1E', borderRadius: 20, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#333' }}>
+                            <View style={{
+                                width: 60, height: 60, borderRadius: 30,
+                                backgroundColor: customAlert.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                                alignItems: 'center', justifyContent: 'center', marginBottom: 16
+                            }}>
+                                {customAlert.type === 'error' && <View style={{ width: 24, height: 2, backgroundColor: '#ef4444', transform: [{ rotate: '45deg' }], position: 'absolute' }} />}
+                                {customAlert.type === 'error' && <View style={{ width: 24, height: 2, backgroundColor: '#ef4444', transform: [{ rotate: '-45deg' }], position: 'absolute' }} />}
+
+                                {customAlert.type === 'success' && <View style={{ width: 10, height: 18, borderBottomWidth: 3, borderRightWidth: 3, borderColor: '#22c55e', transform: [{ rotate: '45deg' }], marginTop: -2 }} />}
+
+                                {customAlert.type === 'info' && <Text style={{ fontSize: 24 }}>ℹ️</Text>}
+                            </View>
+
+                            <Text style={{ color: '#fff', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 12 }}>
+                                {customAlert.title}
+                            </Text>
+
+                            <Text style={{ color: '#9ca3af', fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 24 }}>
+                                {customAlert.message}
+                            </Text>
+
+                            <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+                                {customAlert.buttons && customAlert.buttons.length > 0 ? (
+                                    customAlert.buttons.map((btn, i) => (
+                                        <TouchableOpacity
+                                            key={i}
+                                            onPress={() => {
+                                                if (btn.onPress) btn.onPress();
+                                                closePrettyAlert();
+                                            }}
+                                            style={{
+                                                flex: 1,
+                                                backgroundColor: btn.style === 'cancel' ? '#333' : '#a855f7',
+                                                padding: 14,
+                                                borderRadius: 12,
+                                                alignItems: 'center'
+                                            }}
+                                        >
+                                            <Text style={{ color: '#fff', fontWeight: 'bold' }}>{btn.text}</Text>
+                                        </TouchableOpacity>
+                                    ))
+                                ) : (
+                                    <TouchableOpacity
+                                        onPress={closePrettyAlert}
+                                        style={{ flex: 1, backgroundColor: '#a855f7', padding: 14, borderRadius: 12, alignItems: 'center' }}
+                                    >
+                                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>OK</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        </View>
+                    </View>
+                )
+            }
+
+        </View >
+    );
 }
 
 const styles = StyleSheet.create({
