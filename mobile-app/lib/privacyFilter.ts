@@ -143,7 +143,10 @@ function sanitizeSenderName(sender: string, reverseMap: Map<string, string>): st
     }
 
     // If sender is full name, keep first name
-    const match = sender.match(FULL_NAME_REGEX);
+    // If sender is full name, keep first name
+    // NOTE: We use a non-global regex here to ensure we get capture groups (match[1]), 
+    // unlike the global FULL_NAME_REGEX which returns only matched strings.
+    const match = sender.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\b/); // No /g flag
     if (match) {
         const firstName = match[1];
         // Only mask if not common words
