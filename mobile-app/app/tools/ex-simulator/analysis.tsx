@@ -86,9 +86,44 @@ export default function AnalysisScreen() {
 
     const checkForAnalysisOrProfile = async () => {
         try {
+            console.log('[AnalysisScreen] STARTING CHECK');
+
             // Check if we need to START a new analysis
             const analyzeData = await storage.getItem('exSimulator_analyzeData');
+
+            // 0. CHECK FOR RESUMABLE ACTIVE ANALYSIS (Robustness for refresh)
+
+            const activeAnalyses = await BackgroundAnalysisManager.getActiveAnalyses();
+            if (activeAnalyses.length > 0 && !analyzeData) {
+                const runningId = activeAnalyses[0];
+                console.log('[AnalysisScreen] Resuming active analysis:', runningId);
+                const state = await BackgroundAnalysisManager.getState(runningId);
+
+                if (state && (state.status === 'running' || state.status === 'paused')) {
+                    setIsAnalyzing(true);
+                    setAnalysisState(state);
+                    setLoading(false);
+
+                    BackgroundAnalysisManager.onProgressUpdate(runningId, (updatedState) => {
+                        setAnalysisState(updatedState);
+                        setAnalysisLogs(updatedState.logs || []);
+                        if (updatedState.status === 'completed') {
+                            setIsAnalyzing(false);
+                            const finalProfile = updatedState.result;
+                            const profileData = (finalProfile as any).profile || finalProfile;
+                            setProfile(profileData ? { ...finalProfile, ...profileData } : finalProfile);
+                        }
+                    });
+
+                    BackgroundAnalysisManager.onAnalysisCompleted(() => {
+                        setTimeout(() => router.replace('/'), 1000);
+                    });
+                    return;
+                }
+            }
+
             if (analyzeData) {
+
                 // Check if using chunked storage (new format) or legacy format
                 const metadata = JSON.parse(analyzeData);
                 let parsedMessages: any[];
@@ -117,28 +152,58 @@ export default function AnalysisScreen() {
                     console.log(`[AnalysisScreen] Reassembled ${parsedMessages.length} messages from chunks`);
                 } else {
                     // LEGACY: Old format with parsedMessages directly in storage
+                    console.log('[AnalysisScreen] Using legacy storage format');
                     parsedMessages = metadata.parsedMessages;
                     exName = metadata.exName;
                     relationshipType = metadata.relationshipType;
                     userName = metadata.userName;
                 }
 
-                await storage.removeItem('exSimulator_analyzeData'); // Clear so we don't re-run
+                // REMOVED premature deletion to prevent data loss on error
+                // await storage.removeItem('exSimulator_analyzeData');
 
                 // 🔒 CHECK MONTHLY PROFILE LIMIT BEFORE PROCEEDING
-                const { data: { user } } = await supabase.auth.getUser();
+                console.log('[AnalysisScreen] Checking auth user...');
+
+
+                // Add Timeout to getUser to prevent hang
+                const userPromise = supabase.auth.getUser();
+                const timeoutPromise = new Promise<{ data: { user: any }, error: any }>((_, reject) =>
+                    setTimeout(() => reject(new Error('Auth check timed out')), 8000)
+                );
+
+                // @ts-ignore
+                const result: any = await Promise.race([userPromise, timeoutPromise]);
+                const user = result?.data?.user || null;
+                const authError = result?.error;
+
+                if (authError) {
+                    console.log('[AnalysisScreen] Auth check returned error (continuing as guest):', authError.message);
+                }
+
+                console.log('[AnalysisScreen] User found:', user?.id);
+
                 let subscriptionTier = 'survivor'; // default
                 if (user) {
+                    console.log('[AnalysisScreen] Fetching profile tier...');
+
+
                     const { data: profile } = await supabase
                         .from('profiles')
                         .select('subscription_tier')
-                        .eq('user_id', user.id)
+                        .eq('id', user.id)
                         .single();
                     subscriptionTier = profile?.subscription_tier || 'survivor';
+                    console.log('[AnalysisScreen] Subscription tier:', subscriptionTier);
                 }
 
+                console.log('[AnalysisScreen] Checking monthly limits...');
+                console.log('[AnalysisScreen] Checking monthly limits...');
                 const limitCheck = await canCreateProfileThisMonth(subscriptionTier);
+                console.log('[AnalysisScreen] Limit check result:', JSON.stringify(limitCheck));
+
                 if (!limitCheck.canCreate) {
+                    console.log('[AnalysisScreen] Limit reached, aborting.');
                     setLoading(false);
                     showAlert(
                         '🚫 Límite Alcanzado',
@@ -152,18 +217,24 @@ export default function AnalysisScreen() {
                     return;
                 }
 
+                console.log('[AnalysisScreen] Limit check passed. Setting analyzing=true');
+
                 setIsAnalyzing(true);
                 setLoading(false);
 
                 // Start background analysis with progress tracking
                 const profileId = `profile_${Date.now()}`;
+                console.log('[AnalysisScreen] Generated ProfileID:', profileId);
 
                 // Subscribe to progress updates
+                console.log('[AnalysisScreen] Subscribing to progress updates...');
                 const unsubscribe = BackgroundAnalysisManager.onProgressUpdate(profileId, (state) => {
+                    console.log('[AnalysisScreen] Progress Update:', state.status, state.progress);
                     setAnalysisState(state);
                     setAnalysisLogs(state.logs || []);
 
                     if (state.status === 'completed') {
+                        console.log('[AnalysisScreen] Analysis completed!');
                         setIsAnalyzing(false);
                         // Flatten the result so UI can access properties directly
                         const finalProfile = state.result;
@@ -193,65 +264,92 @@ export default function AnalysisScreen() {
                     }
 
                     if (state.status === 'error') {
+                        console.error('[AnalysisScreen] Analysis failed:', state.error);
                         setIsAnalyzing(false);
                         showAlert('Error', state.error || 'Error en el análisis', [{ text: 'OK' }], 'error');
                     }
                 });
 
                 // ✨ VALIDATE RELATIONSHIP TYPE BEFORE ANALYSIS
+                console.log('[AnalysisScreen] Validating relationship type...');
                 const validation = validateRelationshipType(parsedMessages, relationshipType || 'ex', exName);
                 console.log('[Analysis] Validation result:', validation);
 
                 if (!validation.isValid && validation.detectedType !== 'unknown') {
+                    console.log('[AnalysisScreen] Validation warning shown');
                     // Show custom warning UI instead of Alert (safer for Web)
                     setValidationWarning({
                         validation,
                         onConfirm: async () => {
                             setValidationWarning(null); // Clear warning
                             // Start the analysis
+                            console.log('[AnalysisScreen] Warning confirmed. Starting analysis...');
                             await BackgroundAnalysisManager.startAnalysis(
                                 profileId,
                                 parsedMessages,
                                 exName,
                                 relationshipType || 'ex'
                             );
+                            // Cleanup after successful start
+                            await storage.removeItem('exSimulator_analyzeData');
                         },
-                        onCancel: () => {
+                        onCancel: async () => {
+                            console.log('[AnalysisScreen] Warning cancelled');
                             setIsAnalyzing(false);
                             setLoading(false);
                             setValidationWarning(null);
+                            // Cleanup on cancel to prevent loop
+                            await storage.removeItem('exSimulator_analyzeData');
                             router.back();
                         }
                     });
                 } else {
                     // Validation passed or unknown - start analysis
+                    console.log('[AnalysisScreen] Validation passed. Starting analysis...');
                     await BackgroundAnalysisManager.startAnalysis(
                         profileId,
                         parsedMessages,
                         exName,
                         relationshipType || 'ex'
                     );
+                    // Cleanup after successful start
+                    await storage.removeItem('exSimulator_analyzeData');
                 }
 
                 return;
             }
 
             // No new analysis - try to load existing profile
+
+
+            console.log('[AnalysisScreen] No new analysis data found. Checking stored profile...');
             let stored = await storage.getItem('analysis_view_profile');
             if (stored) {
+                console.log('[AnalysisScreen] Loaded analysis_view_profile');
                 const parsed = JSON.parse(stored);
                 // Flatten: merge inner profile properties to top level
                 setProfile(parsed.profile ? { ...parsed, ...parsed.profile } : parsed);
             } else {
                 stored = await storage.getItem('exSimulator_currentProfile');
                 if (stored) {
+                    console.log('[AnalysisScreen] Loaded exSimulator_currentProfile');
                     const parsed = JSON.parse(stored);
                     setProfile(parsed.profile ? { ...parsed, ...parsed.profile } : parsed);
+                } else {
+                    console.log('[AnalysisScreen] No profile found anywhere.');
                 }
             }
-        } catch (error) {
-            console.error('Error loading:', error);
+        } catch (error: any) {
+            console.error('[AnalysisScreen] CRITICAL ERROR in checkForAnalysisOrProfile:', error);
+            // Show error to user so they know why it failed (instead of just "No Profile")
+            showAlert(
+                'Error de Inicio',
+                `No se pudo iniciar el análisis.\n\nDetalle: ${error.message || 'Error desconocido'}`,
+                [{ text: 'OK', onPress: () => router.back() }],
+                'error'
+            );
         } finally {
+            console.log('[AnalysisScreen] finally block reached. Setting loading=false');
             setLoading(false);
         }
     };
@@ -331,9 +429,13 @@ export default function AnalysisScreen() {
     }
 
     // === ANALYSIS IN PROGRESS SCREEN ===
-    if (isAnalyzing && analysisState) {
-        const progress = analysisState.progress || 0;
-        const currentPhase = analysisState.currentPhase || 'personality';
+    if (isAnalyzing) {
+        // Fallback for initialization race condition
+        const progress = analysisState?.progress || 0;
+        const currentPhase = analysisState?.currentPhase || 'init';
+
+        // Use logs if available, or default message
+        const statusMessage = analysisState?.logs?.slice(-1)[0] || 'Iniciando motor de IA...';
 
         // Animate progress smoothly
         Animated.timing(animatedProgress, {
@@ -417,29 +519,6 @@ export default function AnalysisScreen() {
                     <Text style={{ color: '#6b7280', fontSize: 12 }}>
                         REMI AI ENGINE 2.0
                     </Text>
-
-                    {/* DEBUG PANEL - Show logs for Web debugging */}
-                    {analysisLogs.length > 0 && (
-                        <View style={{
-                            marginTop: 24,
-                            padding: 16,
-                            backgroundColor: 'rgba(0,0,0,0.3)',
-                            borderRadius: 12,
-                            width: '100%',
-                            maxHeight: 200
-                        }}>
-                            <Text style={{ color: '#a855f7', fontWeight: 'bold', marginBottom: 8, fontSize: 12 }}>
-                                📋 Debug Log:
-                            </Text>
-                            <ScrollView style={{ maxHeight: 150 }}>
-                                {analysisLogs.slice(-10).map((log, i) => (
-                                    <Text key={i} style={{ color: '#9ca3af', fontSize: 11, marginBottom: 4, fontFamily: 'monospace' }}>
-                                        {log}
-                                    </Text>
-                                ))}
-                            </ScrollView>
-                        </View>
-                    )}
                 </SafeAreaView>
             </View>
         );
@@ -459,6 +538,24 @@ export default function AnalysisScreen() {
                 <View style={styles.emptyContainer}>
                     <Brain size={64} color="#6b7280" />
                     <Text style={styles.emptyText}>No hay perfil para analizar</Text>
+
+
+
+                    <TouchableOpacity
+                        onPress={() => {
+                            setLoading(true);
+                            checkForAnalysisOrProfile();
+                        }}
+                        style={{
+                            marginTop: 24,
+                            backgroundColor: '#a855f7',
+                            paddingHorizontal: 24,
+                            paddingVertical: 12,
+                            borderRadius: 12
+                        }}
+                    >
+                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>Reintentar</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
         );

@@ -233,7 +233,16 @@ RESPONDE:`;
             {/* Header */}
             <SafeAreaView edges={['top']} style={styles.headerSafe}>
                 <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    <TouchableOpacity
+                        onPress={() => {
+                            if (router.canGoBack()) {
+                                router.back();
+                            } else {
+                                router.replace('/(tabs)');
+                            }
+                        }}
+                        style={styles.backButton}
+                    >
                         <ArrowLeft size={22} color="#9ca3af" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Coach IA</Text>
@@ -347,7 +356,7 @@ RESPONDE:`;
                         </View>
                         <TouchableOpacity
                             style={styles.limitBannerBtn}
-                            onPress={() => router.push('/premium')}
+                            onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
                         >
                             <Text style={styles.limitBannerBtnText}>Mejorar</Text>
                         </TouchableOpacity>

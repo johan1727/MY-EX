@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Sparkles, ChevronRight, X, Crown } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,7 +18,7 @@ export default function UpgradeBanner({
     const router = useRouter();
 
     const handleUpgrade = () => {
-        router.push('/premium' as any);
+        router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
     };
 
     // Header badge style - like ChatGPT "Upgrade to Plus"

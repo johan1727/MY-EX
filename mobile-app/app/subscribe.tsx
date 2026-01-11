@@ -133,7 +133,16 @@ export default function SubscribePage() {
             <SafeAreaView style={{ flex: 1 }}>
                 {/* Back Button Header */}
                 <View style={styles.backHeader}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    <TouchableOpacity
+                        onPress={() => {
+                            if (router.canGoBack()) {
+                                router.back();
+                            } else {
+                                router.replace('/(tabs)');
+                            }
+                        }}
+                        style={styles.backButton}
+                    >
                         <ArrowLeft size={24} color="#fff" />
                     </TouchableOpacity>
                 </View>

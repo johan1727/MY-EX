@@ -135,7 +135,10 @@ export default function ChatHeader({
                         style={styles.premiumButtonSmall}
                         onPress={() => {
                             haptics.impact(haptics.ImpactFeedbackStyle.Medium);
-                            onUpgradePress?.();
+                            // Ensure this calls the passed function or default to router push
+                            if (onUpgradePress) {
+                                onUpgradePress();
+                            }
                         }}
                     >
                         <LinearGradient

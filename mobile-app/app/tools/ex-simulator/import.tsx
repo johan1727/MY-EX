@@ -17,6 +17,7 @@ import { saveProfile } from '../../../lib/profileSync';
 import { supabase } from '../../../lib/supabase';
 import { useAnalysis } from '../../../lib/AnalysisContext';
 import { BackgroundAnalysisManager } from '../../../lib/BackgroundAnalysisManager';
+import { detectRelationshipType } from '../../../lib/relationshipDetector';
 
 // Helper to extract text from ZIP file (WhatsApp exports as ZIP with media)
 async function extractTextFromZip(zipData: string): Promise<string | null> {
@@ -116,6 +117,7 @@ export default function ImportChat() {
 
     // 🕊️ Selector de tipo de relación (evitar confusiones entre ex y fallecidos)
     const [relationshipType, setRelationshipType] = useState<'partner' | 'ex' | 'friend' | 'family' | 'deceased' | null>(null);
+    const [suggestedRelationshipType, setSuggestedRelationshipType] = useState<'partner' | 'ex' | 'friend' | 'family' | 'deceased' | null>(null);
     const [showManualInput, setShowManualInput] = useState(false);
 
     // Debug helper to log steps visually (mapped to console for background compat)
@@ -283,15 +285,17 @@ export default function ImportChat() {
                                 setDetectedParticipants(participants);
                                 addDebug(`👥 Detectados: ${participantNames.join(', ')}`);
 
-                                // 🛡️ ANONYMIZATION
-                                addDebug('🛡️ Anonimizando datos...');
-                                const anonymizedMessages = anonymizeMessages(finalMessages, participantNames);
+                                // 🛡️ ANONYMIZATION MOVED TO BackgroundAnalysisManager
+                                // addDebug('🛡️ Anonimizando datos...');
+                                // const anonymizedMessages = anonymizeMessages(finalMessages, participantNames);
+                                // setParsedMessages(anonymizedMessages);
+                                // setParsedCount(anonymizedMessages.length);
 
-                                setParsedMessages(anonymizedMessages);
-                                setParsedCount(anonymizedMessages.length);
+                                setParsedMessages(finalMessages);
+                                setParsedCount(finalMessages.length);
 
                                 setStep('preview');
-                                addDebug(`✅ ${anonymizedMessages.length.toLocaleString()} mensajes listos (Anonimizados)`);
+                                addDebug(`✅ ${finalMessages.length.toLocaleString()} mensajes listos (SIN Anonimizar)`);
                             } else {
                                 setStep('error');
                                 setErrorMessage('No se encontraron mensajes de WhatsApp. Asegúrate de exportar el chat como texto (.txt).');
@@ -320,6 +324,35 @@ export default function ImportChat() {
                         const { messages: finalMessages } = intelligentTokenSampling(messages);
                         setParsedMessages(finalMessages);
                         setParsedCount(finalMessages.length);
+
+                        // DETECTAR PARTICIPANTES
+                        const participants = detectParticipants(finalMessages);
+                        const participantNames = participants.map(p => p.name);
+                        setDetectedParticipants(participants);
+                        addDebug(`👥 Detectados: ${participantNames.join(', ')}`);
+
+                        // AUTO-DETECT RELATIONSHIP (AI Upgrade)
+                        // We guess the "Ex" is the second most active participant (assuming user is #1)
+                        // or the first one if we can't tell.
+                        const likelyExName = participantNames[1] || participantNames[0] || 'La otra persona';
+                        addDebug(`🤖 Detectando relación con IA para: ${likelyExName}...`);
+
+                        detectRelationshipType(finalMessages, likelyExName).then(type => {
+                            if (type) {
+                                addDebug(`🤖 IA sugiere relación: ${type.toUpperCase()}`);
+                                setSuggestedRelationshipType(type); // Store suggestion, DON'T auto-select
+                                // Optional: You could show a toast or highlight the option
+                            } else {
+                                addDebug('🤖 IA no pudo determinar relación (usando default)');
+                            }
+                        });
+
+                        // Set Ex Name candidate if empty
+                        if (!exName && participantNames.length > 0) {
+                            // Don't auto-set exName blindly, but maybe suggest it?
+                            // For now, let's leave exName empty for user to type/select
+                        }
+
                         setStep('preview');
                         addDebug(`✅ ${finalMessages.length} mensajes cargados`);
                     } else {
@@ -584,13 +617,17 @@ export default function ImportChat() {
             setDetectedParticipants(participants);
             addDebug(`👥 Detectados: ${participantNames.join(', ')}`);
 
-            // 🛡️ ANONYMIZATION (MANDATORY)
-            addDebug('🛡️ Anonimizando datos personales...');
-            await new Promise(resolve => setTimeout(resolve, 50));
+            // 🛡️ ANONYMIZATION MOVED TO BackgroundAnalysisManager
+            // We pass RAW messages so the manager can identify the correct Ex name
+            // addDebug('🛡️ Anonimizando datos...');
+            // await new Promise(resolve => setTimeout(resolve, 50));
 
-            const anonymizedMessages = anonymizeMessages(finalMessages, participantNames);
-            setParsedMessages(anonymizedMessages);
-            addDebug('✅ Datos anonimizados correctamente');
+            // const anonymizedMessages = anonymizeMessages(finalMessages, participantNames);
+            // setParsedMessages(anonymizedMessages);
+            // addDebug('✅ Datos anonimizados correctamente');
+
+            // Pass RAW finalMessages
+            setParsedMessages(finalMessages);
 
             setStep('preview');
         } catch (e: any) {
@@ -611,33 +648,97 @@ export default function ImportChat() {
     };
 
     const handleAnalyze = async () => {
+        if (!exName.trim()) {
+            Alert.alert('Falta información', 'Por favor ingresa el nombre de tu Ex (o como quieres que se llame la IA).');
+            return;
+        }
+
+        if (!relationshipType) {
+            Alert.alert('Falta información', 'Por favor selecciona el tipo de relación.');
+            return;
+        }
+
+        // AI SUGGESTION CHECK
+        if (suggestedRelationshipType && relationshipType !== suggestedRelationshipType) {
+            // User selected something different from AI
+            const translateType = (t: string) =>
+                t === 'partner' ? 'Pareja Actual' :
+                    t === 'ex' ? 'Ex Pareja' :
+                        t === 'friend' ? 'Amigo/a' :
+                            t === 'family' ? 'Familiar' : 'Fallecido';
+
+            Alert.alert(
+                '¿Confirmar tipo de relación?',
+                `La IA detectó que parece ser "${translateType(suggestedRelationshipType)}", pero tú seleccionaste "${translateType(relationshipType)}".\n\n¿Quieres continuar así?`,
+                [
+                    { text: 'Corregir', style: 'cancel' }, // Stay
+                    {
+                        text: 'Sí, estoy seguro',
+                        onPress: async () => await executeAnalysis() // Proceed
+                    }
+                ]
+            );
+            return; // Stop here, wait for alert response
+        }
+
+        await executeAnalysis();
+    };
+
+    const executeAnalysis = async () => {
         console.log('[handleAnalyze] 🚀 STARTING ANALYSIS');
 
         console.log('[handleAnalyze] exName:', exName);
         console.log('[handleAnalyze] parsedMessages count:', parsedMessages.length);
 
-        if (!exName.trim()) {
-            Alert.alert('Error', 'Ingresa nombre');
-            return;
+        // GUEST LIMIT CHECK
+        console.log('[handleAnalyze] Checking user auth...');
+        let user;
+        try {
+            const userPromise = supabase.auth.getUser();
+            const timeoutPromise = new Promise<{ data: { user: any }, error: any }>((_, reject) =>
+                setTimeout(() => reject(new Error('Auth check timed out')), 5000)
+            );
+            const result = await Promise.race([userPromise, timeoutPromise]);
+            user = result.data.user;
+        } catch (authErr) {
+            console.log('[handleAnalyze] Auth check failed/timed out, continuing as guest:', authErr);
+            user = null;
         }
 
-        // GUEST LIMIT CHECK
-        const { data: { user } } = await supabase.auth.getUser();
+        // const { data: { user } } = await supabase.auth.getUser(); // OLD
+        console.log('[handleAnalyze] User:', user?.id || 'Guest');
         if (!user) {
-            const guestUsage = await storage.getItem('guest_analysis_count');
-            const count = guestUsage ? parseInt(guestUsage) : 0;
-            if (count > 0) {
-                Alert.alert(
-                    'Límite Gratuito Alcanzado',
-                    'Has utilizado tu análisis gratuito como invitado. Por favor regístrate para continuar (es gratis).',
-                    [
-                        { text: 'Registrarme', onPress: () => router.push('/auth') },
-                        { text: 'Cancelar', style: 'cancel' }
-                    ]
-                );
-                return;
+            try {
+                console.log('[handleAnalyze] Ensuring guest usage check...');
+                // Force a small delay to ensure storage is ready
+                await new Promise(resolve => setTimeout(resolve, 50));
+
+                const guestUsage = await storage.getItem('guest_analysis_count');
+                console.log('[handleAnalyze] Guest usage retrieved:', guestUsage);
+
+                const count = guestUsage ? parseInt(guestUsage) : 0;
+                // Only enforce strict limit if NOT in development mode
+                if (count > 0 && !__DEV__) {
+                    console.log('[handleAnalyze] Guest limit reached');
+                    Alert.alert(
+                        'Límite Gratuito Alcanzado',
+                        'Has utilizado tu análisis gratuito como invitado. Por favor regístrate para continuar (es gratis).',
+                        [
+                            { text: 'Registrarme', onPress: () => router.push('/auth') },
+                            { text: 'Cancelar', style: 'cancel' }
+                        ]
+                    );
+                    return;
+                }
+            } catch (guestErr) {
+                console.log('[handleAnalyze] Guest check error (ignoring to proceed):', guestErr);
+                // We proceed if check fails to avoid blocking the user
             }
         }
+
+
+
+        console.log('[handleAnalyze] Auth check done. Checking existing profile...');
 
         // Check for existing profile with same name (with timeout)
         try {
@@ -660,6 +761,7 @@ export default function ImportChat() {
 
             // Race query against timeout
             const existingProfile = await Promise.race([checkPromise(), timeoutPromise]);
+            console.log('[handleAnalyze] Existing profile check result:', existingProfile ? 'Found' : 'Null');
 
             if (existingProfile) {
                 // Profile exists - ask user what to do
@@ -696,6 +798,8 @@ export default function ImportChat() {
             // Continue anyway
         }
 
+        console.log('[handleAnalyze] Saving chunks to storage...');
+
         // Navigate to analysis screen with data for hybrid progress display
         // CHUNKED STORAGE: Split 20k messages into 4 chunks of 5k each
         // This avoids AsyncStorage "Row too big" error on Android
@@ -704,23 +808,32 @@ export default function ImportChat() {
         const limitedMessages = parsedMessages.slice(0, messageLimit);
         const totalChunks = Math.ceil(limitedMessages.length / chunkSize);
 
-        // Store metadata first
-        await storage.setItem('exSimulator_analyzeData', JSON.stringify({
-            totalChunks,
-            totalMessages: limitedMessages.length,
-            exName,
-            relationshipType
-        }));
+        try {
+            // Store metadata first
+            await storage.setItem('exSimulator_analyzeData', JSON.stringify({
+                totalChunks,
+                totalMessages: limitedMessages.length,
+                exName,
+                relationshipType
+            }));
 
-        // Store each chunk separately
-        for (let i = 0; i < totalChunks; i++) {
-            const start = i * chunkSize;
-            const end = Math.min(start + chunkSize, limitedMessages.length);
-            const chunk = limitedMessages.slice(start, end);
-            await storage.setItem(`exSimulator_chunk_${i}`, JSON.stringify(chunk));
+            // Store each chunk separately
+            for (let i = 0; i < totalChunks; i++) {
+                const start = i * chunkSize;
+                const end = Math.min(start + chunkSize, limitedMessages.length);
+                console.log(`[handleAnalyze] Saving chunk ${i + 1}/${totalChunks} (${end - start} msgs)`);
+                const chunk = limitedMessages.slice(start, end);
+                await storage.setItem(`exSimulator_chunk_${i}`, JSON.stringify(chunk));
+                // Anti-freeze yield
+                if (i % 2 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+            }
+
+            console.log('[handleAnalyze] Chunks saved. Navigating to analysis...');
+            router.push('/tools/ex-simulator/analysis');
+        } catch (storageErr: any) {
+            console.error('[handleAnalyze] Storage error:', storageErr);
+            Alert.alert('Error', 'No se pudo guardar los datos de análisis: ' + storageErr.message);
         }
-
-        router.push('/tools/ex-simulator/analysis');
     };
 
     const continueAnalysis = async () => {

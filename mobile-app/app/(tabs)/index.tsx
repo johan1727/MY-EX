@@ -91,7 +91,7 @@ export default function ExSimulatorChat() {
     const [drawerVisible, setDrawerVisible] = useState(false);
 
     // FREE USER LIMITS - SURVIVOR tier (Supabase)
-    const FREE_MESSAGE_LIMIT = 30; // simulator_chat_messages for survivor
+    const FREE_MESSAGE_LIMIT = 10; // simulator_chat_messages for survivor
     const userMessageCount = messages.filter(m => m.role === 'user').length;
 
     useFocusEffect(
@@ -448,9 +448,9 @@ export default function ExSimulatorChat() {
             setMessages([...newMessages]);
             setIsTyping(true);
 
-            console.log('[Chat] Calling Edge Function...');
+            console.log('[Chat] Generating AI response...');
             const aiResponse = await generateChatResponse(currentInput, systemPrompt);
-            console.log('[Chat] Edge Function response received');
+            console.log('[Chat] AI response received');
 
             const assistantMsg: Message = {
                 role: 'assistant',
@@ -592,12 +592,27 @@ export default function ExSimulatorChat() {
                     <ProfileDrawer
                         visible={drawerVisible}
                         onClose={() => setDrawerVisible(false)}
-                        currentProfileId={null}
+                        currentProfileId={profileData?.id || profileData?.supabaseId}
+                        onProfileSwitch={async (profile) => {
+                            console.log('[ExChat] Profile switched to:', profile.exName);
+                            setDrawerVisible(false);
+
+                            // Explicitly show loading state
+                            setIsLoadingProfile(true);
+                            setProfileData(null);
+                            setMessages([]);
+
+                            // Small delay to ensure state clears then reload
+                            setTimeout(async () => {
+                                await loadProfile();
+                                // Ensure loading is turned off if it stuck
+                                setTimeout(() => setIsLoadingProfile(false), 500);
+                            }, 150);
+                        }}
                         onProfileDeleted={() => {
                             console.log('[ExChat/EmptyState] Profile deleted, resetting...');
                             setProfileData(null);
                             setMessages([]);
-                            // Do not reload profile immediately
                         }}
                     />
                 </SafeAreaView >
@@ -831,37 +846,81 @@ export default function ExSimulatorChat() {
                 onRequestClose={() => setShowUpgradeModal(false)}
             >
                 <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.upgradeEmoji}>🔥</Text>
-                        <Text style={styles.modalTitle}>Has llegado al límite</Text>
-                        <Text style={styles.modalText}>
-                            Has enviado {FREE_MESSAGE_LIMIT} mensajes en esta simulación.
-                            Para continuar chateando sin límites, actualiza a Premium.
+                    <View style={[styles.modalContent, { padding: 32, borderRadius: 24, backgroundColor: '#18181b', borderWidth: 1, borderColor: '#27272a' }]}>
+                        <View style={{
+                            width: 64, height: 64, borderRadius: 32,
+                            backgroundColor: 'rgba(168, 85, 247, 0.15)',
+                            alignItems: 'center', justifyContent: 'center',
+                            marginBottom: 20
+                        }}>
+                            <Sparkles size={32} color="#a855f7" />
+                        </View>
+
+                        <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginBottom: 12 }}>
+                            Has alcanzado el límite
                         </Text>
+
+                        <Text style={{
+                            fontSize: 16, color: '#a1a1aa', textAlign: 'center',
+                            marginBottom: 28, lineHeight: 24
+                        }}>
+                            Los usuarios gratuitos tienen 10 mensajes por simulación.
+                            Actualiza a Premium para chatear sin límites y desbloquear el análisis profundo.
+                        </Text>
+
                         <TouchableOpacity
-                            style={styles.modalPrimaryBtn}
+                            style={{
+                                backgroundColor: '#a855f7',
+                                width: '100%',
+                                paddingVertical: 16,
+                                borderRadius: 16,
+                                alignItems: 'center',
+                                shadowColor: '#a855f7',
+                                shadowOffset: { width: 0, height: 4 },
+                                shadowOpacity: 0.3,
+                                shadowRadius: 8,
+                                elevation: 4,
+                                marginBottom: 16
+                            }}
                             onPress={() => {
                                 setShowUpgradeModal(false);
-                                router.push('/paywall');
+                                router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
                             }}
                         >
-                            <Text style={styles.modalPrimaryText}>Ver planes Premium</Text>
+                            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Ver planes Premium</Text>
                         </TouchableOpacity>
+
                         <TouchableOpacity
-                            style={styles.modalSecondaryBtn}
+                            style={{ padding: 12 }}
                             onPress={() => setShowUpgradeModal(false)}
                         >
-                            <Text style={styles.modalSecondaryText}>Quizás después</Text>
+                            <Text style={{ color: '#71717a', fontSize: 15, fontWeight: '500' }}>Quizás después</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
 
-            {/* Profile Drawer */}
+            {/* ProfileDrawer */}
             <ProfileDrawer
                 visible={drawerVisible}
                 onClose={() => setDrawerVisible(false)}
                 currentProfileId={profileData?.id || profileData?.supabaseId}
+                onProfileSwitch={async (profile) => {
+                    console.log('[ExChat] Profile switched to:', profile.exName);
+                    setDrawerVisible(false);
+
+                    // Explicitly show loading state
+                    setIsLoadingProfile(true);
+                    setProfileData(null);
+                    setMessages([]);
+
+                    // Small delay to ensure state clears then reload
+                    setTimeout(async () => {
+                        await loadProfile();
+                        // Ensure loading is turned off if it stuck
+                        setTimeout(() => setIsLoadingProfile(false), 500);
+                    }, 150);
+                }}
                 onProfileDeleted={() => {
                     console.log('[ExChat] Profile deleted, resetting state...');
                     setProfileData(null);

@@ -16,3 +16,7 @@ web-build/
 *.log
 .vscode/
 .idea/
+
+# Ignore test scripts with potential secrets
+test-*.js
+list-*.js

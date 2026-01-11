@@ -50,13 +50,15 @@ interface ProfileDrawerProps {
     onClose: () => void;
     currentProfileId?: string | null;
     onProfileDeleted?: () => void;
+    onProfileSwitch?: (profile: Profile) => void;
 }
 
 export default function ProfileDrawer({
     visible,
     onClose,
     currentProfileId,
-    onProfileDeleted
+    onProfileDeleted,
+    onProfileSwitch
 }: ProfileDrawerProps) {
     const router = useRouter();
     const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -171,67 +173,83 @@ export default function ProfileDrawer({
 
 
     const handleProfileSelect = async (profile: Profile) => {
+        console.log('[ProfileDrawer] handleProfileSelect CLICKED:', profile.exName);
         try {
             // Clear cached analysis view to force reload of selected profile
             await storage.removeItem('analysis_view_profile');
+            // ... (saving profile to storage) ...
 
-            // In guest mode, load the FULL profile from allProfiles (not just the minimal data)
+            // In guest mode logic
+            console.log('[ProfileDrawer] Saving to storage...');
             const allProfilesJson = await storage.getItem('exSimulator_allProfiles');
             if (allProfilesJson) {
                 const allProfiles = JSON.parse(allProfilesJson);
                 const fullProfile = allProfiles.find((p: any) => p.id === profile.id);
                 if (fullProfile) {
-                    console.log('[ProfileDrawer] Loading full profile:', fullProfile.id, 'with', Object.keys(fullProfile).length, 'keys');
                     await storage.setItem('exSimulator_currentProfile', JSON.stringify(fullProfile));
                 } else {
-                    // Fallback to minimal profile if not found
-                    console.warn('[ProfileDrawer] Full profile not found, using minimal');
                     await storage.setItem('exSimulator_currentProfile', JSON.stringify(profile));
                 }
             } else {
                 await storage.setItem('exSimulator_currentProfile', JSON.stringify(profile));
             }
 
+            console.log('[ProfileDrawer] Calling onProfileSwitch:', !!onProfileSwitch);
+            if (onProfileSwitch) {
+                onProfileSwitch(profile);
+            } else {
+                // Force navigation to root triggers re-render
+                router.dismissAll();
+                setTimeout(() => {
+                    router.replace('/');
+                }, 100);
+            }
             onClose();
-            // Router should already be on /(tabs) which is the chat
-            router.replace('/(tabs)');
         } catch (error) {
             console.error('[ProfileDrawer] Error selecting profile:', error);
         }
     };
 
-
-
-
     const handleNewSimulation = () => {
-        // Enforce profile limits
-        const limit = SUBSCRIPTION_CONFIG[tier as SubscriptionTier]?.limits?.simulatorAnalyses || 1;
+        console.log('[ProfileDrawer] handleNewSimulation CLICKED');
+        try {
+            // Enforce profile limits
+            const limit = SUBSCRIPTION_CONFIG[tier as SubscriptionTier]?.limits?.simulatorAnalyses || 1;
+            console.log('[ProfileDrawer] Check limit:', profiles.length, '/', limit);
 
-        // If unlimited (-1) or not reached limit, proceed
-        if (limit === -1 || profiles.length < limit) {
-            onClose();
-            router.push('/tools/ex-simulator/import');
-            return;
-        }
+            // If unlimited (-1) or not reached limit, proceed
+            if (limit === -1 || profiles.length < limit) {
+                console.log('[ProfileDrawer] Navigating to import...');
+                onClose();
+                // Direct navigation to test if timeout was issue, or keep timeout
+                setTimeout(() => {
+                    router.push('/tools/ex-simulator/import');
+                }, 100);
+                return;
+            }
 
-        // Limit reached
-        showAlert(
-            'Límite de perfiles alcanzado',
-            `Tu plan actual (${SUBSCRIPTION_CONFIG[tier as SubscriptionTier]?.name}) solo permite ${limit} perfil(es). Mejora a Premium para crear más y analizar múltiples relaciones.`,
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Mejorar Plan',
-                    style: 'default',
-                    onPress: () => {
-                        closeAlert();
-                        onClose();
-                        router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
+            // Limit reached
+            console.log('[ProfileDrawer] Limit reached, showing alert');
+            showAlert(
+                'Límite de perfiles alcanzado',
+                `Tu plan actual (${SUBSCRIPTION_CONFIG[tier as SubscriptionTier]?.name}) solo permite ${limit} perfil(es).\n\nMejora a Premium para crear perfiles ilimitados y desbloquear todo el potencial.`,
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                        text: 'Mejorar Plan',
+                        style: 'default', // formatting logic above will now use Premium style for warning type
+                        onPress: () => {
+                            closeAlert();
+                            onClose();
+                            router.push('/paywall');
+                        }
                     }
-                }
-            ],
-            'warning'
-        );
+                ],
+                'warning'
+            );
+        } catch (e) {
+            console.error('[ProfileDrawer] Error in handleNewSimulation:', e);
+        }
     };
 
     const handleCoachPress = () => {
@@ -268,11 +286,12 @@ export default function ProfileDrawer({
             }
 
             // Delete from local storage list
-            const allProfiles = await storage.getItem('exSimulator_profiles');
+            const allProfiles = await storage.getItem('exSimulator_allProfiles');
             if (allProfiles) {
                 const parsed = JSON.parse(allProfiles);
                 const updated = parsed.filter((p: Profile) => p.id !== profile.id);
-                await storage.setItem('exSimulator_profiles', JSON.stringify(updated));
+                console.log('[Delete] Updating local storage with', updated.length, 'profiles');
+                await storage.setItem('exSimulator_allProfiles', JSON.stringify(updated));
             }
 
             // Clear specific profile data and conversation
@@ -380,31 +399,7 @@ export default function ProfileDrawer({
                                         {/* Action Buttons */}
                                         <View style={styles.profileActions}>
                                             {/* Analysis Button */}
-                                            <TouchableOpacity
-                                                style={styles.analysisBtn}
-                                                onPress={async () => {
-                                                    onClose();
-                                                    // Load FULL profile from allProfiles, not just the minimal {id, exName}
-                                                    const allProfilesJson = await storage.getItem('exSimulator_allProfiles');
-                                                    if (allProfilesJson) {
-                                                        const allProfiles = JSON.parse(allProfilesJson);
-                                                        const fullProfile = allProfiles.find((p: any) => p.id === profile.id);
-                                                        if (fullProfile) {
-                                                            console.log('[ProfileDrawer] Setting full analysis profile:', fullProfile.id, 'with', Object.keys(fullProfile).length, 'keys');
-                                                            await storage.setItem('analysis_view_profile', JSON.stringify(fullProfile));
-                                                        } else {
-                                                            console.warn('[ProfileDrawer] Full profile not found for analysis view');
-                                                            await storage.setItem('analysis_view_profile', JSON.stringify(profile));
-                                                        }
-                                                    } else {
-                                                        await storage.setItem('analysis_view_profile', JSON.stringify(profile));
-                                                    }
-                                                    router.push('/tools/ex-simulator/analysis');
-                                                }}
-                                            >
-                                                <Eye size={14} color="#a855f7" />
-                                                <Text style={styles.analysisBtnText}>Ver análisis de personalidad</Text>
-                                            </TouchableOpacity>
+
 
 
                                             {/* Delete Button */}
@@ -530,14 +525,9 @@ export default function ProfileDrawer({
                 </Animated.View>
             </TouchableOpacity>
 
-            {/* Custom Delete Confirmation Modal */}
-            <Modal
-                transparent
-                visible={showDeleteConfirm}
-                animationType="fade"
-                onRequestClose={() => setShowDeleteConfirm(false)}
-            >
-                <View style={styles.alertOverlay}>
+            {/* Custom Delete Confirmation Overlay */}
+            {showDeleteConfirm && (
+                <View style={[styles.alertOverlay, { zIndex: 9999, elevation: 5 }]}>
                     <View style={styles.alertBox}>
                         <View style={styles.alertIconContainer}>
                             <Trash2 size={32} color="#ef4444" />
@@ -566,16 +556,67 @@ export default function ProfileDrawer({
                         </View>
                     </View>
                 </View>
-            </Modal>
+            )}
 
-            {/* Success Modal */}
-            <Modal
-                transparent
-                visible={showSuccessModal}
-                animationType="fade"
-                onRequestClose={() => setShowSuccessModal(false)}
-            >
-                <View style={styles.alertOverlay}>
+            {/* Custom Generic Alert Overlay (for Upsell) */}
+            {customAlert.visible && (
+                <View style={[styles.alertOverlay, { zIndex: 9999, elevation: 5 }]}>
+                    <View style={styles.alertBox}>
+                        <View style={[
+                            styles.alertIconContainer,
+                            customAlert.type === 'error' ? { backgroundColor: 'rgba(239, 68, 68, 0.1)' } :
+                                customAlert.type === 'warning' ? { backgroundColor: 'rgba(245, 158, 11, 0.1)' } :
+                                    customAlert.type === 'success' ? { backgroundColor: 'rgba(34, 197, 94, 0.1)' } :
+                                        { backgroundColor: 'rgba(59, 130, 246, 0.1)' }
+                        ]}>
+                            {customAlert.type === 'error' && <Trash2 size={32} color="#ef4444" />} {/* Fallback icon */}
+                            {customAlert.type === 'warning' && <Crown size={32} color="#f59e0b" />}
+                            {customAlert.type === 'success' && <Sparkles size={32} color="#22c55e" />}
+                            {customAlert.type === 'info' && <HelpCircle size={32} color="#3b82f6" />}
+                        </View>
+                        <Text style={styles.alertTitle}>{customAlert.title}</Text>
+                        <Text style={styles.alertMessage}>
+                            {customAlert.message}
+                        </Text>
+                        <View style={styles.alertButtons}>
+                            {!customAlert.buttons || customAlert.buttons.length === 0 ? (
+                                <TouchableOpacity
+                                    style={styles.alertButtonConfirm}
+                                    onPress={closeAlert}
+                                >
+                                    <Text style={styles.alertButtonConfirmText}>OK</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                customAlert.buttons.map((btn, idx) => (
+                                    <TouchableOpacity
+                                        key={idx}
+                                        style={[
+                                            btn.style === 'cancel' ? styles.alertButtonCancel :
+                                                btn.style === 'default' && customAlert.type === 'warning' ? styles.alertButtonPremium : // Use premium style for warning/upsell
+                                                    styles.alertButtonConfirm,
+                                            { flex: 1, marginHorizontal: 4 }
+                                        ]}
+                                        onPress={() => {
+                                            if (btn.onPress) btn.onPress();
+                                            else closeAlert();
+                                        }}
+                                    >
+                                        <Text style={[
+                                            btn.style === 'cancel' ? styles.alertButtonCancelText :
+                                                btn.style === 'default' && customAlert.type === 'warning' ? styles.alertButtonPremiumText :
+                                                    styles.alertButtonConfirmText
+                                        ]}>{btn.text}</Text>
+                                    </TouchableOpacity>
+                                ))
+                            )}
+                        </View>
+                    </View>
+                </View>
+            )}
+
+            {/* Success Overlay */}
+            {showSuccessModal && (
+                <View style={[styles.alertOverlay, { zIndex: 9999, elevation: 5 }]}>
                     <View style={[styles.alertBox, { alignItems: 'center', paddingTop: 30, paddingBottom: 30 }]}>
                         <View style={[styles.alertIconContainer, { backgroundColor: 'rgba(34, 197, 94, 0.1)' }]}>
                             <Sparkles size={32} color="#22c55e" />
@@ -586,7 +627,7 @@ export default function ProfileDrawer({
                         </Text>
                     </View>
                 </View>
-            </Modal>
+            )}
         </Modal>
     );
 }
@@ -973,6 +1014,23 @@ const styles = StyleSheet.create({
     alertButtonConfirmText: {
         color: '#ef4444',
         fontWeight: '600',
+        fontSize: 15,
+    },
+    alertButtonPremium: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: '#f59e0b',
+        alignItems: 'center',
+        shadowColor: '#f59e0b',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
+    },
+    alertButtonPremiumText: {
+        color: '#000',
+        fontWeight: 'bold',
         fontSize: 15,
     },
 });

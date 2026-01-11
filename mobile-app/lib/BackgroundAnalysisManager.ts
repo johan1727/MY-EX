@@ -88,6 +88,9 @@ export class BackgroundAnalysisManager {
 
         await this.saveState(profileId, state);
 
+        // 1.5 Emit initial state immediately so UI updates
+        this.emitProgress(profileId, state);
+
         // 2. Add to active analyses
         await this.addToActiveList(profileId);
 
@@ -130,62 +133,88 @@ export class BackgroundAnalysisManager {
                 this.emitProgress(profileId, state);
             };
 
-            // CHECKPOINT 0: Sanitize PII (SECURITY)
-            await onProgress(2, '🔒 Protegiendo datos sensibles...');
+            // CHECKPOINT 0: Detect sender names (BEFORE Sanitization)
+            // We do this first to ensure we match the user's input against the RAW chat data
+            await onProgress(2, '🔍 Identificando participantes...');
 
-            const { messages: sanitizedMessages, reverseMap } = sanitizeChat(messages);
+            const senderCounts = new Map<string, number>();
+            messages.forEach(msg => {
+                senderCounts.set(msg.sender, (senderCounts.get(msg.sender) || 0) + 1);
+            });
+
+            const exNameLower = (exName || '').toLowerCase().trim();
+            // Find the raw sender name in the chat that matches the user's input
+            const rawExSenderName = Array.from(senderCounts.keys()).find(name => {
+                if (!name) return false;
+                const nameLower = name.toLowerCase().trim();
+                return nameLower === exNameLower ||
+                    nameLower.includes(exNameLower) ||
+                    exNameLower.includes(nameLower);
+            }) || exName || 'Persona'; // Fallback to provided name if no match
+
+            console.log('[BackgroundAnalysis] Raw Ex Sender identified as:', rawExSenderName);
+
+            // CHECKPOINT 1: Sanitize PII (SECURITY)
+            await onProgress(5, '🔒 Protegiendo datos sensibles...');
+
+            // Sanitize (ASYNC)
+            const { messages: sanitizedMessages, reverseMap } = await sanitizeChat(messages, (p) => {
+                // Optional: super granular updates if needed, but 0-5% is fast enough usually
+            });
             console.log('[BackgroundAnalysis] Sanitized', reverseMap.size, 'PII items');
+
+            // Resolve the Sanitized Sender Name
+            // We need to know what 'rawExSenderName' became after sanitization
+            let finalExSenderName = rawExSenderName;
+
+            // Check if the raw name was mapped in reverseMap (meaning it was sanitized)
+            // reverseMap keys are MASKS (e.g. [NAME_1]), values are ORIGINAL (e.g. Juan Perez)
+            // We need to find the KEY where value === rawExSenderName
+            for (const [mask, original] of reverseMap.entries()) {
+                if (original === rawExSenderName) {
+                    finalExSenderName = mask;
+                    break;
+                }
+            }
+
+            // Also check if it was partially sanitized (e.g. "Juan Perez" -> "Juan") by checking a sample message
+            // Find a message that originally came from rawExSenderName
+            const sampleMsgIndex = messages.findIndex(m => m.sender === rawExSenderName);
+            if (sampleMsgIndex !== -1 && sanitizedMessages[sampleMsgIndex]) {
+                finalExSenderName = sanitizedMessages[sampleMsgIndex].sender;
+            }
+
+            console.log('[BackgroundAnalysis] Final Traget Ex Sender:', finalExSenderName);
 
             // WEB FIX: Yield to UI after heavy sync operation
             await new Promise(resolve => setTimeout(resolve, 0));
 
-            // Store reverse map for later (to show original data to user if needed)
+            // Store reverse map
             await AsyncStorage.setItem(
                 `pii_reverse_map_${profileId}`,
                 JSON.stringify(Array.from(reverseMap.entries()))
             );
 
-            // CHECKPOINT 1: Start personality analysis (0-65%)
-            await onProgress(5, '📊 Analizando personalidad...');
+            // CHECKPOINT 2: Start personality analysis (0-65%)
+            await onProgress(10, '📊 Analizando personalidad...');
 
             const profile = await analyzePersonality(
-                sanitizedMessages, // Use sanitized messages
-                exName,
+                sanitizedMessages,
+                exName, // Use the display name for the prompt
                 (p, s) => {
-                    const mapped = Math.round(5 + (p * 0.6)); // Map 0-100 to 5-65%
+                    const mapped = Math.round(10 + (p * 0.5)); // Map 0-100 to 10-60%
                     onProgress(mapped, s);
                 },
                 relationshipType as 'ex' | 'friend' | 'family' | 'deceased'
             );
 
-            // CHECKPOINT 2: Detect sender names
-            await onProgress(68, '🔍 Identificando participantes...');
-
-            // WEB FIX: Yield to UI before sync loop
-            await new Promise(resolve => setTimeout(resolve, 0));
-
-            const senderCounts = new Map<string, number>();
-            sanitizedMessages.forEach(msg => {
-                senderCounts.set(msg.sender, (senderCounts.get(msg.sender) || 0) + 1);
-            });
-
-            const exNameLower = (exName || '').toLowerCase().trim();
-            const exSenderName = Array.from(senderCounts.keys()).find(name => {
-                if (!name) return false; // SAFETY: skip undefined/null names
-                const nameLower = name.toLowerCase().trim();
-                return nameLower === exNameLower ||
-                    nameLower.includes(exNameLower) ||
-                    exNameLower.includes(nameLower);
-            }) || exName || 'Persona';
-
-
-            const allParticipants = Array.from(senderCounts.keys()).filter(n => n); // Filter out null/undefined
+            const allParticipants = Array.from(senderCounts.keys()).filter(n => n);
             const detectedUserName = allParticipants.find(name =>
-                name && name.toLowerCase().trim() !== (exSenderName || '').toLowerCase().trim()
+                name && name.toLowerCase().trim() !== (rawExSenderName || '').toLowerCase().trim()
             ) || 'Usuario';
 
+            console.log('[BackgroundAnalysis] Context:', { rawExSenderName, finalExSenderName, detectedUserName });
 
-            console.log('[BackgroundAnalysis] Detected:', { exSenderName, detectedUserName });
 
             // CHECKPOINT 3: Generate Master Prompt (70-95%)
             await onProgress(70, '🧠 Generando Master Prompt...');
@@ -196,12 +225,12 @@ export class BackgroundAnalysisManager {
             let masterPromptResult;
             try {
                 masterPromptResult = await generateMasterPrompt(
-                    sanitizedMessages, // Use sanitized messages
-                    exSenderName,
+                    sanitizedMessages,
+                    finalExSenderName, // PASS THE SANITIZED NAME TOKEN
                     exName,
                     relationshipType,
                     (p, s, t) => {
-                        const mapped = Math.round(70 + (p * 0.25)); // Map 0-100 to 70-95%
+                        const mapped = Math.round(70 + (p * 0.25));
                         onProgress(mapped, s);
                     }
                 );
@@ -231,7 +260,7 @@ export class BackgroundAnalysisManager {
                 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
                 const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-                defensiveTopics = await detectDefensiveTopics(messages, exName, exSenderName, model);
+                defensiveTopics = await detectDefensiveTopics(messages, exName, finalExSenderName, model);
                 console.log('[BackgroundAnalysis] Found', defensiveTopics.length, 'defensive topics');
             } catch (defErr) {
                 console.error('[BackgroundAnalysis] Defensive topics detection failed:', defErr);
@@ -245,7 +274,7 @@ export class BackgroundAnalysisManager {
                 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || '');
                 const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-                jealousyTriggers = await detectJealousyTriggers(messages, exName, exSenderName, model);
+                jealousyTriggers = await detectJealousyTriggers(messages, exName, finalExSenderName, model);
                 console.log('[BackgroundAnalysis] Found', jealousyTriggers.length, 'jealousy triggers');
             } catch (jealErr) {
                 console.error('[BackgroundAnalysis] Jealousy detection failed:', jealErr);
@@ -410,8 +439,8 @@ export class BackgroundAnalysisManager {
                     };
 
                     masterPromptResult = await generateMasterPrompt(
-                        messages, // Usa sanitized messages
-                        exSenderName,
+                        sanitizedMessages, // Usa sanitized messages
+                        finalExSenderName,
                         exName,
                         relationshipType,
                         (p, s, t) => {
@@ -430,7 +459,7 @@ export class BackgroundAnalysisManager {
             // CHECKPOINT 4: Analyze messaging pattern
             await onProgress(98.8, '💬 Analizando patrón de mensajes...');
 
-            const messagingPattern = detectMessagingPattern(messages, exSenderName);
+            const messagingPattern = detectMessagingPattern(sanitizedMessages, finalExSenderName);
             console.log('[BackgroundAnalysis] Messaging pattern:', messagingPattern.style);
 
             // CHECKPOINT 5: Build final profile

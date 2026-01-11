@@ -467,19 +467,7 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
                                     </TouchableOpacity>
 
                                     {/* Analysis Button - Always visible */}
-                                    {hasAnalysis && (
-                                        <TouchableOpacity
-                                            style={styles.analysisBtn}
-                                            onPress={() => {
-                                                storage.setItem('analysis_view_profile', JSON.stringify(p));
-                                                onClose();
-                                                router.push('/analysis');
-                                            }}
-                                        >
-                                            <Eye size={14} color="#a855f7" />
-                                            <Text style={styles.analysisBtnText}>Ver análisis de personalidad</Text>
-                                        </TouchableOpacity>
-                                    )}
+
                                 </View>
                             );
                         })}

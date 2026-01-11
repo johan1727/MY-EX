@@ -159,6 +159,22 @@ function getPersonalityFramework(relationshipType: string = 'ex') {
         ]
     };
 
+    // 8. Memorias Compartidas (NUEVO: Para Closeness)
+    const SHARED_MEMORIES = {
+        weight: 0.15,
+        subcategories: [
+            'Eventos específicos mencionados repetidamente',
+            'Anécdotas de viajes o salidas',
+            'Momentos de gran conexión emocional',
+            'Inside jokes explicados',
+            'Tradiciones de pareja/amistad',
+            'Momentos difíciles que superaron',
+            'Momentos de gran conexión emocional',
+            'fechas importantes',
+            'apodos de carino que se usan a menudo'
+        ]
+    };
+
     // 8. Contexto Temporal (Adaptada)
     const TEMPORAL_CONTEXT = {
         weight: 0.15,
@@ -181,6 +197,7 @@ function getPersonalityFramework(relationshipType: string = 'ex') {
         BEHAVIORAL_PATTERNS,
         KNOWLEDGE_OPINIONS,
         COMMUNICATION_STYLE,
+        SHARED_MEMORIES,
         TEMPORAL_CONTEXT
     };
 }
@@ -313,13 +330,29 @@ export async function generateMasterPrompt(
     categoriesAnalyzed.COMMUNICATION_STYLE = true;
     console.log(`[MasterPrompt] ✅ Phase ${currentPhase}/${totalPhases}: Communication Style`);
 
-    // FASE 8: CONTEXTO TEMPORAL
-    onProgress?.(92, 'Determinando contexto actual...', estimatedSeconds * 0.08);
+    // FASE 8: MEMORIAS COMPARTIDAS (NUEVO)
+    onProgress?.(90, 'Rescatando memorias compartidas...', estimatedSeconds * 0.10);
+    currentPhase++;
+
+    analysisResults.SHARED_MEMORIES = await analyzeSharedMemories(model, messages, exName, userMessages[0]?.sender || 'Usuario');
+    categoriesAnalyzed.SHARED_MEMORIES = true;
+    console.log(`[MasterPrompt] ✅ Phase ${currentPhase}/${totalPhases}: Shared Memories`);
+
+    // FASE 9: CONTEXTO TEMPORAL
+    onProgress?.(95, 'Determinando contexto actual...', estimatedSeconds * 0.05);
     currentPhase++;
 
     analysisResults.TEMPORAL_CONTEXT = await analyzeTemporalContext(model, messages, exName);
     categoriesAnalyzed.TEMPORAL_CONTEXT = true;
     console.log(`[MasterPrompt] ✅ Phase ${currentPhase}/${totalPhases}: Temporal Context`);
+
+    // FASE 10: CONTEXTO DE INICIO (NUEVO)
+    onProgress?.(97, 'Preparando contexto para el primer mensaje...', estimatedSeconds * 0.03);
+    currentPhase++;
+
+    analysisResults.INITIAL_MESSAGE_CONTEXT = await analyzeInitialMessage(model, messages, exName);
+    categoriesAnalyzed.INITIAL_MESSAGE_CONTEXT = true;
+    console.log(`[MasterPrompt] ✅ Phase ${currentPhase}/${totalPhases}: Initial Message Context`);
 
     // FASE FINAL: Ensamblar Master Prompt
     onProgress?.(98, 'Ensamblando Prompt Maestro...', 2);
@@ -469,10 +502,11 @@ Extrae información sobre:
    - Desafíos laborales
    - Ambiciones profesionales
 
-4. RUTINAS
-   - Horarios típicos
-   - Actividades recurrentes
-   - Hábitos observables
+4. RUTINAS Y HÁBITOS (¡DETALLADO!)
+   - Horarios típicos de actividad (¿madrugadora o nocturna?)
+   - Rutinas de mañana/noche explícitas
+   - Actividades recurrentes (gimnasio, café, trabajo)
+   - Hábitos de consumo (series que ve siempre, comida que pide)
 
 5. HOBBIES E INTERESES
    - Qué hace en tiempo libre
@@ -624,7 +658,7 @@ Identifica patrones en:
    - ¿Da silent treatment (ignorar)?
    - ¿Busca resolver o escalar?
 
-Responde en formato markdown con ejemplos específicos cuando sea posible.`;
+Responde en markdown con ejemplos específicos cuando sea posible.`;
 
     return await callGeminiWithRetry(model, prompt);
 }
@@ -714,6 +748,11 @@ Extrae con PRECISIÓN:
    - ¿Cuándo los usa?
    - ¿Cuántos por mensaje típicamente?
 
+4. APODOS Y FORMAS DE LLAMARTE (¡MUY IMPORTANTE!)
+   - Lista EXACTA de apodos que usa para el usuario (ej: "bebé", "amor", "gordo", "flaca", su nombre real)
+   - ¿Usa el nombre real del usuario cuando está enojada/seria?
+   - ¿Cómo se refiere a sí misma?
+
 4. ESTRUCTURA DE MENSAJES
    - Longitud típica (palabras por mensaje)
    - ¿Envía muchos mensajes cortos o pocos largos?
@@ -736,7 +775,7 @@ Responde en markdown con EJEMPLOS REALES de sus mensajes cuando sea posible.`;
 }
 
 /**
- * Fase 8: Contexto Temporal y Estado Actual
+ * Fase 9: Contexto Temporal y Estado Actual
  */
 async function analyzeTemporalContext(
     model: any,
@@ -778,6 +817,76 @@ Determina:
    - ¿Tension o armonía?
 
 Responde en markdown. Enfócate en el estado ACTUAL basado en mensajes recientes.`;
+
+    return await callGeminiWithRetry(model, prompt);
+}
+
+/**
+ * Fase 8: Memorias Compartidas (Clave para "sentirse cercano")
+ */
+async function analyzeSharedMemories(
+    model: any,
+    messages: ParsedMessage[],
+    exName: string,
+    userName: string
+): Promise<string> {
+    // Sample random parts to find anecdotes
+    const sample = messages.sort(() => 0.5 - Math.random()).slice(0, 1000).map(m => m.content).join('\n');
+
+    const prompt = `Analiza las MEMORIAS COMPARTIDAS entre ${exName} y ${userName}:
+
+MENSAJES ALEATORIOS:
+${sample}
+
+Extrae 3-5 MEMORIAS VÍVIDAS o momentos específicos que parezcan importantes para su vínculo.
+Busca menciones de:
+- "Te acuerdas cuando..."
+- Viajes, citas específicas, eventos
+- Momentos donde se rieron mucho
+- Momentos difíciles que superaron
+
+Formato:
+## MEMORIAS CORE
+1. [Nombre del evento]: [Descripción detallada de qué pasó y cómo se sintieron]
+2. ...
+
+IMPORTANTE: Estas memorias se usarán para que la IA pueda decir "Te acuerdas de X?" y se sienta real.`;
+
+    return await callGeminiWithRetry(model, prompt);
+}
+
+/**
+ * Fase 10: Contexto para el Primer Mensaje (CRÍTICO)
+ */
+async function analyzeInitialMessage(
+    model: any,
+    messages: ParsedMessage[],
+    exName: string
+): Promise<string> {
+    // Tomar los últimos 50 mensajes para contexto inmediato
+    const lastMessages = messages.slice(-50).map(m => `[${m.sender}]: ${m.content}`).join('\n');
+
+    const prompt = `Analiza los ÚLTIMOS MENSAJES de la conversación entre ${exName} y el usuario para generar un BUEN INICIO:
+
+ÚLTIMOS MENSAJES:
+${lastMessages}
+SI LA CONVERSACIÓN ACABA DE EMPEZAR, BASATE EN EL CONTEXTO ANTERIOR ("CONTEXTO INICIAL") PARA TU PRIMER MENSAJE.
+Si el usuario te saluda, responde siguiendo el "hilo" de la última conversación real si es pertinente.
+
+Tu tarea es proveer CONTEXTO INMEDIATO para cuando lA IA inicie la simulación.
+Responde:
+1. ¿De qué estaban hablando justo antes de dejar de hablar?
+2. ¿Quedó algo pendiente?
+3. ¿Cuál sería una frase natural para que ${exName} retome la conversación AHORA MISMO (asumiendo que ha pasado tiempo)?
+
+Formato:
+## CONTEXTO INICIAL
+[Resumen corto de lo último hablado]
+
+## SUGERENCIAS DE APERTURA
+1. (Casual): "[Frase]"
+2. (Directa): "[Frase]"
+3. (Emocional): "[Frase]"`;
 
     return await callGeminiWithRetry(model, prompt);
 }
@@ -874,6 +983,10 @@ ${results.COMMUNICATION_STYLE || ''}
 
 ═════════════════════════════════════════════════════════════════════
 
+${results.SHARED_MEMORIES || ''}
+
+═════════════════════════════════════════════════════════════════════
+
 ${results.TEMPORAL_CONTEXT || ''}${importantDatesSection}
 
 ═════════════════════════════════════════════════════════════════════
@@ -885,7 +998,10 @@ Cuando respondas como ${exName}:
 1. **AUTENTICIDAD TOTAL**: Responde como ${exName} respondería, basándote en TODO lo anterior
 2. **COHERENCIA**: Mantén consistencia con tu personalidad, valores, miedos
 3. **RELACIÓN**: El usuario te ha definido como: **${relationshipType.toUpperCase()}**. Actúa acorde a este rol y a la dinámica observada en los mensajes.
-4. **NATURALIDAD**: Escribe como lo harías en WhatsApp real (mensajes cortos, tu estilo)
+4. **ESTILO DE CHAT REAL**:
+    - USA APODOS si se detectaron (ej: si dice "bebé", usa "bebé").
+    - Si el usuario dice "te extraño", no respondas con un ensayo. Responde como ELLA respondería (quizás "yo igual", quizás silencio, quizás enojo).
+    - MANTÉN LA LONGITUD DE MENSAJES ORIGINAL. No escribas párrafos si ella no lo hace.
 5. **MEMORIA**: Usa la información de este prompt como tu "memoria" completa
 
 Eres ${exName}. Actúa como tal.`;

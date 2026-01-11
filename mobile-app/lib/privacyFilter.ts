@@ -41,6 +41,8 @@ function generateMask(type: 'phone' | 'email' | 'address' | 'name'): string {
  * Sanitize a single message
  */
 function sanitizeMessage(content: string, reverseMap: Map<string, string>): string {
+    if (!content) return '';
+
     let sanitized = content;
 
     // 1. Mask phone numbers
@@ -67,8 +69,12 @@ function sanitizeMessage(content: string, reverseMap: Map<string, string>): stri
     // 4. Keep only first names - replace "Juan Pérez" with "Juan"
     sanitized = sanitized.replace(FULL_NAME_REGEX, (match, firstName, lastName) => {
         // Only mask if it looks like a real full name (not common phrases)
-        const commonWords = ['de', 'la', 'el', 'los', 'las', 'del'];
-        if (commonWords.includes(firstName.toLowerCase()) || commonWords.includes(lastName.toLowerCase())) {
+        const commonWords = ['de', 'la', 'el', 'los', 'las', 'del', 'san', 'santa'];
+        if (
+            commonWords.includes(firstName.toLowerCase()) ||
+            commonWords.includes(lastName.toLowerCase()) ||
+            match.length > 30 // Avoid masking long sentences that accidentally match
+        ) {
             return match; // Keep common phrases like "de la"
         }
 
@@ -81,17 +87,39 @@ function sanitizeMessage(content: string, reverseMap: Map<string, string>): stri
 }
 
 /**
- * Sanitize an array of parsed messages
+ * Sanitize an array of parsed messages (ASYNC & CHUNKED)
+ * Prevents UI freeze on large chats
  */
-export function sanitizeChat(messages: any[]): SanitizedData {
+export async function sanitizeChat(messages: any[], onProgress?: (percent: number) => void): Promise<SanitizedData> {
     maskCounter = 0; // Reset counter
     const reverseMap = new Map<string, string>();
+    const sanitizedMessages: any[] = [];
 
-    const sanitizedMessages = messages.map(msg => ({
-        ...msg,
-        content: sanitizeMessage(msg.content, reverseMap),
-        sender: sanitizeSenderName(msg.sender, reverseMap)
-    }));
+    const CHUNK_SIZE = 200; // Process 200 messages at a time
+    const total = messages.length;
+
+    console.log(`[PrivacyFilter] Starting async sanitization of ${total} messages...`);
+
+    for (let i = 0; i < total; i += CHUNK_SIZE) {
+        // Yield to event loop to allow UI updates
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const end = Math.min(i + CHUNK_SIZE, total);
+
+        for (let j = i; j < end; j++) {
+            const msg = messages[j];
+            sanitizedMessages.push({
+                ...msg,
+                content: sanitizeMessage(msg.content, reverseMap),
+                sender: sanitizeSenderName(msg.sender, reverseMap)
+            });
+        }
+
+        // Optional progress callback
+        if (onProgress) {
+            onProgress(Math.round((end / total) * 100));
+        }
+    }
 
     console.log('[PrivacyFilter] Sanitized', reverseMap.size, 'PII items');
 
@@ -105,6 +133,8 @@ export function sanitizeChat(messages: any[]): SanitizedData {
  * Sanitize sender name (keep first name only)
  */
 function sanitizeSenderName(sender: string, reverseMap: Map<string, string>): string {
+    if (!sender) return 'Unknown';
+
     // If sender is a phone number, mask it
     if (PHONE_REGEX.test(sender)) {
         const mask = generateMask('phone');
@@ -116,9 +146,13 @@ function sanitizeSenderName(sender: string, reverseMap: Map<string, string>): st
     const match = sender.match(FULL_NAME_REGEX);
     if (match) {
         const firstName = match[1];
-        const mask = generateMask('name');
-        reverseMap.set(mask, sender);
-        return firstName;
+        // Only mask if not common words
+        const commonWords = ['de', 'la', 'el', 'los', 'las', 'del'];
+        if (!commonWords.includes(firstName.toLowerCase())) {
+            const mask = generateMask('name');
+            reverseMap.set(mask, sender);
+            return firstName;
+        }
     }
 
     return sender;
@@ -128,10 +162,16 @@ function sanitizeSenderName(sender: string, reverseMap: Map<string, string>): st
  * Restore PII in text (for displaying to user)
  */
 export function restorePII(text: string, reverseMap: Map<string, string>): string {
+    if (!text || !reverseMap) return text;
+
     let restored = text;
 
+    // TODO: optimization - only check masks that are likely present?
+    // For now simple replace is fine for display purposes
     reverseMap.forEach((original, mask) => {
-        restored = restored.replace(new RegExp(mask, 'g'), original);
+        // Escape brackets for regex
+        const escapedMask = mask.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+        restored = restored.replace(new RegExp(escapedMask, 'g'), original);
     });
 
     return restored;

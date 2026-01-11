@@ -122,15 +122,14 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                 .single();
 
             // Race against timeout
-            const { data: profile, error } = await Promise.race([queryPromise, timeoutPromise]);
+            const { data: profile, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
 
             console.log('[Subscription] Query completed');
-            console.log('[Subscription] Error:', error);
-            console.log('[Subscription] Profile data:', profile);
 
             if (error) {
                 console.error('[Subscription] ❌ Error fetching tier from Supabase:', error);
-                console.error('[Subscription] Error details:', JSON.stringify(error, null, 2));
+                // Fallback to survivor on error
+                setTier('survivor');
                 return;
             }
 
