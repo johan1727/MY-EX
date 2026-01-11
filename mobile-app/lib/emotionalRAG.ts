@@ -308,8 +308,15 @@ export async function createEmotionalMemories(
 
     console.log(`[EmotionalMemories] Created ${clusters.length} clusters`);
 
-    // PASO 3: Generar memorias solo para clusters significativos
-    const significantClusters = clusters.filter(c => c.messages.length >= 5);
+    // PASO 3: Generar memorias solo para clusters significativos (Top 20 más intensos)
+    let significantClusters = clusters.filter(c => c.messages.length >= 5);
+
+    // Sort by intensity to prioritize the most emotional moments
+    significantClusters.sort((a, b) => b.avgIntensity - a.avgIntensity);
+
+    // LIMIT TO TOP 20 to prevent infinite loops (user reported 1/1144)
+    significantClusters = significantClusters.slice(0, 20);
+
     const model = genAI.getGenerativeModel({
         model: 'gemini-2.0-flash',
         generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
