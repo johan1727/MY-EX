@@ -146,7 +146,7 @@ export class BackgroundAnalysisManager {
             // Find the raw sender name in the chat that matches the user's input
             const rawExSenderName = Array.from(senderCounts.keys()).find(name => {
                 if (!name) return false;
-                const nameLower = name.toLowerCase().trim();
+                const nameLower = (name || '').toLowerCase().trim();
                 return nameLower === exNameLower ||
                     nameLower.includes(exNameLower) ||
                     exNameLower.includes(nameLower);
@@ -210,7 +210,7 @@ export class BackgroundAnalysisManager {
 
             const allParticipants = Array.from(senderCounts.keys()).filter(n => n);
             const detectedUserName = allParticipants.find(name =>
-                name && name.toLowerCase().trim() !== (rawExSenderName || '').toLowerCase().trim()
+                name && (name || '').toLowerCase().trim() !== (rawExSenderName || '').toLowerCase().trim()
             ) || 'Usuario';
 
             console.log('[BackgroundAnalysis] Context:', { rawExSenderName, finalExSenderName, detectedUserName });

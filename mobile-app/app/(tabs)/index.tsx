@@ -1191,26 +1191,27 @@ const styles = StyleSheet.create({
         fontSize: 15,
     },
     // Gemini Preview
+    // Gemini Preview
     previewBubble: {
         position: 'absolute',
-        bottom: 80, // Above input
+        bottom: 90, // Increased to clear input safely
         left: 20,
-        backgroundColor: 'rgba(168, 85, 247, 0.9)', // Purple glass
-        borderRadius: 20,
+        right: 20, // Constrain width
+        backgroundColor: 'rgba(168, 85, 247, 0.95)', // Slightly more opaque
+        borderRadius: 16,
         paddingHorizontal: 16,
-        paddingVertical: 8,
-        maxWidth: '80%',
+        paddingVertical: 10,
         shadowColor: '#a855f7',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
+        shadowOpacity: 0.4,
         shadowRadius: 8,
-        elevation: 5,
-        zIndex: 100,
-        borderBottomLeftRadius: 4, // Chat bubble tail effect
+        elevation: 8,
+        zIndex: 9999, // Force on top
+        borderBottomLeftRadius: 4,
     },
     previewText: {
         color: '#fff',
         fontSize: 14,
-        fontWeight: '500',
+        fontWeight: '600',
     },
 });

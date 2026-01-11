@@ -73,10 +73,7 @@ export default function ImportChat() {
     // const [analyzing, setAnalyzing] = useState(false); // Removed in favor of Context
     const [errorMessage, setErrorMessage] = useState('');
     const [parsedCount, setParsedCount] = useState(0);
-    const [truncatedInfo, setTruncatedInfo] = useState<{ original: number; used: number } | null>(null);
-    // const [progress, setProgress] = useState(0); // Removed in favor of Context
-    // const [debugLog, setDebugLog] = useState<string[]>([]); // Removed in favor of Context
-
+    const [truncationInfo, setTruncatedInfo] = useState<{ original: number; used: number } | null>(null);
 
     // Use Context
     const {
@@ -88,6 +85,25 @@ export default function ImportChat() {
         startAnalysis,
         resetAnalysis
     } = useAnalysis();
+
+    // Custom Alert State
+    const [customAlert, setCustomAlert] = useState<{
+        visible: boolean;
+        title: string;
+        message: string;
+        type: 'error' | 'success' | 'info';
+        buttons?: { text: string; onPress?: () => void; style?: 'cancel' | 'default' }[];
+    }>({ visible: false, title: '', message: '', type: 'info' });
+
+    const showPrettyAlert = (title: string, message: string, type: 'error' | 'success' | 'info' = 'info', buttons?: any[]) => {
+        setCustomAlert({ visible: true, title, message, type, buttons });
+    };
+
+    const closePrettyAlert = () => {
+        setCustomAlert(prev => ({ ...prev, visible: false }));
+    };
+
+
 
     // Sync context state
     useEffect(() => {
@@ -403,7 +419,7 @@ export default function ImportChat() {
 
                     // Find first .txt file
                     const txtFiles = Object.keys(zip.files).filter(name =>
-                        name.toLowerCase().endsWith('.txt') && !zip.files[name].dir
+                        name && (name || '').toLowerCase().endsWith('.txt') && !zip.files[name].dir
                     );
 
                     if (txtFiles.length === 0) {
@@ -633,12 +649,13 @@ export default function ImportChat() {
         } catch (e: any) {
             setStep('error');
             setErrorMessage(e.message);
+            showPrettyAlert('Error', e.message, 'error');
         }
     };
 
 
     const handleTextPaste = async () => {
-        if (!rawText.trim()) { Alert.alert('Error', 'Pega el texto'); return; }
+        if (!rawText.trim()) { showPrettyAlert('Error', 'Pega el texto', 'error'); return; }
         await new Promise(resolve => setTimeout(resolve, 50));
         const messages = parseWhatsAppExport(rawText);
         if (messages.length < 5) { Alert.alert('Error', 'Mínimo 5 mensajes'); return; }
@@ -649,12 +666,12 @@ export default function ImportChat() {
 
     const handleAnalyze = async () => {
         if (!exName.trim()) {
-            Alert.alert('Falta información', 'Por favor ingresa el nombre de tu Ex (o como quieres que se llame la IA).');
+            showPrettyAlert('Falta información', 'Por favor ingresa el nombre de tu Ex (o como quieres que se llame la IA).', 'error');
             return;
         }
 
         if (!relationshipType) {
-            Alert.alert('Falta información', 'Por favor selecciona el tipo de relación.');
+            showPrettyAlert('Falta información', 'Por favor selecciona el tipo de relación.', 'error');
             return;
         }
 
@@ -667,9 +684,10 @@ export default function ImportChat() {
                         t === 'friend' ? 'Amigo/a' :
                             t === 'family' ? 'Familiar' : 'Fallecido';
 
-            Alert.alert(
+            showPrettyAlert(
                 '¿Confirmar tipo de relación?',
                 `La IA detectó que parece ser "${translateType(suggestedRelationshipType)}", pero tú seleccionaste "${translateType(relationshipType)}".\n\n¿Quieres continuar así?`,
+                'info',
                 [
                     { text: 'Corregir', style: 'cancel' }, // Stay
                     {
@@ -720,12 +738,13 @@ export default function ImportChat() {
                 // Only enforce strict limit if NOT in development mode
                 if (count > 0 && !__DEV__) {
                     console.log('[handleAnalyze] Guest limit reached');
-                    Alert.alert(
+                    showPrettyAlert(
                         'Límite Gratuito Alcanzado',
                         'Has utilizado tu análisis gratuito como invitado. Por favor regístrate para continuar (es gratis).',
+                        'info',
                         [
-                            { text: 'Registrarme', onPress: () => router.push('/auth') },
-                            { text: 'Cancelar', style: 'cancel' }
+                            { text: 'Cancelar', style: 'cancel' },
+                            { text: 'Registrarme', onPress: () => router.push('/auth') }
                         ]
                     );
                     return;
@@ -766,12 +785,14 @@ export default function ImportChat() {
             if (existingProfile) {
                 // Profile exists - ask user what to do
                 return new Promise<void>((resolve) => {
-                    Alert.alert(
+                    showPrettyAlert(
                         '⚠️ Perfil Existente',
-                        `Ya existe un perfil llamado "${existingProfile.ex_name}".\\n\\n¿Qué quieres hacer?`,
+                        `Ya existe un perfil llamado "${existingProfile.ex_name}".\n\n¿Qué quieres hacer?`,
+                        'info',
                         [
+                            { text: 'Cancelar', style: 'cancel', onPress: () => resolve() },
                             {
-                                text: '🔄 Actualizar Existente',
+                                text: 'Actualizar',
                                 onPress: async () => {
                                     // Set a flag to update instead of create
                                     (window as any).__updateProfileId = existingProfile.id;
@@ -780,15 +801,14 @@ export default function ImportChat() {
                                 }
                             },
                             {
-                                text: '➕ Crear Nuevo',
+                                text: 'Crear Nuevo',
                                 onPress: async () => {
                                     // Clear flag to create new
                                     delete (window as any).__updateProfileId;
                                     await continueAnalysis();
                                     resolve();
                                 }
-                            },
-                            { text: 'Cancelar', style: 'cancel', onPress: () => resolve() }
+                            }
                         ]
                     );
                 });
@@ -832,7 +852,8 @@ export default function ImportChat() {
             router.push('/tools/ex-simulator/analysis');
         } catch (storageErr: any) {
             console.error('[handleAnalyze] Storage error:', storageErr);
-            Alert.alert('Error', 'No se pudo guardar los datos de análisis: ' + storageErr.message);
+            console.error('[handleAnalyze] Storage error:', storageErr);
+            showPrettyAlert('Error', 'No se pudo guardar los datos de análisis: ' + storageErr.message, 'error');
         }
     };
 
@@ -1300,6 +1321,67 @@ export default function ImportChat() {
                 )}
 
             </ScrollView >
+
+            {/* Custom Pretty Alert Modal */}
+            {
+                customAlert.visible && (
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }]}>
+                        <View style={{ width: '85%', maxWidth: 340, backgroundColor: '#1E1E1E', borderRadius: 20, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#333' }}>
+                            <View style={{
+                                width: 60, height: 60, borderRadius: 30,
+                                backgroundColor: customAlert.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                                alignItems: 'center', justifyContent: 'center', marginBottom: 16
+                            }}>
+                                {customAlert.type === 'error' && <View style={{ width: 24, height: 2, backgroundColor: '#ef4444', transform: [{ rotate: '45deg' }], position: 'absolute' }} />}
+                                {customAlert.type === 'error' && <View style={{ width: 24, height: 2, backgroundColor: '#ef4444', transform: [{ rotate: '-45deg' }], position: 'absolute' }} />}
+
+                                {customAlert.type === 'success' && <View style={{ width: 10, height: 18, borderBottomWidth: 3, borderRightWidth: 3, borderColor: '#22c55e', transform: [{ rotate: '45deg' }], marginTop: -2 }} />}
+
+                                {customAlert.type === 'info' && <Text style={{ fontSize: 24 }}>ℹ️</Text>}
+                            </View>
+
+                            <Text style={{ color: '#fff', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 12 }}>
+                                {customAlert.title}
+                            </Text>
+
+                            <Text style={{ color: '#9ca3af', fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 24 }}>
+                                {customAlert.message}
+                            </Text>
+
+                            <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+                                {customAlert.buttons && customAlert.buttons.length > 0 ? (
+                                    customAlert.buttons.map((btn, i) => (
+                                        <TouchableOpacity
+                                            key={i}
+                                            onPress={() => {
+                                                if (btn.onPress) btn.onPress();
+                                                closePrettyAlert();
+                                            }}
+                                            style={{
+                                                flex: 1,
+                                                backgroundColor: btn.style === 'cancel' ? '#333' : '#a855f7',
+                                                padding: 14,
+                                                borderRadius: 12,
+                                                alignItems: 'center'
+                                            }}
+                                        >
+                                            <Text style={{ color: '#fff', fontWeight: 'bold' }}>{btn.text}</Text>
+                                        </TouchableOpacity>
+                                    ))
+                                ) : (
+                                    <TouchableOpacity
+                                        onPress={closePrettyAlert}
+                                        style={{ flex: 1, backgroundColor: '#a855f7', padding: 14, borderRadius: 12, alignItems: 'center' }}
+                                    >
+                                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>OK</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        </View>
+                    </View>
+                )
+            }
+
         </View >
     );
 }
