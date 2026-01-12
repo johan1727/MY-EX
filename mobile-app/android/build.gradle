@@ -5,7 +5,7 @@ buildscript {
         buildToolsVersion = findProperty('android.buildToolsVersion') ?: '35.0.0'
         minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '24')
         compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '35')
-        targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '34')
+        targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '35')
         kotlinVersion = findProperty('android.kotlinVersion') ?: '1.9.25'
         // Suppress warning from Stripe SDK regarding Kotlin version mismatch (Compose Compiler 1.3.2 wants Kotlin 1.7.20)
         // We are on Kotlin 1.9.25 for React Native 0.76, so we suppress this check.
