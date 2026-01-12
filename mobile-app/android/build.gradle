@@ -12,6 +12,8 @@ buildscript {
         suppressKotlinVersionCompatibilityCheck = true
         // Force Stripe to use a Compose Compiler compatible with Kotlin 1.9.25
         stripeReactNative_composeCompilerVersion = '1.5.14'
+        StripeReactNative_composeCompilerVersion = '1.5.14'
+        composeCompilerVersion = '1.5.14'
 
         ndkVersion = "26.1.10909125"
     }
