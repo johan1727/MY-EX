@@ -43,4 +43,11 @@ allprojects {
         mavenCentral()
         maven { url 'https://www.jitpack.io' }
     }
+    
+    // Force specific versions to resolve conflicts
+    configurations.all {
+        resolutionStrategy {
+            force 'androidx.compose.compiler:compiler:1.5.14'
+        }
+    }
 }
