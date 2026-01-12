@@ -43,15 +43,4 @@ allprojects {
     }
 }
 
-// Force specific Compose Compiler version for Stripe module to match Kotlin 1.9
-subprojects {
-    afterEvaluate { project ->
-        if (project.name == "stripe_stripe-react-native") {
-            android {
-                composeOptions {
-                    kotlinCompilerExtensionVersion = "1.5.14"
-                }
-            }
-        }
-    }
-}
+
