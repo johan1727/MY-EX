@@ -12,3 +12,8 @@
 -keep class com.facebook.react.turbomodule.** { *; }
 
 # Add any project specific keep options here:
+
+# RevenueCat - Amazon Appstore Support
+-dontwarn com.amazon.**
+-keep class com.amazon.** { *; }
+-dontnote com.amazon.**
