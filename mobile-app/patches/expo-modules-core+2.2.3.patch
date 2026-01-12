@@ -1,0 +1,15 @@
+diff --git a/node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle b/node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle
+index 5488421..a3b7c89 100644
+--- a/node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle
++++ b/node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle
+@@ -92,7 +92,9 @@ ext.useExpoPublishing = {
+     publishing {
+       publications {
+         release(MavenPublication) {
+-          from components.release
++          if (components.findByName("release")) {
++            from components.release
++          }
+         }
+       }
+       repositories {
