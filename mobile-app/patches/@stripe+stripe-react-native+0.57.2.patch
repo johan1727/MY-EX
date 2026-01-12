@@ -7,7 +7,7 @@ index c40c1a3..2bb12df 100644
  
  android {
 +    composeOptions {
-+        kotlinCompilerExtensionVersion "1.5.14"
++        kotlinCompilerExtensionVersion "1.5.15"
 +    }
 +
    namespace "com.reactnativestripesdk"
