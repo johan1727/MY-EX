@@ -14,13 +14,13 @@ import { storage } from '../lib/storage';
 import { BackgroundAnalysisManager } from '../lib/BackgroundAnalysisManager';
 import { AnalysisProgressIndicator } from '../components/AnalysisProgressIndicator';
 import WebAnalytics from '../components/WebAnalytics';
+import HotjarTracking from '../components/HotjarTracking';
 import * as Sentry from '@sentry/react-native';
 
 // Initialize Sentry for error monitoring
 if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
     Sentry.init({
         dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-        enableInExpoDevelopment: false, // Only in production
         debug: false,
     });
 }
@@ -252,6 +252,7 @@ export default function RootLayout() {
                     />
                     <CookieConsent />
                     <WebAnalytics />
+                    <HotjarTracking />
                     {/* Show progress indicator for any active background analysis - REMOVED PER USER REQUEST */}
                     {/* <AnalysisProgressIndicator /> */}
                     <StatusBar style="light" />
