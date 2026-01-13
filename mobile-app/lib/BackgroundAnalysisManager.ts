@@ -412,8 +412,11 @@ export class BackgroundAnalysisManager {
 
                 // Crear memorias emocionales con progress tracking
                 if (messages.length >= 20 && user?.id) {
+                    // LIMIT: Last 200 messages to prevent timeout (User reported >1h for 1000+ msgs)
+                    const limitedMessages = messages.length > 200 ? messages.slice(-200) : messages;
+
                     emotionalMemories = await createEmotionalMemories(
-                        messages,
+                        limitedMessages,
                         profileId,
                         user.id,
                         (current, total) => {

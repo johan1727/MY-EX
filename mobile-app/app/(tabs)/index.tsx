@@ -275,11 +275,21 @@ export default function ExSimulatorChat() {
         const textToSend = content || inputText;
         if (!textToSend.trim() || isTyping) return;
 
-        // Check Free Limit
-        if (tier === 'survivor' && userMessageCount >= FREE_MESSAGE_LIMIT) {
-            Keyboard.dismiss();
-            setShowUpgradeModal(true);
-            return;
+        // Check Free Limit (Sophisticated)
+        if (tier === 'survivor') {
+            const { checkFreeTierLimits } = require('../../lib/usageTracking');
+            const limitResult = await checkFreeTierLimits(userId || 'guest'); // Use persistent ID
+
+            if (!limitResult.allowed) {
+                Keyboard.dismiss();
+                if (limitResult.reason === 'daily') {
+                    Alert.alert('Límite Diario Alcanzado', 'Has usado tus 30 mensajes de hoy. Vuelve mañana o mejora tu plan.');
+                } else if (limitResult.reason === 'burst') {
+                    Alert.alert('Recargando Energía', `Has consumido tus 10 mensajes. Tómate un descanso, recargaremos en ${limitResult.waitTime} minutos.`);
+                }
+                setShowUpgradeModal(true);
+                return;
+            }
         }
 
         const currentInput = textToSend.trim();
@@ -322,6 +332,12 @@ export default function ExSimulatorChat() {
 
             const updatedFacts = await loadFacts(userId, profileData.supabaseId);
             setMemoryFacts(updatedFacts);
+
+            // Track Usage
+            if (tier === 'survivor') {
+                const { incrementFreeTierUsage } = require('../../lib/usageTracking');
+                incrementFreeTierUsage(userId || 'guest');
+            }
             return;
         }
 
@@ -335,6 +351,12 @@ export default function ExSimulatorChat() {
         const newMessages = [...messages, userMessage];
         setMessages(newMessages);
         setIsTyping(true);
+
+        // Track Usage (Normal Message)
+        if (tier === 'survivor') {
+            const { incrementFreeTierUsage } = require('../../lib/usageTracking');
+            incrementFreeTierUsage(userId || 'guest');
+        }
 
         let promptModifier = '';
         const defensiveTopic = checkDefensiveTrigger(inputText, profileData.profile?.defensiveTopics || []);

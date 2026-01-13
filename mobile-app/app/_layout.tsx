@@ -13,6 +13,7 @@ import ShareIntentModal from '../components/ShareIntentModal';
 import { storage } from '../lib/storage';
 import { BackgroundAnalysisManager } from '../lib/BackgroundAnalysisManager';
 import { AnalysisProgressIndicator } from '../components/AnalysisProgressIndicator';
+import WebAnalytics from '../components/WebAnalytics';
 
 
 
@@ -240,6 +241,7 @@ export default function RootLayout() {
                         type={shareModalType}
                     />
                     <CookieConsent />
+                    <WebAnalytics />
                     {/* Show progress indicator for any active background analysis - REMOVED PER USER REQUEST */}
                     {/* <AnalysisProgressIndicator /> */}
                     <StatusBar style="light" />
