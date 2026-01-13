@@ -62,7 +62,7 @@ export default function PrivacyLegalScreen() {
 
                     <TouchableOpacity
                         style={styles.menuItem}
-                        onPress={() => Linking.openURL('mailto:soporte@soyremi.com')}
+                        onPress={() => Linking.openURL('mailto:soyremi.app@gmail.com')}
                     >
                         <View style={styles.menuItemLeft}>
                             <Mail size={20} color="#9ca3af" />
