@@ -210,7 +210,7 @@ export async function updateMasterPromptWithCorrections(
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
         // UPGRADE: Gemini 2.0 Flash (más rápido y mejor)
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         // Construir resumen de correcciones
         const correctionsSummary = corrections.map((c, i) =>
@@ -456,7 +456,7 @@ export async function analyzeConversationPatterns(
 
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         // Tomar últimos 20 mensajes para análisis
         const recentConvo = conversation.slice(-20);
