@@ -1,0 +1,10 @@
+android
+ios
+node_modules
+.expo
+.git
+*.zip
+*.aab
+*.apk
+coverage
+.DS_Store

@@ -1904,9 +1904,9 @@ export function getUsageLimits(subscriptionTier: string): UsageLimits {
                 maxMessagesPerSimulation: -1 // ilimitado
             };
         case 'warrior':
-            // Warrior: 150k tokens/día, ilimitado
+            // Warrior: 150k tokens/día, ilimitado (Updated to 20 profiles per user request)
             return {
-                maxProfiles: 5,
+                maxProfiles: 20,
                 maxSimulationsPerMonth: -1,
                 maxMessagesPerSimulation: -1
             };
@@ -2038,6 +2038,9 @@ export async function incrementMonthlyProfileCount(userId?: string): Promise<voi
 /**
  * Check if user can create a new profile this month
  */
+/**
+ * Check if user can create a new profile (Based on ACTIVE profiles)
+ */
 export async function canCreateProfileThisMonth(subscriptionTier: string, userId?: string): Promise<{
     canCreate: boolean;
     currentCount: number;
@@ -2050,24 +2053,41 @@ export async function canCreateProfileThisMonth(subscriptionTier: string, userId
         return { canCreate: true, currentCount: 0, maxAllowed: -1 };
     }
 
-    const currentCount = await getMonthlyProfileCount(userId);
+    // NEW LOGIC: Count ACTIVE profiles instead of monthly creations
+    let activeCount = 0;
+    try {
+        let targetId = userId;
+        if (!targetId) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) targetId = user.id;
+        }
 
-    if (currentCount >= limits.maxProfiles) {
-        const nextMonth = new Date();
-        nextMonth.setMonth(nextMonth.getMonth() + 1);
-        nextMonth.setDate(1);
+        if (targetId) {
+            const { count, error } = await supabase
+                .from('ex_profiles')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', targetId);
 
+            if (!error && count !== null) {
+                activeCount = count;
+            }
+        }
+    } catch (e) {
+        console.error('Error counting active profiles:', e);
+    }
+
+    if (activeCount >= limits.maxProfiles) {
         return {
             canCreate: false,
-            currentCount,
+            currentCount: activeCount,
             maxAllowed: limits.maxProfiles,
-            message: `Has alcanzado el límite de ${limits.maxProfiles} perfiles este mes. Podrás crear más el 1 de ${nextMonth.toLocaleString('es-ES', { month: 'long' })}.`
+            message: `Has alcanzado el límite de ${limits.maxProfiles} perfiles activos. Elimina uno para crear otro o mejora tu plan a Premium para tener más.`
         };
     }
 
     return {
         canCreate: true,
-        currentCount,
+        currentCount: activeCount,
         maxAllowed: limits.maxProfiles
     };
 }
