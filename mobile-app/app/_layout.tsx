@@ -14,6 +14,16 @@ import { storage } from '../lib/storage';
 import { BackgroundAnalysisManager } from '../lib/BackgroundAnalysisManager';
 import { AnalysisProgressIndicator } from '../components/AnalysisProgressIndicator';
 import WebAnalytics from '../components/WebAnalytics';
+import * as Sentry from '@sentry/react-native';
+
+// Initialize Sentry for error monitoring
+if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
+    Sentry.init({
+        dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+        enableInExpoDevelopment: false, // Only in production
+        debug: false,
+    });
+}
 
 
 
