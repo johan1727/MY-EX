@@ -1,0 +1,35 @@
+diff --git a/node_modules/@stripe/stripe-react-native/android/.project b/node_modules/@stripe/stripe-react-native/android/.project
+index 0e0a1ba..36d66da 100644
+--- a/node_modules/@stripe/stripe-react-native/android/.project
++++ b/node_modules/@stripe/stripe-react-native/android/.project
+@@ -14,4 +14,15 @@
+ 	<natures>
+ 		<nature>org.eclipse.buildship.core.gradleprojectnature</nature>
+ 	</natures>
++	<filteredResources>
++		<filter>
++			<id>1768184673925</id>
++			<name></name>
++			<type>30</type>
++			<matcher>
++				<id>org.eclipse.core.resources.regexFilterMatcher</id>
++				<arguments>node_modules|\.git|__CREATED_BY_JAVA_LANGUAGE_SERVER__</arguments>
++			</matcher>
++		</filter>
++	</filteredResources>
+ </projectDescription>
+diff --git a/node_modules/@stripe/stripe-react-native/android/build.gradle b/node_modules/@stripe/stripe-react-native/android/build.gradle
+index c40c1a3..2bb12df 100644
+--- a/node_modules/@stripe/stripe-react-native/android/build.gradle
++++ b/node_modules/@stripe/stripe-react-native/android/build.gradle
+@@ -75,6 +75,10 @@ if (isNewArchitectureEnabled()) {
+ }
+ 
+ android {
++    composeOptions {
++        kotlinCompilerExtensionVersion "1.5.14"
++    }
++
+   namespace "com.reactnativestripesdk"
+   buildFeatures {
+     buildConfig true
