@@ -15,11 +15,12 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Send, Heart, Sparkles, Crown, Image as ImageIcon, X, HelpCircle, LogOut } from 'lucide-react-native';
+import { ArrowLeft, Send, Heart, Sparkles, Crown, Image as ImageIcon, X, HelpCircle, LogOut, Flag } from 'lucide-react-native';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { storage } from '../lib/storage';
 import UpgradeBanner from '../components/UpgradeBanner';
 import { useSubscription } from '@/lib/SubscriptionContext';
+import { reportAIContent } from '../lib/aiContentModeration';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -327,6 +328,58 @@ RESPONDE:`;
                                         {msg.content}
                                     </Text>
                                 ) : null}
+
+                                {/* AI Label + Report Button (Google Play requirement) */}
+                                {msg.role === 'assistant' && (
+                                    <View style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        marginTop: 8,
+                                        paddingTop: 8,
+                                        borderTopWidth: 1,
+                                        borderTopColor: 'rgba(255,255,255,0.1)'
+                                    }}>
+                                        <Sparkles size={12} color="#9ca3af" /
+                                        >
+                                        <Text style={{
+                                            fontSize: 11,
+                                            color: '#9ca3af',
+                                            marginLeft: 4,
+                                            fontWeight: '500'
+                                        }}>
+                                            Generado por IA
+                                        </Text>
+                                        <TouchableOpacity
+                                            onPress={async () => {
+                                                const success = await reportAIContent(
+                                                    `coach_msg_${index}`,
+                                                    msg.content,
+                                                    'coach',
+                                                    'current_user_id' // TODO: Get real user ID from auth
+                                                );
+                                            }}
+                                            style={{
+                                                marginLeft: 'auto',
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                                paddingHorizontal: 8,
+                                                paddingVertical: 4,
+                                                borderRadius: 8
+                                            }}
+                                        >
+                                            <Flag size={11} color="#ef4444" />
+                                            <Text style={{
+                                                fontSize: 11,
+                                                color: '#ef4444',
+                                                marginLeft: 4,
+                                                fontWeight: '600'
+                                            }}>
+                                                Reportar
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
                             </View>
                         </View>
                     ))}

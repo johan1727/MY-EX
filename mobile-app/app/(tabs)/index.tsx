@@ -8,8 +8,9 @@ import { loadMasterPrompt } from '../../lib/masterPromptSupabase';
 import { storage } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { checkProhibitedContent } from '../../lib/contentModeration';
-import { Send, Sparkles, ImageIcon, Brain, Menu } from 'lucide-react-native';
+import { Send, Sparkles, ImageIcon, Brain, Menu, Flag } from 'lucide-react-native';
 import { useSubscription } from '../../lib/SubscriptionContext';
+import { reportAIContent } from '../../lib/aiContentModeration';
 import ChatHeader, { CHAT_THEMES, ChatTheme } from '../../components/ChatHeader';
 import { StatusBar } from 'expo-status-bar';
 import ProfileDrawer from '../../components/ProfileDrawer';
@@ -739,6 +740,57 @@ export default function ExSimulatorChat() {
                                     {new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                     {msg.role === 'user' && msg.seen && ' • Leído'}
                                 </Text>
+
+                                {/* AI Label + Report Button (Google Play requirement) */}
+                                {msg.role === 'assistant' && (
+                                    <View style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        marginTop: 8,
+                                        paddingTop: 8,
+                                        borderTopWidth: 1,
+                                        borderTopColor: 'rgba(255,255,255,0.05)'
+                                    }}>
+                                        <Sparkles size={11} color="#9ca3af" />
+                                        <Text style={{
+                                            fontSize: 10,
+                                            color: '#9ca3af',
+                                            marginLeft: 4,
+                                            fontWeight: '500'
+                                        }}>
+                                            Generado por IA
+                                        </Text>
+                                        <TouchableOpacity
+                                            onPress={async () => {
+                                                await reportAIContent(
+                                                    `sim_msg_${idx}`,
+                                                    msg.content,
+                                                    'ex_simulator',
+                                                    'current_user_id' // TODO: Get real user ID
+                                                );
+                                            }}
+                                            style={{
+                                                marginLeft: 'auto',
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                                                paddingHorizontal: 7,
+                                                paddingVertical: 3,
+                                                borderRadius: 6
+                                            }}
+                                        >
+                                            <Flag size={10} color="#ef4444" />
+                                            <Text style={{
+                                                fontSize: 10,
+                                                color: '#ef4444',
+                                                marginLeft: 3,
+                                                fontWeight: '600'
+                                            }}>
+                                                Reportar
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
                             </View>
                         </View>
                     ))}
