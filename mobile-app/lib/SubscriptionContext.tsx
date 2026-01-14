@@ -31,6 +31,7 @@ interface SubscriptionContextType {
     restorePurchases: () => Promise<void>;
     checkFeatureAccess: (feature: string) => boolean;
     getRemainingQuota: (feature: string) => number; // -1 para ilimitado
+    setSubscriberAttribute: (key: string, value: string) => Promise<void>;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
@@ -301,6 +302,17 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         return TIER_LIMITS[tier][feature] ?? 0;
     };
 
+    const setSubscriberAttribute = async (key: string, value: string) => {
+        if (Platform.OS !== 'web') {
+            try {
+                await Purchases.setAttributes({ [key]: value });
+                console.log(`[Subscription] Attribute set: ${key}=${value}`);
+            } catch (e) {
+                console.error('[Subscription] Error setting attribute:', e);
+            }
+        }
+    };
+
     return (
         <SubscriptionContext.Provider
             value={{
@@ -311,6 +323,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                 restorePurchases,
                 checkFeatureAccess,
                 getRemainingQuota,
+                setSubscriberAttribute,
             }}
         >
             {children}

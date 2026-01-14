@@ -21,26 +21,10 @@ const SLIDES = [
         id: 1,
         title: 'Hola, soy REMI',
         subtitle: 'Tu compañero de sanación emocional',
-        description: 'Estoy aquí para ayudarte a procesar tus emociones, entender tus sentimientos y avanzar hacia una versión más fuerte de ti.',
-        icon: Brain,
-        gradient: ['#8b5cf6', '#6366f1'],
-    },
-    {
-        id: 2,
-        title: 'Tu espacio seguro',
-        subtitle: 'Sin juicios, solo apoyo',
-        description: 'Habla conmigo sobre lo que sientes. Puedo ayudarte a analizar conversaciones, manejar momentos difíciles y celebrar tu progreso.',
-        icon: Shield,
-        gradient: ['#3b82f6', '#06b6d4'],
-    },
-    {
-        id: 3,
-        title: 'Comienza ahora',
-        subtitle: 'Tu transformación empieza aquí',
-        description: 'No necesitas crear una cuenta para empezar. Solo presiona el botón y comienza a sanar.',
+        description: 'Estoy aquí para escucharte, analizar tu situación y ayudarte a avanzar hacia una versión más fuerte de ti, sin juicios.',
         icon: Sparkles,
-        gradient: ['#10b981', '#34d399'],
-    },
+        gradient: ['#8b5cf6', '#6366f1'],
+    }
 ];
 
 export default function WelcomeScreen() {
@@ -92,17 +76,12 @@ export default function WelcomeScreen() {
         <View style={styles.container}>
             <StatusBar style="light" />
 
-            {/* Skip button */}
-            <TouchableOpacity style={styles.skipButton} onPress={handleStart}>
-                <Text style={styles.skipText}>Saltar</Text>
-            </TouchableOpacity>
-
             {/* Content */}
             <View style={styles.content}>
                 {/* Icon with gradient background */}
                 <Animated.View style={[styles.iconContainer, { opacity: fadeAnim }]}>
                     <LinearGradient
-                        colors={slide.gradient}
+                        colors={slide.gradient as [string, string]}
                         style={styles.iconGradient}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
@@ -119,31 +98,16 @@ export default function WelcomeScreen() {
                 </Animated.View>
             </View>
 
-            {/* Pagination dots */}
-            <View style={styles.pagination}>
-                {SLIDES.map((_, index) => (
-                    <View
-                        key={index}
-                        style={[
-                            styles.dot,
-                            index === currentSlide && styles.dotActive,
-                        ]}
-                    />
-                ))}
-            </View>
-
             {/* Action button */}
             <View style={styles.footer}>
-                <TouchableOpacity style={styles.button} onPress={handleNext}>
+                <TouchableOpacity style={styles.button} onPress={handleStart}>
                     <LinearGradient
-                        colors={['#8b5cf6', '#6366f1']}
+                        colors={['#8b5cf6', '#6366f1'] as [string, string]}
                         style={styles.buttonGradient}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
                     >
-                        <Text style={styles.buttonText}>
-                            {currentSlide === SLIDES.length - 1 ? 'Comenzar' : 'Siguiente'}
-                        </Text>
+                        <Text style={styles.buttonText}>Comenzar a sanar</Text>
                         <ArrowRight size={20} color="#fff" style={styles.buttonIcon} />
                     </LinearGradient>
                 </TouchableOpacity>

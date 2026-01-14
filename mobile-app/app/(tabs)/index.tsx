@@ -98,6 +98,8 @@ export default function ExSimulatorChat() {
     const [showLoginModal, setShowLoginModal] = useState(false);
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [hasShownLoginPrompt, setHasShownLoginPrompt] = useState(false);
+    const [usageData, setUsageData] = useState<{ allowed: boolean, reason?: 'daily' | 'burst', waitTime?: number } | null>(null);
+    const [showInsightTeaser, setShowInsightTeaser] = useState(false);
 
     // Theme state
     const [chatTheme, setChatTheme] = useState<ChatTheme>('default');
@@ -112,8 +114,17 @@ export default function ExSimulatorChat() {
     useFocusEffect(
         useCallback(() => {
             loadProfile();
+            refreshUsage();
         }, [])
     );
+
+    const refreshUsage = async () => {
+        if (tier === 'survivor') {
+            const { checkFreeTierLimits } = require('../../lib/usageTracking');
+            const result = await checkFreeTierLimits(userId || 'guest');
+            setUsageData({ dailyCount: 0, ...result }); // dailyCount is updated elsewhere but we check allowed here
+        }
+    };
 
     useEffect(() => {
         // Auto-scroll to bottom when messages change
@@ -499,6 +510,21 @@ export default function ExSimulatorChat() {
             const finalMessages = [...newMessages, assistantMsg];
             setMessages(finalMessages);
             await saveConversation(finalMessages);
+
+            // INSIGHT TEASER: Trigger after 5 messages
+            if (finalMessages.filter(m => m.role === 'user').length === 5 && !isPremium) {
+                setTimeout(() => {
+                    const teaserMsg: Message = {
+                        role: 'assistant',
+                        content: "💡 REMI ha detectado un patrón interesante en tu forma de comunicarte. Desbloquea el 'Análisis de Apego' en tu perfil para ver qué significa.",
+                        timestamp: new Date(),
+                        seen: false
+                    };
+                    setMessages(prev => [...prev, teaserMsg]);
+                }, 1000);
+            }
+
+            refreshUsage();
         } catch (error: any) {
             console.error('[ExChat] Error:', error);
             let errorText = '❌ Error de conexión. ';
@@ -790,6 +816,44 @@ export default function ExSimulatorChat() {
                     context="ex_simulator"
                     userId={userId || 'current_user_id'}
                 />
+
+                {/* Recharge Banner (for free users) */}
+                {usageData && !usageData.allowed && (
+                    <View style={{
+                        backgroundColor: '#1E1B4B',
+                        padding: 12,
+                        marginHorizontal: 16,
+                        marginBottom: 8,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: '#4338CA',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                    }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13, marginBottom: 2 }}>
+                                {usageData.reason === 'daily' ? 'Límite diario alcanzado' : 'Recargando energía...'}
+                            </Text>
+                            <Text style={{ color: '#A5B4FC', fontSize: 12 }}>
+                                {usageData.reason === 'daily'
+                                    ? 'Vuelve mañana para seguir sanando.'
+                                    : `Tómate un respiro. Recargaremos en ${usageData.waitTime} min.`}
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
+                            style={{
+                                backgroundColor: '#4338CA',
+                                paddingHorizontal: 12,
+                                paddingVertical: 6,
+                                borderRadius: 8
+                            }}
+                        >
+                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>Upgrade</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
 
                 {/* Input */}
                 <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'transparent' }}>
