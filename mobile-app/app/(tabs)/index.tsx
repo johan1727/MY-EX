@@ -8,12 +8,13 @@ import { loadMasterPrompt } from '../../lib/masterPromptSupabase';
 import { storage } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { checkProhibitedContent } from '../../lib/contentModeration';
-import { Send, Sparkles, ImageIcon, Brain, Menu, Flag } from 'lucide-react-native';
+import { Send, Sparkles, ImageIcon, Brain, Menu, Flag, MoreVertical } from 'lucide-react-native';
 import { useSubscription } from '../../lib/SubscriptionContext';
 import { reportAIContent } from '../../lib/aiContentModeration';
 import ChatHeader, { CHAT_THEMES, ChatTheme } from '../../components/ChatHeader';
 import { StatusBar } from 'expo-status-bar';
 import ProfileDrawer from '../../components/ProfileDrawer';
+import AIReportModal from '../../components/AIReportModal';
 import * as ImagePicker from 'expo-image-picker';
 
 import {
@@ -70,10 +71,23 @@ export default function ExSimulatorChat() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputText, setInputText] = useState('');
     const [isTyping, setIsTyping] = useState(false);
+    const [reportModalVisible, setReportModalVisible] = useState(false);
+    const [reportData, setReportData] = useState({ id: '', content: '' });
+
+    const handleReport = (msg: any, index: number) => {
+        setReportData({ id: `sim_msg_${index}`, content: msg.content });
+        setReportModalVisible(true);
+    };
     const [userName, setUserName] = useState('');
     const [conversationMemory, setConversationMemory] = useState<string>('');
     const [memoryFacts, setMemoryFacts] = useState<MemoryFact[]>([]);
     const [userId, setUserId] = useState<string | null>(null);
+
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data }) => {
+            if (data?.user?.id) setUserId(data.user.id);
+        });
+    }, []);
     const [pastSummaries, setPastSummaries] = useState<string>(''); // RAG: past conversation summaries
 
     // NEW: Emotional simulation state
@@ -724,72 +738,34 @@ export default function ExSimulatorChat() {
                                     <Text style={styles.messageAvatarText}>{profileData.exName[0]}</Text>
                                 </View>
                             )}
-                            <View
-                                style={[
+                            <View style={{ flexDirection: 'row', alignItems: 'flex-end', maxWidth: '100%' }}>
+                                <View style={[
                                     styles.messageBubble,
                                     msg.role === 'user' ? styles.userBubble : styles.assistantBubble,
-                                ]}
-                            >
-                                <Text style={[
-                                    styles.messageText,
-                                    { color: msg.role === 'user' ? '#fff' : '#e5e5e5' }
+                                    { maxWidth: msg.role === 'assistant' ? '78%' : '78%' }
                                 ]}>
-                                    {msg.content}
-                                </Text>
-                                <Text style={styles.messageTime}>
-                                    {new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                                    {msg.role === 'user' && msg.seen && ' • Leído'}
-                                </Text>
+                                    <Text style={[
+                                        styles.messageText,
+                                        { color: msg.role === 'user' ? '#fff' : '#e5e5e5' }
+                                    ]}>
+                                        {msg.content}
+                                    </Text>
+                                    <Text style={styles.messageTime}>
+                                        {new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                        {msg.role === 'user' && msg.seen && ' • Leído'}
+                                    </Text>
+                                </View>
 
-                                {/* AI Label + Report Button (Google Play requirement) */}
                                 {msg.role === 'assistant' && (
-                                    <View style={{
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        marginTop: 8,
-                                        paddingTop: 8,
-                                        borderTopWidth: 1,
-                                        borderTopColor: 'rgba(255,255,255,0.05)'
-                                    }}>
-                                        <Sparkles size={11} color="#9ca3af" />
-                                        <Text style={{
-                                            fontSize: 10,
-                                            color: '#9ca3af',
-                                            marginLeft: 4,
-                                            fontWeight: '500'
-                                        }}>
-                                            Generado por IA
-                                        </Text>
-                                        <TouchableOpacity
-                                            onPress={async () => {
-                                                await reportAIContent(
-                                                    `sim_msg_${idx}`,
-                                                    msg.content,
-                                                    'ex_simulator',
-                                                    'current_user_id' // TODO: Get real user ID
-                                                );
-                                            }}
-                                            style={{
-                                                marginLeft: 'auto',
-                                                flexDirection: 'row',
-                                                alignItems: 'center',
-                                                backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                                                paddingHorizontal: 7,
-                                                paddingVertical: 3,
-                                                borderRadius: 6
-                                            }}
-                                        >
-                                            <Flag size={10} color="#ef4444" />
-                                            <Text style={{
-                                                fontSize: 10,
-                                                color: '#ef4444',
-                                                marginLeft: 3,
-                                                fontWeight: '600'
-                                            }}>
-                                                Reportar
-                                            </Text>
-                                        </TouchableOpacity>
-                                    </View>
+                                    <TouchableOpacity
+                                        onPress={() => handleReport(msg, idx)}
+                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                        style={{ marginLeft: 4, marginBottom: 4 }}
+                                    >
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <MoreVertical size={16} color="#6b7280" />
+                                        </View>
+                                    </TouchableOpacity>
                                 )}
                             </View>
                         </View>
@@ -806,6 +782,14 @@ export default function ExSimulatorChat() {
                         </View>
                     )}
                 </ScrollView>
+                <AIReportModal
+                    visible={reportModalVisible}
+                    onClose={() => setReportModalVisible(false)}
+                    messageId={reportData.id}
+                    content={reportData.content}
+                    context="ex_simulator"
+                    userId={userId || 'current_user_id'}
+                />
 
                 {/* Input */}
                 <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'transparent' }}>

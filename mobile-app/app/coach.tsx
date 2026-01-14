@@ -10,14 +10,17 @@ import {
     Platform,
     Image,
     Modal,
+    Alert,
 } from 'react-native';
+import AIReportModal from '../components/AIReportModal';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Send, Heart, Sparkles, Crown, Image as ImageIcon, X, HelpCircle, LogOut, Flag } from 'lucide-react-native';
+import { ArrowLeft, Send, Heart, Sparkles, Crown, Image as ImageIcon, X, HelpCircle, LogOut, Flag, MoreVertical } from 'lucide-react-native';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { storage } from '../lib/storage';
+import { supabase } from '../lib/supabase';
 import UpgradeBanner from '../components/UpgradeBanner';
 import { useSubscription } from '@/lib/SubscriptionContext';
 import { reportAIContent } from '../lib/aiContentModeration';
@@ -40,6 +43,21 @@ export default function CoachScreen() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputText, setInputText] = useState('');
     const [isTyping, setIsTyping] = useState(false);
+    const [reportModalVisible, setReportModalVisible] = useState(false);
+    const [reportData, setReportData] = useState({ id: '', content: '' });
+    const [userId, setUserId] = useState<string>('');
+
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data }) => {
+            if (data?.user?.id) setUserId(data.user.id);
+        });
+    }, []);
+
+
+    const handleReport = (msg: any, index: number) => {
+        setReportData({ id: `coach_msg_${index}`, content: msg.content });
+        setReportModalVisible(true);
+    };
     const [dailyMessageCount, setDailyMessageCount] = useState(0);
     const [showLimitWarning, setShowLimitWarning] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -308,77 +326,40 @@ RESPONDE:`;
                                     <Sparkles size={14} color="#a855f7" />
                                 </View>
                             )}
-                            <View style={[
-                                styles.messageBubble,
-                                msg.role === 'user' ? styles.userBubble : styles.assistantBubble,
-                            ]}>
-                                {/* Display image if present */}
-                                {msg.image && (
-                                    <Image
-                                        source={{ uri: msg.image }}
-                                        style={styles.messageImage}
-                                        resizeMode="cover"
-                                    />
-                                )}
-                                {msg.content && msg.content !== '(imagen enviada)' ? (
-                                    <Text style={[
-                                        styles.messageText,
-                                        msg.role === 'user' ? styles.userText : styles.assistantText,
-                                    ]}>
-                                        {msg.content}
-                                    </Text>
-                                ) : null}
-
-                                {/* AI Label + Report Button (Google Play requirement) */}
-                                {msg.role === 'assistant' && (
-                                    <View style={{
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        marginTop: 8,
-                                        paddingTop: 8,
-                                        borderTopWidth: 1,
-                                        borderTopColor: 'rgba(255,255,255,0.1)'
-                                    }}>
-                                        <Sparkles size={12} color="#9ca3af" /
-                                        >
-                                        <Text style={{
-                                            fontSize: 11,
-                                            color: '#9ca3af',
-                                            marginLeft: 4,
-                                            fontWeight: '500'
-                                        }}>
-                                            Generado por IA
+                            <View style={{ flexDirection: 'row', alignItems: 'flex-end', maxWidth: '100%' }}>
+                                <View style={[
+                                    styles.messageBubble,
+                                    msg.role === 'user' ? styles.userBubble : styles.assistantBubble,
+                                    { maxWidth: msg.role === 'assistant' ? '78%' : '75%' }
+                                ]}>
+                                    {/* Display image if present */}
+                                    {msg.image && (
+                                        <Image
+                                            source={{ uri: msg.image }}
+                                            style={styles.messageImage}
+                                            resizeMode="cover"
+                                        />
+                                    )}
+                                    {msg.content && msg.content !== '(imagen enviada)' ? (
+                                        <Text style={[
+                                            styles.messageText,
+                                            msg.role === 'user' ? styles.userText : styles.assistantText,
+                                        ]}>
+                                            {msg.content}
                                         </Text>
-                                        <TouchableOpacity
-                                            onPress={async () => {
-                                                const success = await reportAIContent(
-                                                    `coach_msg_${index}`,
-                                                    msg.content,
-                                                    'coach',
-                                                    'current_user_id' // TODO: Get real user ID from auth
-                                                );
-                                            }}
-                                            style={{
-                                                marginLeft: 'auto',
-                                                flexDirection: 'row',
-                                                alignItems: 'center',
-                                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                                                paddingHorizontal: 8,
-                                                paddingVertical: 4,
-                                                borderRadius: 8
-                                            }}
-                                        >
-                                            <Flag size={11} color="#ef4444" />
-                                            <Text style={{
-                                                fontSize: 11,
-                                                color: '#ef4444',
-                                                marginLeft: 4,
-                                                fontWeight: '600'
-                                            }}>
-                                                Reportar
-                                            </Text>
-                                        </TouchableOpacity>
-                                    </View>
+                                    ) : null}
+                                </View>
+
+                                {msg.role === 'assistant' && (
+                                    <TouchableOpacity
+                                        onPress={() => handleReport(msg, index)}
+                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                        style={{ marginLeft: 4, marginBottom: 4 }}
+                                    >
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <MoreVertical size={16} color="#6b7280" />
+                                        </View>
+                                    </TouchableOpacity>
                                 )}
                             </View>
                         </View>
@@ -394,6 +375,14 @@ RESPONDE:`;
                             </View>
                         </View>
                     )}
+                    <AIReportModal
+                        visible={reportModalVisible}
+                        onClose={() => setReportModalVisible(false)}
+                        messageId={reportData.id}
+                        content={reportData.content}
+                        context="coach"
+                        userId="current_user_id"
+                    />
                 </ScrollView>
 
                 {/* Limit Warning Banner */}
