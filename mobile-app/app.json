@@ -24,7 +24,7 @@
     },
     "android": {
       "package": "com.soyremi.remi",
-      "versionCode": 7,
+      "versionCode": 38,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a1025"
