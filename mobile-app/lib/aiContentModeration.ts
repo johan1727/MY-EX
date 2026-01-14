@@ -87,9 +87,9 @@ export function showAIDisclaimer(onAccept: () => void) {
 export async function hasSeenAIDisclaimer(userId: string): Promise<boolean> {
     try {
         const { data, error } = await supabase
-            .from('user_preferences')
+            .from('profiles')
             .select('ai_disclaimer_seen')
-            .eq('user_id', userId)
+            .eq('id', userId)
             .single();
 
         if (error) return false;
@@ -105,12 +105,11 @@ export async function hasSeenAIDisclaimer(userId: string): Promise<boolean> {
 export async function markAIDisclaimerSeen(userId: string): Promise<void> {
     try {
         await supabase
-            .from('user_preferences')
-            .upsert({
-                user_id: userId,
+            .from('profiles')
+            .update({
                 ai_disclaimer_seen: true,
-                updated_at: new Date().toISOString(),
-            });
+            })
+            .eq('id', userId);
     } catch (error) {
         console.error('Error marking AI disclaimer seen:', error);
     }
