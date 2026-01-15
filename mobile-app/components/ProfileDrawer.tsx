@@ -67,7 +67,8 @@ export default function ProfileDrawer({
     const [isGuest, setIsGuest] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [slideAnim] = useState(new Animated.Value(-300));
-    const [userId, setUserId] = useState<string | null>(null); // Added userId state
+    const [userId, setUserId] = useState<string | null>(null);
+    const [userEmail, setUserEmail] = useState<string | null>(null);
     // Custom Alert State
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [profileToDelete, setProfileToDelete] = useState<Profile | null>(null);
@@ -121,6 +122,8 @@ export default function ProfileDrawer({
             setUserId(user?.id || null); // Set userId
 
             if (user) {
+                setUserId(user.id);
+                setUserEmail(user.email || null);
                 // Load from Supabase
                 const { data } = await supabase
                     .from('ex_profiles')
@@ -165,6 +168,8 @@ export default function ProfileDrawer({
                     }
                 }
                 setIsGuest(true);
+                setUserId(null);
+                setUserEmail(null);
             }
         } catch (error) {
             console.error('Error loading profiles:', error);
@@ -211,14 +216,22 @@ export default function ProfileDrawer({
     };
 
     const handleNewSimulation = () => {
-        console.log('[ProfileDrawer] handleNewSimulation CLICKED');
+        console.log('[ProfileDrawer] handleNewSimulation CLICKED - Tier:', tier);
         try {
+            // Safety check for tier and config
+            if (!tier || !SUBSCRIPTION_CONFIG[tier as SubscriptionTier]) {
+                console.error('[ProfileDrawer] Invalid tier or config missing for:', tier);
+                Alert.alert('Error', 'Hubo un problema al verificar tu suscripción. Reintenta en un momento.');
+                return;
+            }
+
             // Enforce profile limits
-            const limit = SUBSCRIPTION_CONFIG[tier as SubscriptionTier]?.limits?.simulatorAnalyses || 1;
-            console.log('[ProfileDrawer] Check limit:', profiles.length, '/', limit);
+            const limit = SUBSCRIPTION_CONFIG[tier as SubscriptionTier]?.limits?.simulatorAnalyses || 0;
+            const currentCount = Array.isArray(profiles) ? profiles.length : 0;
+            console.log('[ProfileDrawer] Check limit:', currentCount, '/', limit);
 
             // If unlimited (-1) or not reached limit, proceed
-            if (limit === -1 || profiles.length < limit) {
+            if (limit === -1 || currentCount < limit) {
                 console.log('[ProfileDrawer] Navigating to import...');
                 onClose();
                 // Direct navigation to test if timeout was issue, or keep timeout
@@ -440,6 +453,19 @@ export default function ProfileDrawer({
                                     <Settings size={16} color="#9ca3af" />
                                     <Text style={styles.userMenuText}>Preferencias</Text>
                                 </TouchableOpacity>
+
+                                {!isGuest && (
+                                    <TouchableOpacity
+                                        style={styles.userMenuItem}
+                                        onPress={async () => {
+                                            await handleLogout();
+                                        }}
+                                    >
+                                        <LogIn size={16} color="#9ca3af" />
+                                        <Text style={styles.userMenuText}>Cambiar cuenta</Text>
+                                    </TouchableOpacity>
+                                )}
+
                                 <TouchableOpacity style={styles.userMenuItem} onPress={() => { onClose(); router.push('/legal/privacy'); }}>
                                     <Lock size={16} color="#9ca3af" />
                                     <Text style={styles.userMenuText}>Privacidad</Text>
@@ -508,8 +534,8 @@ export default function ProfileDrawer({
                                 <User size={20} color="#fff" />
                             </View>
                             <View style={styles.userInfo}>
-                                <Text style={styles.userName}>
-                                    {isGuest ? 'Invitado' : 'Mi cuenta'}
+                                <Text style={styles.userName} numberOfLines={1}>
+                                    {isGuest ? 'Invitado' : (userEmail || 'Mi cuenta')}
                                 </Text>
                                 <Text style={isGuest ? styles.userPlanFree : (isPremium ? styles.userPlan : styles.userPlanFree)}>
                                     {isGuest ? 'Plan Gratuito' : (isPremium ? 'Premium' : 'Plan Gratuito')}

@@ -88,3 +88,9 @@ export async function incrementFreeTierUsage(userId: string): Promise<void> {
     console.log('[UsageTracking] Updated:', data);
     await storage.setItem(key, JSON.stringify(data));
 }
+
+export async function resetUsage(userId: string): Promise<void> {
+    const key = getUsageKey(userId);
+    await storage.removeItem(key);
+    console.log('[UsageTracking] Limits reset for:', userId);
+}

@@ -40,9 +40,8 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         color: '#9ca3af',
         features: [
             'Explora REMI gratis',
-            '30 mensajes al día',
-            '10 mensajes cada 3 horas',
-            'Una prueba del simulador'
+            'Mensajes limitados por día',
+            'Acceso básico al simulador'
         ],
         limits: {
             dailyTokens: 9000,
@@ -64,8 +63,7 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Explorer',
         color: '#06b6d4',
         features: [
-            '150 mensajes al día',
-            '50 mensajes cada 3 horas',
+            'Más mensajes diarios',
             'Crea múltiples perfiles de ex',
             'Decodificador avanzado',
             'Bóveda de secretos privada',
@@ -91,11 +89,10 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Warrior',
         color: '#3b82f6',
         features: [
-            '500 mensajes al día',
-            '150 mensajes cada 3 horas',
             'Uso extendido sin interrupciones',
             'Respuestas más largas y detalladas',
-            'Análisis diario de tu progreso'
+            'Análisis diario de tu progreso',
+            'Prioridad en respuestas'
         ],
         limits: {
             dailyTokens: 150000,
@@ -117,8 +114,7 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
         badge: 'Phoenix',
         color: '#ec4899',
         features: [
-            '2000 mensajes al día',
-            '400 mensajes cada 3 horas',
+            'Experiencia ilimitada',
             'Coaching personalizado con IA avanzada',
             'Análisis de capturas de pantalla',
             'Predicciones de comportamiento',

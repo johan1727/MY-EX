@@ -224,6 +224,9 @@ export class BackgroundAnalysisManager {
 
             let masterPromptResult;
             try {
+                // OPTIMIZATION: Skip initial generation, do it only once at the end with full context
+                // This saves ~60-90 seconds of wait time
+                /*
                 masterPromptResult = await generateMasterPrompt(
                     sanitizedMessages,
                     finalExSenderName, // PASS THE SANITIZED NAME TOKEN
@@ -234,6 +237,8 @@ export class BackgroundAnalysisManager {
                         onProgress(mapped, s);
                     }
                 );
+                */
+                await onProgress(75, '🧠 Analizando contexto profundo...');
             } catch (err) {
                 console.error('[BackgroundAnalysis] Master prompt failed (continuing without):', err);
             }

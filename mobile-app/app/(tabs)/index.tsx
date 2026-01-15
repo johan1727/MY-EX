@@ -8,14 +8,17 @@ import { loadMasterPrompt } from '../../lib/masterPromptSupabase';
 import { storage } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { checkProhibitedContent } from '../../lib/contentModeration';
-import { Send, Sparkles, ImageIcon, Brain, Menu, Flag, MoreVertical } from 'lucide-react-native';
+import { Send, Sparkles, ImageIcon, Brain, Menu, Flag, MoreVertical, Zap } from 'lucide-react-native';
 import { useSubscription } from '../../lib/SubscriptionContext';
 import { reportAIContent } from '../../lib/aiContentModeration';
 import ChatHeader, { CHAT_THEMES, ChatTheme } from '../../components/ChatHeader';
+import SuggestionBanner from '../../components/SuggestionBanner';
 import { StatusBar } from 'expo-status-bar';
 import ProfileDrawer from '../../components/ProfileDrawer';
 import AIReportModal from '../../components/AIReportModal';
 import * as ImagePicker from 'expo-image-picker';
+import EnergyRechargeModal from '../../components/EnergyRechargeModal';
+import InsightTeaserModal from '../../components/InsightTeaserModal'; // New Modal
 
 import {
     loadConversationFromCloud,
@@ -73,6 +76,7 @@ export default function ExSimulatorChat() {
     const [isTyping, setIsTyping] = useState(false);
     const [reportModalVisible, setReportModalVisible] = useState(false);
     const [reportData, setReportData] = useState({ id: '', content: '' });
+    const [suggestionBanner, setSuggestionBanner] = useState<{ visible: boolean; message: string; icon: string } | null>(null);
 
     const handleReport = (msg: any, index: number) => {
         setReportData({ id: `sim_msg_${index}`, content: msg.content });
@@ -96,11 +100,12 @@ export default function ExSimulatorChat() {
 
     // NEW: Limits and modals
     const [showLoginModal, setShowLoginModal] = useState(false);
+    const [showEnergyModal, setShowEnergyModal] = useState(false);
+    const [energyWaitTime, setEnergyWaitTime] = useState(0);
+    const [showInsightTeaser, setShowInsightTeaser] = useState(false); // New State
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [hasShownLoginPrompt, setHasShownLoginPrompt] = useState(false);
     const [usageData, setUsageData] = useState<{ allowed: boolean, reason?: 'daily' | 'burst', waitTime?: number } | null>(null);
-    const [showInsightTeaser, setShowInsightTeaser] = useState(false);
-
     // Theme state
     const [chatTheme, setChatTheme] = useState<ChatTheme>('default');
 
@@ -310,10 +315,12 @@ export default function ExSimulatorChat() {
                 Keyboard.dismiss();
                 if (limitResult.reason === 'daily') {
                     Alert.alert('Límite Diario Alcanzado', 'Has usado tus 30 mensajes de hoy. Vuelve mañana o mejora tu plan.');
+                    setShowUpgradeModal(true);
                 } else if (limitResult.reason === 'burst') {
-                    Alert.alert('Recargando Energía', `Has consumido tus 10 mensajes. Tómate un descanso, recargaremos en ${limitResult.waitTime} minutos.`);
+                    // Alert.alert('Recargando Energía', `Has consumido tus 10 mensajes. Tómate un descanso, recargaremos en ${limitResult.waitTime} minutos.`);
+                    setEnergyWaitTime(limitResult.waitTime);
+                    setShowEnergyModal(true);
                 }
-                setShowUpgradeModal(true);
                 return;
             }
         }
@@ -369,7 +376,7 @@ export default function ExSimulatorChat() {
 
         const userMessage: Message = {
             role: 'user',
-            content: inputText.trim(),
+            content: currentInput,
             timestamp: new Date(),
             seen: false,
         };
@@ -385,8 +392,8 @@ export default function ExSimulatorChat() {
         }
 
         let promptModifier = '';
-        const defensiveTopic = checkDefensiveTrigger(inputText, profileData.profile?.defensiveTopics || []);
-        const jealousyTrigger = checkJealousyTrigger(inputText, profileData.profile?.jealousyTriggers || []);
+        const defensiveTopic = checkDefensiveTrigger(currentInput, profileData.profile?.defensiveTopics || []);
+        const jealousyTrigger = checkJealousyTrigger(currentInput, profileData.profile?.jealousyTriggers || []);
 
         if (defensiveTopic) {
             promptModifier += `\n[MODO DEFENSIVO]: El usuario mencionó "${defensiveTopic.topic}", un tema que causa actitud defensiva.`;
@@ -514,13 +521,7 @@ export default function ExSimulatorChat() {
             // INSIGHT TEASER: Trigger after 5 messages
             if (finalMessages.filter(m => m.role === 'user').length === 5 && !isPremium) {
                 setTimeout(() => {
-                    const teaserMsg: Message = {
-                        role: 'assistant',
-                        content: "💡 REMI ha detectado un patrón interesante en tu forma de comunicarte. Desbloquea el 'Análisis de Apego' en tu perfil para ver qué significa.",
-                        timestamp: new Date(),
-                        seen: false
-                    };
-                    setMessages(prev => [...prev, teaserMsg]);
+                    setShowInsightTeaser(true);
                 }, 1000);
             }
 
@@ -855,8 +856,41 @@ export default function ExSimulatorChat() {
                     </View>
                 )}
 
+                {/* Suggestion Banner */}
+                {suggestionBanner && (
+                    <View style={{ position: 'absolute', bottom: 100, left: 0, right: 0, zIndex: 50 }}>
+                        <SuggestionBanner
+                            visible={suggestionBanner.visible}
+                            message={suggestionBanner.message}
+                            icon={suggestionBanner.icon}
+                            onAccept={() => {
+                                setSuggestionBanner(null);
+                                router.push('/(tabs)/profile');
+                            }}
+                            onDismiss={() => setSuggestionBanner(null)}
+                        />
+                    </View>
+                )}
+
                 {/* Input */}
                 <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'transparent' }}>
+                    {/* Gemini-style Preview Bubble - MOVED ABOVE INPUT */}
+                    {inputText.trim() !== '' && (
+                        <Animated.View
+                            style={[
+                                styles.previewBubble,
+                                {
+                                    opacity: 1, // Simple opacity
+                                    transform: [{ translateY: 0 }],
+                                }
+                            ]}
+                        >
+                            <Text style={styles.previewText} numberOfLines={1} ellipsizeMode="tail">
+                                {inputText}
+                            </Text>
+                        </Animated.View>
+                    )}
+
                     <View style={styles.inputContainer}>
                         <View style={styles.inputWrapper}>
                             {/* Image Picker Button */}
@@ -905,24 +939,25 @@ export default function ExSimulatorChat() {
                             )}
                         </View>
                     </View>
-                    {/* Gemini-style Preview Bubble */}
-                    {inputText.trim() !== '' && (
-                        <Animated.View
-                            style={[
-                                styles.previewBubble,
-                                {
-                                    opacity: new Animated.Value(1), // Simple fade could be enhanced with useEffect
-                                    transform: [{ translateY: 0 }]
-                                }
-                            ]}
-                        >
-                            <Text style={styles.previewText} numberOfLines={1} ellipsizeMode="tail">
-                                {inputText}
-                            </Text>
-                        </Animated.View>
-                    )}
                 </SafeAreaView>
             </KeyboardAvoidingView>
+
+            {/* ENERGY RECHARGE MODAL */}
+            <EnergyRechargeModal
+                visible={showEnergyModal}
+                waitTimeMinutes={energyWaitTime}
+                onDismiss={() => setShowEnergyModal(false)}
+                onUpgrade={() => {
+                    setShowEnergyModal(false);
+                    router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
+                }}
+            />
+
+            {/* NEW INSIGHT TEASER MODAL */}
+            <InsightTeaserModal
+                visible={showInsightTeaser}
+                onDismiss={() => setShowInsightTeaser(false)}
+            />
 
             {/* LOGIN RECOMMENDATION MODAL */}
             <Modal
@@ -1315,11 +1350,11 @@ const styles = StyleSheet.create({
     // Gemini Preview
     // Gemini Preview
     previewBubble: {
-        position: 'absolute',
-        bottom: 90, // Increased to clear input safely
-        left: 20,
-        right: 20, // Constrain width
-        backgroundColor: 'rgba(168, 85, 247, 0.95)', // Slightly more opaque
+        alignSelf: 'flex-end',
+        marginRight: 16,
+        marginBottom: 8,
+        maxWidth: '80%',
+        backgroundColor: 'rgba(168, 85, 247, 0.95)',
         borderRadius: 16,
         paddingHorizontal: 16,
         paddingVertical: 10,
@@ -1328,8 +1363,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.4,
         shadowRadius: 8,
         elevation: 8,
-        zIndex: 9999, // Force on top
-        borderBottomLeftRadius: 4,
+        borderBottomRightRadius: 2,
     },
     previewText: {
         color: '#fff',

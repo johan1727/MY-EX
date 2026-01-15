@@ -1,4 +1,4 @@
-// import 'react-native-url-polyfill/auto';
+import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 // Temporary debug adapter
 import { Platform } from 'react-native';

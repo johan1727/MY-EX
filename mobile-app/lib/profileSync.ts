@@ -198,6 +198,7 @@ async function saveProfileToSupabase(profile: ExProfile, userId: string): Promis
                 ex_name: profile.exName,
                 profile_data: profile.profile,
                 message_count: profile.messageCount,
+                master_prompt: profile.masterPrompt,
                 updated_at: new Date().toISOString()
             })
             .eq('id', profile.supabaseId)
@@ -220,7 +221,8 @@ async function saveProfileToSupabase(profile: ExProfile, userId: string): Promis
             user_id: userId,
             ex_name: profile.exName,
             profile_data: profile.profile,
-            message_count: profile.messageCount
+            message_count: profile.messageCount,
+            master_prompt: profile.masterPrompt
         })
         .select()
         .single();

@@ -199,7 +199,7 @@ INSTRUCCION CRITICA: Responde EXACTAMENTE como lo harías tú en WhatsApp real.
 ` : '';
 
     const contextHistory = conversationHistory
-        .slice(-6)
+        .slice(-20)
         .map(m => `${m.role === 'user' ? userName : profileData.exName}: ${m.content}`)
         .join('\n');
 

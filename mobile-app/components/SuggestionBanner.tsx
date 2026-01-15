@@ -60,70 +60,77 @@ export default function SuggestionBanner({
                 opacity: fadeAnim,
                 transform: [{ translateY: slideAnim }],
             }}
-            className="mx-4 mb-3"
+            className="mx-6 mb-4"
         >
-            <LinearGradient
-                colors={['#8b5cf6', '#ec4899']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                className="rounded-2xl p-0.5"
+            <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={onAccept}
+                style={{
+                    backgroundColor: 'rgba(20, 20, 30, 0.95)',
+                    borderRadius: 20,
+                    padding: 12,
+                    borderWidth: 1,
+                    borderColor: 'rgba(139, 92, 246, 0.3)',
+                    shadowColor: '#8b5cf6',
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 8,
+                    elevation: 5
+                }}
             >
-                <View className="bg-[#1a1a2e] rounded-2xl p-4">
-                    <View className="flex-row items-start">
-                        {/* Icon */}
-                        <View className="bg-purple-500/20 rounded-full p-2 mr-3">
-                            <Sparkles size={20} color="#a855f7" />
+                <View className="flex-row items-center justify-between pl-1">
+                    <View className="flex-row items-center flex-1 gap-3.5">
+                        {/* Glowing Icon Container */}
+                        <View style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 20,
+                            backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            borderWidth: 1,
+                            borderColor: 'rgba(139, 92, 246, 0.2)'
+                        }}>
+                            <Sparkles size={20} color="#a78bfa" />
                         </View>
 
-                        {/* Content */}
-                        <View className="flex-1">
-                            <View className="flex-row items-center mb-1">
-                                <Text className="text-purple-400 font-bold text-sm">
-                                    Sugerencia
-                                </Text>
-                            </View>
-                            <Text className="text-white text-sm leading-5 mb-3">
-                                {message}
+                        {/* Text Content */}
+                        <View className="flex-1 mr-2">
+                            <Text className="text-white font-bold text-[15px] leading-5">
+                                Análisis Disponible
                             </Text>
+                            <Text className="text-gray-400 text-xs font-medium" numberOfLines={1}>
+                                REMI detectó algo importante
+                            </Text>
+                        </View>
+                    </View>
 
-                            {/* Actions */}
-                            <View className="flex-row gap-2">
-                                <TouchableOpacity
-                                    onPress={onAccept}
-                                    className="flex-1"
-                                >
-                                    <LinearGradient
-                                        colors={['#8b5cf6', '#ec4899']}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 1 }}
-                                        className="rounded-xl py-2 px-4"
-                                    >
-                                        <Text className="text-white font-semibold text-center text-sm">
-                                            {icon} Abrir
-                                        </Text>
-                                    </LinearGradient>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    onPress={onDismiss}
-                                    className="bg-white/10 rounded-xl py-2 px-4"
-                                >
-                                    <Text className="text-gray-400 font-semibold text-sm">
-                                        Ahora no
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
+                    {/* Action Arrow */}
+                    <View className="flex-row items-center gap-4 pr-1">
+                        <View style={{
+                            backgroundColor: '#7c3aed',
+                            paddingHorizontal: 16,
+                            paddingVertical: 8,
+                            borderRadius: 14,
+                            shadowColor: '#8b5cf6',
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.3,
+                            shadowRadius: 4,
+                            elevation: 3
+                        }}>
+                            <Text style={{ color: 'white', fontWeight: '800', fontSize: 13 }}>Ver</Text>
                         </View>
 
-                        {/* Close button */}
                         <TouchableOpacity
                             onPress={onDismiss}
-                            className="ml-2 p-1"
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            style={{ opacity: 0.7 }}
                         >
-                            <X size={16} color="#9ca3af" />
+                            <X size={18} color="#9ca3af" />
                         </TouchableOpacity>
                     </View>
                 </View>
-            </LinearGradient>
+            </TouchableOpacity>
         </Animated.View>
     );
 }

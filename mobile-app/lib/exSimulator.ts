@@ -18,7 +18,7 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 // Rate limiting helper - wait between API calls to prevent 429 errors
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-const STAGE_DELAY_MS = 5000; // 5s between stages (paid tier allows 60 RPM)
+const STAGE_DELAY_MS = 500; // 0.5s between stages (Flash is faster)
 
 // Types
 export interface ParsedMessage {
