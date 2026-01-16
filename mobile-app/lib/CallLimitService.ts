@@ -4,7 +4,7 @@ export type PlanTier = 'free' | 'warrior' | 'phoenix';
 
 export const VOICE_LIMITS_MINUTES: Record<PlanTier, number> = {
     free: 0,       // Demo disabled by default effectively, or super short if we change mind
-    warrior: 25,   // $51 MXN cost
+    warrior: 15,   // Reduced to 15m due to High Quality Model costs
     phoenix: 60    // $123 MXN cost
 };
 

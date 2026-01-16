@@ -15,6 +15,7 @@ import { Check, ArrowLeft, Crown } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useSubscription } from '../lib/SubscriptionContext';
+import PlanFeaturesModal from '../components/PlanFeaturesModal';
 
 const PLANS = [
     {
@@ -68,13 +69,13 @@ const PLANS = [
 
 export default function SubscribePage() {
     const router = useRouter();
-    const [loading, setLoading] = useState<string | null>(null);
-    const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('monthly');
-    const { tier, isLoading: tierLoading } = useSubscription();
-    const isPremium = tier !== 'survivor';
-    const currentPlanIndex = PLANS.findIndex(p => p.id === tier);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     const handleSubscribe = async (plan: typeof PLANS[0]) => {
+        // DEV: Just show modal for testing
+        // setShowSuccessModal(true);
+        // return;
+
         if (Platform.OS !== 'web') {
             alert('Los pagos web solo funcionan en navegador. Por favor usa la app móvil para suscribirte.');
             return;
@@ -130,6 +131,13 @@ export default function SubscribePage() {
             style={styles.container}
         >
             <StatusBar style="light" />
+
+            <PlanFeaturesModal
+                visible={showSuccessModal}
+                onClose={() => setShowSuccessModal(false)}
+                planName={tier === 'survivor' ? 'Phoenix' : tier.charAt(0).toUpperCase() + tier.slice(1)} // Default showing target plan
+            />
+
             <SafeAreaView style={{ flex: 1 }}>
                 {/* Back Button Header */}
                 <View style={styles.backHeader}>
@@ -144,6 +152,11 @@ export default function SubscribePage() {
                         style={styles.backButton}
                     >
                         <ArrowLeft size={24} color="#fff" />
+                    </TouchableOpacity>
+
+                    {/* DEV: Preview Modal Button */}
+                    <TouchableOpacity onPress={() => setShowSuccessModal(true)} style={{ marginLeft: 'auto', padding: 8 }}>
+                        <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10 }}>Preview Modal</Text>
                     </TouchableOpacity>
                 </View>
 

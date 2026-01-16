@@ -116,9 +116,25 @@ export default function PremiumScreen() {
         try {
             setLoading(true);
             const offerings = await getOfferings();
-            if (offerings?.current?.availablePackages) {
-                setPackages(offerings.current.availablePackages);
-                console.log('📦 Loaded packages:', offerings.current.availablePackages.map(p => p.identifier));
+
+            console.log('📦 REVENUECAT DEBUG:');
+            // Try to get 'current' offering, fallback to 'default'
+            const currentOffering = offerings?.current || offerings?.all?.['default'];
+
+            console.log('Target Offering:', currentOffering?.identifier);
+            if (currentOffering?.availablePackages) {
+                console.log('Available Packages:', currentOffering.availablePackages.map(p => ({
+                    id: p.identifier,
+                    product: p.product.identifier,
+                    price: p.product.priceString
+                })));
+                setPackages(currentOffering.availablePackages);
+            } else {
+                console.log('No available packages found in current or default offering.');
+                // Detailed debug of what IS available
+                if (offerings?.all) {
+                    console.log('All Offerings keys:', Object.keys(offerings.all));
+                }
             }
         } catch (error) {
             console.error('Error loading offerings:', error);

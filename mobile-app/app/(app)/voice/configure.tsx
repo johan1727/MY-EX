@@ -55,7 +55,7 @@ const PremiumOrb = ({ isActive }: { isActive: boolean }) => {
 
 export default function VoiceConfigScreen() {
     const router = useRouter();
-    const { profileId, name } = useLocalSearchParams<{ profileId: string, name: string }>();
+    const { profileId, name, force } = useLocalSearchParams<{ profileId: string, name: string, force?: string }>();
     const [audioFiles, setAudioFiles] = useState<any[]>([]);
     const [isCloning, setIsCloning] = useState(false);
     const [statusText, setStatusText] = useState('Sube 3 audios de WhatsApp');
@@ -77,19 +77,12 @@ export default function VoiceConfigScreen() {
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileId);
 
             if (!isUUID) {
-                // DEV Mock Logic
-                if (__DEV__ && profileId.startsWith('profile_')) {
-                    // Check if we "faked" a voice before (could use localstorage, but for now just assume no unless hardcoded)
-                    // If you want to persist mock voice, you'd need a store.
-                    setLoadingVoice(false);
-                    return;
-                }
                 setLoadingVoice(false);
                 return;
             }
 
             const { data, error } = await supabase
-                .from('profiles')
+                .from('ex_profiles')
                 .select('voice_id')
                 .eq('id', profileId)
                 .single();
@@ -98,6 +91,15 @@ export default function VoiceConfigScreen() {
                 console.log('[VoiceConfig] Found valid voice_id:', data.voice_id);
                 setExistingVoiceId(data.voice_id);
                 setStatusText('Voz Activa y Lista');
+
+                // AUTO-REDIRECT Checks
+                if (force !== 'true') {
+                    console.log('[VoiceConfig] Auto-redirecting to call...');
+                    router.replace({
+                        pathname: '/(app)/voice/call',
+                        params: { profileId, name, voiceId: data.voice_id }
+                    });
+                }
             }
         } catch (e) {
             console.error('[VoiceConfig] Error checking voice:', e);
@@ -213,14 +215,11 @@ export default function VoiceConfigScreen() {
 
             setStatusText('¡Voz Sintetizada Correctamente!');
 
-            console.log('[VoiceConfig] Updating Supabase profile with voice_id:', result.voiceId);
+            console.log('[VoiceConfig] Updating Ex Profile with voice_id:', result.voiceId);
 
-            console.log('[VoiceConfig] Updating Supabase profile with voice_id:', result.voiceId);
-
-            // Only update Supabase if real user
-
+            // CORRECTION: Update ex_profiles, NOT profiles
             const { error: updateError } = await supabase
-                .from('profiles')
+                .from('ex_profiles')
                 .update({ voice_id: result.voiceId })
                 .eq('id', profileId);
 
@@ -342,17 +341,17 @@ export default function VoiceConfigScreen() {
                                 <Text style={styles.cardTitle}>Instrucciones de Clonación</Text>
                             </View>
                             <Text style={styles.cardBody}>
-                                **Truco Rápido (Sin exportar chat):**
+                                <Text style={{ fontWeight: '700', color: '#fff' }}>Truco Rápido (Sin exportar chat):</Text>
                                 {"\n\n"}
-                                1. Ve a WhatsApp y busca un audio de **la persona**.
+                                1. Ve a WhatsApp y busca un audio de <Text style={{ fontWeight: '700', color: '#fff' }}>la persona</Text>.
                                 {"\n"}
                                 2. Mantén presionado → Compartir → Guardar en Archivos.
                                 {"\n"}
-                                3. **Calidad de Audio:**
+                                3. <Text style={{ fontWeight: '700', color: '#fff' }}>Calidad de Audio:</Text>
                                 {"\n"}
                                 • Evita ruidos de fondo (viento, música).
                                 {"\n"}
-                                • Que hable **SOLO esa persona**.
+                                • Que hable <Text style={{ fontWeight: '700', color: '#fff' }}>SOLO esa persona</Text>.
                             </Text>
                         </View>
 

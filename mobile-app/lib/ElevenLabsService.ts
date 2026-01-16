@@ -101,9 +101,11 @@ export class ElevenLabsService {
     async streamTextToSpeech(text: string, voiceId: string): Promise<string> {
         if (!ELEVENLABS_API_KEY) throw new Error('Missing ElevenLabs API Key');
 
-        // Turbo v2.5 for speed
-        const modelId = 'eleven_turbo_v2_5';
-        const url = `${BASE_URL}/text-to-speech/${voiceId}/stream?optimize_streaming_latency=3&output_format=mp3_44100_128`;
+        // Use Multilingual v2 for higher quality (slower than Turbo but better cloning)
+        const modelId = 'eleven_multilingual_v2';
+        // Reduce latency setting slightly (3 -> 0) because v2 doesn't support aggressive optimization as well as Turbo
+        // But we want quality.
+        const url = `${BASE_URL}/text-to-speech/${voiceId}/stream?optimize_streaming_latency=1&output_format=mp3_44100_128`;
 
         console.log(`[ElevenLabs] Streaming TTS (${text.length} chars) for voice ${voiceId}...`);
 
@@ -128,8 +130,10 @@ export class ElevenLabsService {
                     text: text,
                     model_id: modelId,
                     voice_settings: {
-                        stability: 0.5,
-                        similarity_boost: 0.75
+                        stability: 0.5,        // Balanced
+                        similarity_boost: 0.8, // Higher similarity for cloned voices
+                        style: 0.0,            // Default
+                        use_speaker_boost: true
                     }
                 })
             });
