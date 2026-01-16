@@ -8,7 +8,7 @@ import { loadMasterPrompt } from '../../lib/masterPromptSupabase';
 import { storage } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { checkProhibitedContent } from '../../lib/contentModeration';
-import { Send, Sparkles, ImageIcon, Brain, Menu, Flag, MoreVertical, Zap } from 'lucide-react-native';
+import { Send, Sparkles, ImageIcon, Brain, Menu, Flag, MoreVertical, Zap, Headphones, AudioLines } from 'lucide-react-native';
 import { useSubscription } from '../../lib/SubscriptionContext';
 import { reportAIContent } from '../../lib/aiContentModeration';
 import ChatHeader, { CHAT_THEMES, ChatTheme } from '../../components/ChatHeader';
@@ -924,9 +924,66 @@ export default function ExSimulatorChat() {
                                 value={inputText}
                                 onChangeText={setInputText}
                                 onSubmitEditing={() => sendMessage()}
-                                editable={!isTyping}
                                 multiline
                             />
+
+                            {/* VOICE MODE BUTTON - PREMIUM UI */}
+                            {/* VOICE MODE BUTTON - GEMINI STYLE */}
+                            <TouchableOpacity
+                                onPress={() => {
+                                    if (!profileData) {
+                                        Alert.alert('Error', 'Cargando perfil...');
+                                        return;
+                                    }
+                                    const hasVoice = !!profileData.voice_id;
+                                    const target = hasVoice ? '/(app)/voice/call' : '/(app)/voice/configure';
+                                    router.push({
+                                        pathname: target,
+                                        params: {
+                                            profileId: profileData.id || profileData.supabaseId,
+                                            name: profileData.exName || profileData.name,
+                                            voiceId: profileData.voice_id
+                                        }
+                                    });
+                                }}
+                                style={{
+                                    marginRight: 12,
+                                    // Removed container shadows to avoid "square" artifact on Android
+                                }}
+                            >
+                                <LinearGradient
+                                    colors={['#2563eb', '#7c3aed', '#db2777']} // Slightly deeper/premium tones
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={{
+                                        width: 48,
+                                        height: 48,
+                                        borderRadius: 24,
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                        borderWidth: 1,
+                                        borderColor: 'rgba(255,255,255,0.25)',
+                                        // Self-contained shadow
+                                        shadowColor: '#7c3aed',
+                                        shadowOffset: { width: 0, height: 4 },
+                                        shadowOpacity: 0.4,
+                                        shadowRadius: 8,
+                                        elevation: 8
+                                    }}
+                                >
+                                    {/* Inner Glow Effect using View */}
+                                    <View style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.1)' }} />
+
+                                    <AudioLines
+                                        size={24}
+                                        color="white"
+                                        style={{ opacity: 1 }}
+                                    />
+                                    <View style={{ position: 'absolute', bottom: 10, right: 10 }}>
+                                        <Sparkles size={10} color="#fbbf24" style={{ opacity: 0.9 }} />
+                                    </View>
+                                </LinearGradient>
+                            </TouchableOpacity>
                             {/* Send Button */}
                             {inputText.trim() !== '' && (
                                 <TouchableOpacity

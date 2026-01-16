@@ -2,7 +2,7 @@
   "expo": {
     "name": "REMI",
     "slug": "my-ex-chat",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -24,7 +24,7 @@
     },
     "android": {
       "package": "com.soyremi.remi",
-      "versionCode": 39,
+      "versionCode": 40,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a1025"
@@ -85,7 +85,15 @@
       "expo-router",
       "expo-secure-store",
       "expo-share-intent",
-      "@react-native-community/datetimepicker"
+      "expo-share-intent",
+      "@react-native-community/datetimepicker",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "remi-3n",
+          "project": "soy-remi-mobile"
+        }
+      ]
     ],
     "scheme": "my-ex-coach",
     "extra": {

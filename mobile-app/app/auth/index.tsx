@@ -109,11 +109,15 @@ export default function AuthScreen() {
                 console.log('Using redirect URL:', redirectUrl);
 
                 if (Platform.OS === 'web') {
-                    // Web-specific: Do standard redirect, not popup
+                    // Web-specific: Explicitly use window.location.origin to ensure localhost is used
+                    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081';
+                    const targetUrl = `${origin}/auth`; // URL matching the file structure
+                    console.log('[Auth] Web Redirect URL:', targetUrl);
+
                     const { error } = await supabase.auth.signInWithOAuth({
                         provider,
                         options: {
-                            redirectTo: typeof window !== 'undefined' ? window.location.origin + '/auth' : redirectUrl,
+                            redirectTo: targetUrl,
                             queryParams: {
                                 access_type: 'offline',
                                 prompt: 'consent'

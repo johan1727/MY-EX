@@ -93,8 +93,9 @@ android {
         applicationId 'com.soyremi.remi'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 38
-        versionName "1.0.2"
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 40
+        versionName "1.0.4"
     }
     signingConfigs {
         debug {

@@ -26,7 +26,6 @@ import {
     ChevronUp,
     ChevronDown,
     Eye,
-
     Trash2,
     HelpCircle,
 } from 'lucide-react-native';
@@ -513,6 +512,7 @@ export default function ProfileDrawer({
                                         <Text style={[styles.userMenuText, { color: '#ef4444' }]}>Cerrar sesión</Text>
                                     </TouchableOpacity>
                                 )}
+
                             </View>
                         )}
 
