@@ -190,19 +190,10 @@ export default function ActiveCallScreen() {
 
     // 1. Check Limits
     const checkLimits = async () => {
-        // Mock Session if needed logic is upstream usually, but safe check here
         const { data: { session } } = await supabase.auth.getSession();
         let userId = session?.user?.id;
 
-        if (!userId && __DEV__) userId = 'mock_user_id_dev'; // Bypass
-
         if (!userId) return;
-
-        // Bypass check strict for mock
-        if (userId === 'mock_user_id_dev') {
-            setUsagePercent(10);
-            return;
-        }
 
         const status = await callLimitService.checkUsageStatus(userId);
         setUsagePercent(status.usagePercent);
@@ -333,10 +324,10 @@ export default function ActiveCallScreen() {
                     setCallState('idle');
                     setStatusText('Tu turno...');
 
-                    // BILLING: Log usage (skip if mock)
+                    // BILLING: Log usage
                     const { data: { session } } = await supabase.auth.getSession();
                     const userId = session?.user?.id;
-                    if (userId && userId !== 'mock_user_id_dev') {
+                    if (userId) {
                         await callLimitService.logUsage(userId, profileId, durationSec);
                         checkLimits(); // Re-check limits
                     }

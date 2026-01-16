@@ -173,12 +173,6 @@ export default function VoiceConfigScreen() {
             if (userError) console.error('[VoiceConfig] GetUser Error:', userError);
         }
 
-        // DEV Bypass for Testing
-        if (!userId && __DEV__) {
-            console.warn('[VoiceConfig] DEV MODE: Using MOCK User ID');
-            userId = 'mock_user_id_dev';
-        }
-
         if (!userId) {
             console.error('[VoiceConfig] No user found');
             Alert.alert(
@@ -193,13 +187,7 @@ export default function VoiceConfigScreen() {
         try {
             console.log('[VoiceConfig] Checking usage limits...');
 
-            // Check usage (mocking strict check if in DEV and using mock ID)
-            let usage = { canCall: false };
-            if (userId === 'mock_user_id_dev') {
-                usage = { canCall: true }; // Bypass for mock user
-            } else {
-                usage = await callLimitService.checkUsageStatus(userId);
-            }
+            const usage = await callLimitService.checkUsageStatus(userId);
 
             console.log('[VoiceConfig] Usage status:', JSON.stringify(usage, null, 2));
 
@@ -227,19 +215,19 @@ export default function VoiceConfigScreen() {
 
             console.log('[VoiceConfig] Updating Supabase profile with voice_id:', result.voiceId);
 
-            // Only update Supabase if real user
-            if (userId !== 'mock_user_id_dev') {
-                const { error: updateError } = await supabase
-                    .from('profiles')
-                    .update({ voice_id: result.voiceId })
-                    .eq('id', profileId);
+            console.log('[VoiceConfig] Updating Supabase profile with voice_id:', result.voiceId);
 
-                if (updateError) {
-                    console.error('[VoiceConfig] Supabase update error:', updateError);
-                }
-            } else {
-                console.log('[VoiceConfig] Skipping Supabase update (Mock User)');
+            // Only update Supabase if real user
+
+            const { error: updateError } = await supabase
+                .from('profiles')
+                .update({ voice_id: result.voiceId })
+                .eq('id', profileId);
+
+            if (updateError) {
+                console.error('[VoiceConfig] Supabase update error:', updateError);
             }
+
 
             console.log('[VoiceConfig] Naivgating in 1.2s...');
 
