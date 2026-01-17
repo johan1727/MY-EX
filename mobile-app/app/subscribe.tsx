@@ -24,8 +24,8 @@ const PLANS = [
         name: 'Explorer',
         price: 89,
         annualPrice: 890,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER || 'price_1RxtmyP3GWiMooGS4yHwDZmW', // TEST Monthly
-        annualPriceId: 'price_1Sn4siP3GWiMooGSc336SbzN', // Live/Test check? Using Test fallback if needed
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER || 'price_1RxtmyP3GWiMooGS4yHwDZmW',
+        annualPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER_ANNUAL || 'price_1Sn4siP3GWiMooGSc336SbzN',
         color: '#3b82f6',
         features: [
             'Límites más amplios de uso',
@@ -39,8 +39,8 @@ const PLANS = [
         name: 'Warrior',
         price: 299,
         annualPrice: 2990,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR || 'price_1RxtnNP3GWiMooGSgROuc422', // TEST
-        annualPriceId: 'price_1Sn4uNP3GWiMooGSsVmPQzAg',
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR || 'price_1RxtnNP3GWiMooGSgROuc422',
+        annualPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR_ANNUAL || 'price_1Sn4uNP3GWiMooGSsVmPQzAg',
         color: '#f97316',
         popular: true,
         features: [
@@ -55,8 +55,8 @@ const PLANS = [
         name: 'Phoenix',
         price: 449,
         annualPrice: 4490,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX || 'price_1RxtnWP3GWiMooGS5kpAvvXn', // TEST
-        annualPriceId: 'price_1Sn4uhP3GWiMooGSwqepVrYh',
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX || 'price_1RxtnWP3GWiMooGS5kpAvvXn',
+        annualPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX_ANNUAL || 'price_1Sn4uhP3GWiMooGSwqepVrYh',
         color: '#ec4899',
         badge: 'MEJOR VALOR',
         features: [
@@ -67,6 +67,18 @@ const PLANS = [
         ],
     },
 ];
+
+// ... (rest of imports/component logic)
+
+{/* Footer */ }
+<View style={styles.footer}>
+    <Text style={styles.footerText}>
+        💳 Pago seguro con Stripe
+    </Text>
+    <Text style={styles.footerText}>
+        ✨ Cancela cuando quieras
+    </Text>
+</View>
 
 export default function SubscribePage() {
     const router = useRouter();
@@ -311,7 +323,7 @@ export default function SubscribePage() {
                     {/* Footer */}
                     <View style={styles.footer}>
                         <Text style={styles.footerText}>
-                            💳 Pago seguro con Stripe (Test Mode)
+                            💳 Pago seguro con Stripe
                         </Text>
                         <Text style={styles.footerText}>
                             ✨ Cancela cuando quieras
