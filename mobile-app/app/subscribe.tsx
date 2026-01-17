@@ -23,14 +23,7 @@ import { PLANS } from '../lib/constants';
 // ... (rest of imports/component logic)
 
 {/* Footer */ }
-<View style={styles.footer}>
-    <Text style={styles.footerText}>
-        💳 Pago seguro con Stripe
-    </Text>
-    <Text style={styles.footerText}>
-        ✨ Cancela cuando quieras
-    </Text>
-</View>
+// Footer removed from global scope
 
 export default function SubscribePage() {
     const router = useRouter();
