@@ -4,8 +4,8 @@ export const PLANS = [
         name: 'Explorer',
         price: 89,
         annualPrice: 890,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER || 'price_1RxtmyP3GWiMooGS4yHwDZmW',
-        annualPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER_ANNUAL || 'price_1Sn4siP3GWiMooGSc336SbzN',
+        priceId: process.env.EXPO_PUBLIC_STRIPE_PRICE_EXPLORER || process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER || 'price_1RxtmyP3GWiMooGS4yHwDZmW',
+        annualPriceId: process.env.EXPO_PUBLIC_STRIPE_PRICE_EXPLORER_ANNUAL || process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER_ANNUAL || 'price_1Sn4siP3GWiMooGSc336SbzN',
         color: '#3b82f6',
         features: [
             'Límites más amplios de uso',
@@ -19,8 +19,8 @@ export const PLANS = [
         name: 'Warrior',
         price: 299,
         annualPrice: 2990,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR || 'price_1RxtnNP3GWiMooGSgROuc422',
-        annualPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR_ANNUAL || 'price_1Sn4uNP3GWiMooGSsVmPQzAg',
+        priceId: process.env.EXPO_PUBLIC_STRIPE_PRICE_WARRIOR || process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR || 'price_1RxtnNP3GWiMooGSgROuc422',
+        annualPriceId: process.env.EXPO_PUBLIC_STRIPE_PRICE_WARRIOR_ANNUAL || process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR_ANNUAL || 'price_1Sn4uNP3GWiMooGSsVmPQzAg',
         color: '#f97316',
         popular: true,
         features: [
@@ -35,8 +35,8 @@ export const PLANS = [
         name: 'Phoenix',
         price: 449,
         annualPrice: 4490,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX || 'price_1RxtnWP3GWiMooGS5kpAvvXn',
-        annualPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX_ANNUAL || 'price_1Sn4uhP3GWiMooGSwqepVrYh',
+        priceId: process.env.EXPO_PUBLIC_STRIPE_PRICE_PHOENIX || process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX || 'price_1RxtnWP3GWiMooGS5kpAvvXn',
+        annualPriceId: process.env.EXPO_PUBLIC_STRIPE_PRICE_PHOENIX_ANNUAL || process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX_ANNUAL || 'price_1Sn4uhP3GWiMooGSwqepVrYh',
         color: '#ec4899',
         badge: 'MEJOR VALOR',
         features: [
