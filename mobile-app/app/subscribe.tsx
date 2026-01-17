@@ -18,55 +18,7 @@ import { useSubscription } from '../lib/SubscriptionContext';
 import PlanFeaturesModal from '../components/PlanFeaturesModal';
 import ConfettiCannon from 'react-native-confetti-cannon';
 
-const PLANS = [
-    {
-        id: 'explorer',
-        name: 'Explorer',
-        price: 89,
-        annualPrice: 890,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER || 'price_1RxtmyP3GWiMooGS4yHwDZmW',
-        annualPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER_ANNUAL || 'price_1Sn4siP3GWiMooGSc336SbzN',
-        color: '#3b82f6',
-        features: [
-            'Límites más amplios de uso',
-            'Crea múltiples perfiles',
-            'Análisis profundo de patrones',
-            'REMI recuerda tu historia completa',
-        ],
-    },
-    {
-        id: 'warrior',
-        name: 'Warrior',
-        price: 299,
-        annualPrice: 2990,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR || 'price_1RxtnNP3GWiMooGSgROuc422',
-        annualPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR_ANNUAL || 'price_1Sn4uNP3GWiMooGSsVmPQzAg',
-        color: '#f97316',
-        popular: true,
-        features: [
-            'REMI LIVE: sesiones ilimitadas de voz',
-            'Uso extendido sin interrupciones',
-            'Respuestas más largas y detalladas',
-            'Decodificador de mensajes incluido',
-        ],
-    },
-    {
-        id: 'phoenix',
-        name: 'Phoenix',
-        price: 449,
-        annualPrice: 4490,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX || 'price_1RxtnWP3GWiMooGS5kpAvvXn',
-        annualPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX_ANNUAL || 'price_1Sn4uhP3GWiMooGSwqepVrYh',
-        color: '#ec4899',
-        badge: 'MEJOR VALOR',
-        features: [
-            'REMI LIVE: voz con IA sin límites',
-            'Uso ilimitado',
-            'Acceso total sin restricciones',
-            'Más perfiles',
-        ],
-    },
-];
+import { PLANS } from '../lib/constants';
 
 // ... (rest of imports/component logic)
 
