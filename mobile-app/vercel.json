@@ -1,13 +1,6 @@
 {
     "version": 2,
-    "buildCommand": "npm run build",
     "outputDirectory": "dist",
-    "functions": {
-        "api/stripe/create-checkout.js": {
-            "memory": 1024,
-            "maxDuration": 10
-        }
-    },
     "routes": [
         {
             "handle": "filesystem"
