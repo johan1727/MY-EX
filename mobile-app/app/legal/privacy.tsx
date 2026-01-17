@@ -4,20 +4,23 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, Shield } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useTheme } from '../../lib/ThemeContext';
+
 export default function PrivacyPolicy() {
     const router = useRouter();
+    const { isDark } = useTheme();
 
     const openExternalPolicy = () => {
         Linking.openURL('https://doc-hosting.flycricket.io/remi-privacy-policy/05311c5a-0b5e-4454-8c86-d6176c777cd4/privacy');
     };
 
     return (
-        <View style={styles.container}>
-            <SafeAreaView edges={['top']} style={styles.header}>
+        <View style={[styles.container, !isDark && { backgroundColor: '#f9fafb' }]}>
+            <SafeAreaView edges={['top']} style={[styles.header, !isDark && { backgroundColor: '#fff', borderBottomColor: '#e5e7eb' }]}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <ArrowLeft size={24} color="white" />
+                    <ArrowLeft size={24} color={!isDark ? '#000' : 'white'} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Política de Privacidad</Text>
+                <Text style={[styles.headerTitle, !isDark && { color: '#000' }]}>Política de Privacidad</Text>
             </SafeAreaView>
 
             <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
@@ -29,7 +32,7 @@ export default function PrivacyPolicy() {
                 </View>
 
                 {/* Main Card */}
-                <View style={styles.card}>
+                <View style={[styles.card, !isDark && { backgroundColor: '#fff', borderColor: '#e5e7eb', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' }]}>
                     <Text style={styles.updateText}>
                         Última actualización: 23 de diciembre de 2025
                     </Text>
@@ -38,35 +41,35 @@ export default function PrivacyPolicy() {
                         <Text style={styles.externalButtonText}>🌐 Ver Política Oficial (Online)</Text>
                     </TouchableOpacity>
 
-                    <Text style={styles.sectionTitle}>Información que Recopilamos</Text>
-                    <Text style={styles.bulletPoint}>• Email y nombre (para tu cuenta)</Text>
-                    <Text style={styles.bulletPoint}>• Conversaciones con la IA</Text>
-                    <Text style={styles.bulletPoint}>• Datos de uso de la app</Text>
+                    <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>Información que Recopilamos</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• Email y nombre (para tu cuenta)</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• Conversaciones con la IA</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• Datos de uso de la app</Text>
 
-                    <Text style={styles.sectionTitle}>Cómo Usamos tus Datos</Text>
-                    <Text style={styles.bulletPoint}>• Generar respuestas personalizadas de IA</Text>
-                    <Text style={styles.bulletPoint}>• Mejorar el servicio</Text>
-                    <Text style={styles.bulletPoint}>• Procesar suscripciones</Text>
+                    <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>Cómo Usamos tus Datos</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• Generar respuestas personalizadas de IA</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• Mejorar el servicio</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• Procesar suscripciones</Text>
 
-                    <Text style={styles.sectionTitle}>Compartir con Terceros</Text>
-                    <Text style={styles.bulletPoint}>
+                    <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>Compartir con Terceros</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>
                         <Text style={styles.highlight}>Google Gemini AI:</Text> Tus conversaciones se envían a Google para generar respuestas
                     </Text>
-                    <Text style={styles.bulletPoint}>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>
                         <Text style={styles.highlight}>Supabase:</Text> Almacenamiento y autenticación
                     </Text>
                     <Text style={[styles.bulletPoint, styles.importantText]}>
                         ❌ NO VENDEMOS tus datos a terceros
                     </Text>
 
-                    <Text style={styles.sectionTitle}>Tus Derechos (LFPDPPP)</Text>
-                    <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Acceso:</Text> Ver tus datos</Text>
-                    <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Rectificación:</Text> Corregir datos</Text>
-                    <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Cancelación:</Text> Eliminar cuenta</Text>
-                    <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Oposición:</Text> Limitar uso de datos</Text>
+                    <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>Tus Derechos (LFPDPPP)</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• <Text style={[styles.bold, !isDark && { color: '#111' }]}>Acceso:</Text> Ver tus datos</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• <Text style={[styles.bold, !isDark && { color: '#111' }]}>Rectificación:</Text> Corregir datos</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• <Text style={[styles.bold, !isDark && { color: '#111' }]}>Cancelación:</Text> Eliminar cuenta</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• <Text style={[styles.bold, !isDark && { color: '#111' }]}>Oposición:</Text> Limitar uso de datos</Text>
 
-                    <Text style={styles.sectionTitle}>Seguridad</Text>
-                    <Text style={styles.paragraph}>
+                    <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>Seguridad</Text>
+                    <Text style={[styles.paragraph, !isDark && { color: '#4b5563' }]}>
                         Usamos encriptación TLS/SSL para proteger tus datos. Sin embargo, ningún sistema es 100% seguro.
                     </Text>
 
@@ -88,24 +91,26 @@ export default function PrivacyPolicy() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#000',
+        backgroundColor: '#0a0a0c', // Darker background
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingBottom: 16,
-        backgroundColor: '#000',
+        backgroundColor: '#0a0a0c',
         borderBottomWidth: 1,
-        borderBottomColor: '#333',
+        borderBottomColor: '#27272a',
     },
     backButton: {
         padding: 8,
         marginRight: 12,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderRadius: 20,
     },
     headerTitle: {
         color: '#fff',
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '700',
     },
     content: {
@@ -119,76 +124,85 @@ const styles = StyleSheet.create({
         marginBottom: 24,
     },
     iconCircle: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
         alignItems: 'center',
         justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(16, 185, 129, 0.2)',
     },
     card: {
-        backgroundColor: '#1a1a1a',
-        borderRadius: 16,
-        padding: 20,
+        backgroundColor: '#18181b', // Zinc 900
+        borderRadius: 24,
+        padding: 24,
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: '#27272a',
         marginBottom: 20,
     },
     updateText: {
-        color: '#6b7280',
+        color: '#71717a', // Zinc 500
         fontSize: 12,
-        marginBottom: 16,
+        marginBottom: 20,
+        textAlign: 'center',
     },
     sectionTitle: {
         color: '#fff',
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: '700',
-        marginTop: 20,
+        marginTop: 24,
         marginBottom: 12,
     },
     bulletPoint: {
-        color: '#9ca3af',
-        fontSize: 14,
-        lineHeight: 22,
-        marginBottom: 6,
+        color: '#d4d4d8', // Zinc 300
+        fontSize: 15,
+        lineHeight: 24,
+        marginBottom: 8,
     },
     paragraph: {
-        color: '#9ca3af',
-        fontSize: 14,
-        lineHeight: 22,
+        color: '#d4d4d8',
+        fontSize: 15,
+        lineHeight: 24,
         marginBottom: 12,
     },
     highlight: {
-        color: '#a855f7',
-        fontWeight: '600',
+        color: '#a855f7', // Purple
+        fontWeight: '700',
     },
     bold: {
         color: '#fff',
-        fontWeight: '600',
+        fontWeight: '700',
     },
     importantText: {
         color: '#ef4444',
-        fontWeight: '600',
+        fontWeight: '700',
     },
     highlightBox: {
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
-        borderRadius: 12,
-        padding: 16,
-        marginTop: 20,
+        borderRadius: 16,
+        padding: 20,
+        marginTop: 24,
         borderWidth: 1,
-        borderColor: 'rgba(16, 185, 129, 0.3)',
+        borderColor: 'rgba(16, 185, 129, 0.2)',
     },
     highlightBoxText: {
-        color: '#10b981',
-        fontSize: 14,
-        lineHeight: 22,
+        color: '#34d399', // Emerald 400
+        fontSize: 15,
+        lineHeight: 24,
+        fontWeight: '500',
     },
     externalButton: {
         backgroundColor: '#10b981',
-        borderRadius: 12,
+        borderRadius: 16,
         paddingVertical: 16,
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: 20,
+        shadowColor: '#10b981',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+        elevation: 6,
     },
     externalButtonText: {
         color: '#fff',
@@ -196,9 +210,10 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     footer: {
-        color: '#4b5563',
+        color: '#52525b', // Zinc 600
         fontSize: 12,
         textAlign: 'center',
         marginBottom: 40,
+        paddingHorizontal: 20,
     },
 });

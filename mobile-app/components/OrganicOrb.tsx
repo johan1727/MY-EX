@@ -13,7 +13,8 @@ import Animated, {
 
 interface OrganicOrbProps {
     state: 'idle' | 'listening' | 'thinking' | 'speaking';
-    volume: number; // 0 to 1 (normalized) or dB
+    volume: number;
+    theme?: 'light' | 'dark';
 }
 
 const BlobLayer = ({
@@ -106,15 +107,26 @@ const BlobLayer = ({
     );
 };
 
-export default function OrganicOrb({ state, volume }: OrganicOrbProps) {
-    // Colors based on state
-    // Listening (waiting for user): Cyan/Blue
-    // Speaking (AI active): Purple/Pink
-    // Thinking: White/Gray pulsating
-    // Error: Red
+export default function OrganicOrb({ state, volume, theme = 'dark' }: OrganicOrbProps) {
+    // Colors based on state & theme
+    // Light Mode (ElevenLabs Style): Black/Dark Gray blobs on White
+    const isLight = theme === 'light';
 
-    const primaryColor = state === 'speaking' ? '#a855f7' : '#06b6d4'; // Purple vs Cyan
-    const secondaryColor = state === 'speaking' ? '#ec4899' : '#3b82f6'; // Pink vs Blue
+    let primaryColor, secondaryColor;
+
+    if (isLight) {
+        // Monochrome / Grayscale for sleek look
+        // Speaking: Black/Dark Gray
+        // Listening: Light Gray/Medium Gray
+        primaryColor = state === 'speaking' ? '#111827' : '#6b7280';
+        secondaryColor = state === 'speaking' ? '#374151' : '#9ca3af';
+
+        // Error state override?
+    } else {
+        // Original Dark Mode Colors
+        primaryColor = state === 'speaking' ? '#a855f7' : '#06b6d4';
+        secondaryColor = state === 'speaking' ? '#ec4899' : '#3b82f6';
+    }
 
     return (
         <View style={styles.container}>

@@ -366,6 +366,26 @@ export class BackgroundAnalysisManager {
                 console.error('[BackgroundAnalysis] Date extraction failed:', dateErr);
             }
 
+            // CHECKPOINT 4.00: PRE-SAVE PROFILE (Critical for FK constraints)
+            // Save preliminary profile to Supabase so Embeddings and Memories have a valid foreign key
+            if (user?.id) {
+                await onProgress(95.0, '💾 Sincronizando perfil...');
+                const preliminaryProfile = {
+                    id: profileId,
+                    exName,
+                    userName: detectedUserName,
+                    relationshipType,
+                    profile: { ...profile, importantDates }, // Save what we have so far
+                    messageCount: messages.length,
+                    createdAt: new Date().toISOString(),
+                    // Master prompt might be null here, that's fine
+                };
+
+                // Save and ensure we have the Supabase ID
+                const saved = await saveProfile(preliminaryProfile as any, user.id);
+                console.log('[BackgroundAnalysis] Preliminary save complete. Supabase ID:', saved?.supabaseId);
+            }
+
             // CHECKPOINT 4.01: Vector Embeddings (NEW - Advanced AI)
             await onProgress(95.5, '🧠 Creando embeddings semánticos...');
 

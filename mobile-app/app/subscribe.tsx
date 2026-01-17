@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useSubscription } from '../lib/SubscriptionContext';
 import PlanFeaturesModal from '../components/PlanFeaturesModal';
+import ConfettiCannon from 'react-native-confetti-cannon';
 
 const PLANS = [
     {
@@ -23,12 +24,12 @@ const PLANS = [
         name: 'Explorer',
         price: 89,
         annualPrice: 890,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER || 'price_1RsodvP3GWiMooGSMQpJ0KL8', // LIVE Monthly
-        annualPriceId: 'price_1Sn4siP3GWiMooGSc336SbzN', // LIVE Annual
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_EXPLORER || 'price_1RxtmyP3GWiMooGS4yHwDZmW', // TEST Monthly
+        annualPriceId: 'price_1Sn4siP3GWiMooGSc336SbzN', // Live/Test check? Using Test fallback if needed
         color: '#3b82f6',
         features: [
             'Límites más amplios de uso',
-            'Crea múltiples perfiles de ex',
+            'Crea múltiples perfiles',
             'Análisis profundo de patrones',
             'REMI recuerda tu historia completa',
         ],
@@ -38,15 +39,15 @@ const PLANS = [
         name: 'Warrior',
         price: 299,
         annualPrice: 2990,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR || 'price_1RqOMRP3GWiMooGSD5OPjzim', // LIVE Monthly
-        annualPriceId: 'price_1Sn4uNP3GWiMooGSsVmPQzAg', // LIVE Annual
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_WARRIOR || 'price_1RxtnNP3GWiMooGSgROuc422', // TEST
+        annualPriceId: 'price_1Sn4uNP3GWiMooGSsVmPQzAg',
         color: '#f97316',
         popular: true,
         features: [
+            'REMI LIVE: sesiones ilimitadas de voz',
             'Uso extendido sin interrupciones',
             'Respuestas más largas y detalladas',
             'Decodificador de mensajes incluido',
-            'Respuestas prioritarias',
         ],
     },
     {
@@ -54,15 +55,15 @@ const PLANS = [
         name: 'Phoenix',
         price: 449,
         annualPrice: 4490,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX || 'price_1RqOM5P3GWiMooGS8k3BDdW8', // LIVE Monthly
-        annualPriceId: 'price_1Sn4uhP3GWiMooGSwqepVrYh', // LIVE Annual
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PHOENIX || 'price_1RxtnWP3GWiMooGS5kpAvvXn', // TEST
+        annualPriceId: 'price_1Sn4uhP3GWiMooGSwqepVrYh',
         color: '#ec4899',
         badge: 'MEJOR VALOR',
         features: [
+            'REMI LIVE: voz con IA sin límites',
             'Uso ilimitado',
             'Acceso total sin restricciones',
-            '20 perfiles de ex',
-            'Soporte premium prioritario',
+            'Más perfiles',
         ],
     },
 ];
@@ -70,12 +71,31 @@ const PLANS = [
 export default function SubscribePage() {
     const router = useRouter();
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const { tier } = useSubscription();
+    const isPremium = tier !== 'survivor';
+
+    // Confetti Logic
+    const [showConfetti, setShowConfetti] = useState(false);
+    const prevTierRef = useRef(tier);
+
+    useEffect(() => {
+        // If tier changed from survivor to something else, show confetti
+        if (prevTierRef.current === 'survivor' && tier !== 'survivor') {
+            console.log('Tier upgraded! Showing confetti');
+            setShowConfetti(true);
+            setShowSuccessModal(true);
+        }
+        prevTierRef.current = tier;
+    }, [tier]);
+
+
+    const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('monthly');
+    const [loading, setLoading] = useState<string | null>(null);
+
+    // Determines current plan index for UI logic
+    const currentPlanIndex = PLANS.findIndex(p => p.id === tier);
 
     const handleSubscribe = async (plan: typeof PLANS[0]) => {
-        // DEV: Just show modal for testing
-        // setShowSuccessModal(true);
-        // return;
-
         if (Platform.OS !== 'web') {
             alert('Los pagos web solo funcionan en navegador. Por favor usa la app móvil para suscribirte.');
             return;
@@ -95,11 +115,13 @@ export default function SubscribePage() {
             // Determine correct Price ID based on selection
             const selectedPriceId = billingPeriod === 'monthly' ? plan.priceId : plan.annualPriceId;
 
-            // Call API to create checkout session
-            const response = await fetch('/api/stripe/create-checkout', {
+            // Call Supabase Edge Function instead of local API route
+            const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+            const response = await fetch(`${supabaseUrl}/functions/v1/create-stripe-checkout`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`
                 },
                 body: JSON.stringify({
                     priceId: selectedPriceId,
@@ -126,16 +148,29 @@ export default function SubscribePage() {
     };
 
     return (
-        <LinearGradient
-            colors={['#0f0f23', '#1a0a2e', '#2d1b4e']}
-            style={styles.container}
-        >
-            <StatusBar style="light" />
+        <View style={styles.container}>
+            <StatusBar style="dark" />
+            <LinearGradient
+                colors={['#ffffff', '#f3f4f6']}
+                style={StyleSheet.absoluteFill}
+            />
+
+            {showConfetti && (
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, pointerEvents: 'none' }}>
+                    <ConfettiCannon
+                        count={200}
+                        origin={{ x: -10, y: 0 }}
+                        autoStart={true}
+                        fadeOut={true}
+                        onAnimationEnd={() => setShowConfetti(false)}
+                    />
+                </View>
+            )}
 
             <PlanFeaturesModal
                 visible={showSuccessModal}
                 onClose={() => setShowSuccessModal(false)}
-                planName={tier === 'survivor' ? 'Phoenix' : tier.charAt(0).toUpperCase() + tier.slice(1)} // Default showing target plan
+                planName={tier === 'survivor' ? 'Phoenix' : tier.charAt(0).toUpperCase() + tier.slice(1)}
             />
 
             <SafeAreaView style={{ flex: 1 }}>
@@ -151,12 +186,7 @@ export default function SubscribePage() {
                         }}
                         style={styles.backButton}
                     >
-                        <ArrowLeft size={24} color="#fff" />
-                    </TouchableOpacity>
-
-                    {/* DEV: Preview Modal Button */}
-                    <TouchableOpacity onPress={() => setShowSuccessModal(true)} style={{ marginLeft: 'auto', padding: 8 }}>
-                        <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10 }}>Preview Modal</Text>
+                        <ArrowLeft size={24} color="#111827" />
                     </TouchableOpacity>
                 </View>
 
@@ -196,7 +226,7 @@ export default function SubscribePage() {
                                     Anual
                                 </Text>
                                 <View style={styles.saveBadge}>
-                                    <Text style={styles.saveBadgeText}>AHORRA 17%</Text>
+                                    <Text style={styles.saveBadgeText}>-17%</Text>
                                 </View>
                             </TouchableOpacity>
                         </View>
@@ -238,11 +268,11 @@ export default function SubscribePage() {
                                         </View>
                                     )}
 
-                                    <Text style={styles.planName}>{plan.name}</Text>
+                                    <Text style={[styles.planName, { color: '#111827' }]}>{plan.name}</Text>
 
                                     <View style={styles.priceContainer}>
                                         <Text style={styles.currency}>MX$</Text>
-                                        <Text style={styles.price}>{displayPrice}.00</Text>
+                                        <Text style={[styles.price, { color: '#111827' }]}>{displayPrice}.00</Text>
                                         <Text style={styles.period}>/{billingPeriod === 'monthly' ? 'mes' : 'año'}</Text>
                                     </View>
 
@@ -258,7 +288,7 @@ export default function SubscribePage() {
                                     <TouchableOpacity
                                         style={[
                                             styles.button,
-                                            { backgroundColor: isDisabled ? '#4b5563' : plan.color },
+                                            { backgroundColor: isDisabled ? '#9ca3af' : plan.color },
                                             loading === plan.id && styles.buttonDisabled,
                                         ]}
                                         onPress={() => handleSubscribe(plan)}
@@ -281,7 +311,7 @@ export default function SubscribePage() {
                     {/* Footer */}
                     <View style={styles.footer}>
                         <Text style={styles.footerText}>
-                            💳 Pago seguro con Stripe
+                            💳 Pago seguro con Stripe (Test Mode)
                         </Text>
                         <Text style={styles.footerText}>
                             ✨ Cancela cuando quieras
@@ -289,13 +319,14 @@ export default function SubscribePage() {
                     </View>
                 </ScrollView>
             </SafeAreaView>
-        </LinearGradient>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        // bg handled by LinearGradient
     },
     scrollContent: {
         padding: 24,
@@ -308,22 +339,29 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 32,
         fontWeight: '900',
-        color: '#fff',
+        color: '#111827', // Dark
         marginBottom: 8,
     },
     subtitle: {
         fontSize: 16,
-        color: 'rgba(255, 255, 255, 0.6)',
+        color: '#6b7280', // Gray-500
     },
     plansContainer: {
         gap: 20,
+        maxWidth: 600,
+        alignSelf: 'center',
+        width: '100%'
     },
     planCard: {
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        backgroundColor: '#ffffff',
         borderRadius: 20,
         padding: 24,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: '#e5e7eb',
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        elevation: 2,
     },
     popularCard: {
         borderColor: '#f97316',
@@ -346,7 +384,6 @@ const styles = StyleSheet.create({
     planName: {
         fontSize: 24,
         fontWeight: '700',
-        color: '#fff',
         marginBottom: 16,
     },
     priceContainer: {
@@ -356,17 +393,16 @@ const styles = StyleSheet.create({
     },
     currency: {
         fontSize: 20,
-        color: '#9ca3af',
+        color: '#6b7280',
         marginRight: 4,
     },
     price: {
         fontSize: 48,
         fontWeight: '900',
-        color: '#fff',
     },
     period: {
         fontSize: 16,
-        color: '#9ca3af',
+        color: '#6b7280',
         marginLeft: 4,
     },
     featuresContainer: {
@@ -380,7 +416,7 @@ const styles = StyleSheet.create({
     },
     featureText: {
         fontSize: 14,
-        color: 'rgba(255, 255, 255, 0.8)',
+        color: '#374151',
         flex: 1,
     },
     button: {
@@ -390,7 +426,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     buttonDisabled: {
-        opacity: 0.5,
+        opacity: 0.7,
     },
     buttonText: {
         color: '#fff',
@@ -401,9 +437,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginTop: 40,
         gap: 8,
+        paddingBottom: 40
     },
     footerText: {
-        color: 'rgba(255, 255, 255, 0.5)',
+        color: '#9ca3af',
         fontSize: 14,
     },
     backHeader: {
@@ -438,7 +475,7 @@ const styles = StyleSheet.create({
     },
     toggleContainer: {
         flexDirection: 'row',
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        backgroundColor: '#f3f4f6',
         borderRadius: 16,
         padding: 4,
         marginTop: 24,
@@ -452,15 +489,19 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     toggleOptionActive: {
-        backgroundColor: '#3b82f6',
+        backgroundColor: '#ffffff',
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1
     },
     toggleText: {
-        color: 'rgba(255, 255, 255, 0.6)',
+        color: '#6b7280',
         fontSize: 16,
         fontWeight: '600',
     },
     toggleTextActive: {
-        color: '#fff',
+        color: '#111827',
         fontWeight: '700',
     },
     saveBadge: {

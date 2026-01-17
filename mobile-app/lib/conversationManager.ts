@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { sendMessageToChatGPT } from './openai';
+import { sendMessageToAGI } from './gemini';
 
 interface Conversation {
     id: string;
@@ -54,8 +54,13 @@ export class ConversationManager {
             
             Respond with ONLY the title, nothing else. Make it concise and relevant.`;
 
-            const response = await sendMessageToChatGPT(prompt);
-            let title = response.text.trim();
+            const aiResponse = await sendMessageToAGI(
+                text,
+                imageBase64,
+                userId,
+                previousMessages,
+                conversationId
+            ); let title = aiResponse.text.trim(); // Assuming aiResponse has a .text property, similar to the original 'response'
 
             // Remove quotes if present
             title = title.replace(/^["']|["']$/g, '');

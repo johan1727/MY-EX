@@ -13,6 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Brain, MessageCircle, Shield, Sparkles, ArrowRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme } from '../lib/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -72,9 +73,22 @@ export default function WelcomeScreen() {
     const slide = SLIDES[currentSlide];
     const IconComponent = slide.icon;
 
+    // Theme Support
+    const { isDark } = useTheme();
+    // Defaults
+    const bgColor = isDark ? '#0a0a0a' : '#ffffff';
+    const textColor = isDark ? '#fff' : '#111827';
+    const subTextColor = isDark ? '#9ca3af' : '#4b5563';
+    const dotColor = isDark ? '#333' : '#e5e7eb';
+
     return (
-        <View style={styles.container}>
-            <StatusBar style="light" />
+        <View style={[styles.container, { backgroundColor: bgColor }]}>
+            <StatusBar style={isDark ? "light" : "dark"} />
+
+            {/* Skip Button - Conditional visibility if needed */}
+            <TouchableOpacity style={styles.skipButton} onPress={handleStart}>
+                <Text style={styles.skipText}>Saltar</Text>
+            </TouchableOpacity>
 
             {/* Content */}
             <View style={styles.content}>
@@ -92,9 +106,9 @@ export default function WelcomeScreen() {
 
                 {/* Text content */}
                 <Animated.View style={[styles.textContainer, { opacity: fadeAnim }]}>
-                    <Text style={styles.title}>{slide.title}</Text>
+                    <Text style={[styles.title, { color: textColor }]}>{slide.title}</Text>
                     <Text style={styles.subtitle}>{slide.subtitle}</Text>
-                    <Text style={styles.description}>{slide.description}</Text>
+                    <Text style={[styles.description, { color: subTextColor }]}>{slide.description}</Text>
                 </Animated.View>
             </View>
 
@@ -129,7 +143,6 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0a0a0a',
     },
     skipButton: {
         position: 'absolute',

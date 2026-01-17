@@ -28,12 +28,15 @@ import {
     Eye,
     Trash2,
     HelpCircle,
+    Sun,
+    Moon,
 } from 'lucide-react-native';
 import { storage } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Linking } from 'react-native';
+import { Linking, Pressable } from 'react-native'; // Added Pressable for hover
 import { useSubscription } from '@/lib/SubscriptionContext';
+import { useTheme } from '@/lib/ThemeContext'; // Import Theme Context
 import { SUBSCRIPTION_CONFIG, SubscriptionTier } from '../lib/subscriptions';
 
 interface Profile {
@@ -50,6 +53,8 @@ interface ProfileDrawerProps {
     currentProfileId?: string | null;
     onProfileDeleted?: () => void;
     onProfileSwitch?: (profile: Profile) => void;
+    // isDark prop is deprecated in favor of useTheme
+    variant?: 'overlay' | 'sidebar'; // New prop
 }
 
 export default function ProfileDrawer({
@@ -57,9 +62,17 @@ export default function ProfileDrawer({
     onClose,
     currentProfileId,
     onProfileDeleted,
-    onProfileSwitch
+    onProfileSwitch,
+    variant = 'overlay',
 }: ProfileDrawerProps) {
     const router = useRouter();
+    const { isDark, toggleTheme } = useTheme(); // Use Global Theme
+
+    // Hover States for Web
+    const [hoveredProfile, setHoveredProfile] = useState<string | null>(null);
+    const [hoveredCoach, setHoveredCoach] = useState(false);
+    const [hoveredMenuItem, setHoveredMenuItem] = useState<string | null>(null);
+
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const { tier } = useSubscription();
     const isPremium = tier !== 'survivor';
@@ -349,209 +362,282 @@ export default function ProfileDrawer({
         setShowDeleteConfirm(true);
     };
 
-    return (
-        <Modal
-            visible={visible}
-            transparent
-            animationType="none"
-            onRequestClose={onClose}
+    const renderDrawerContent = () => (
+        <Animated.View
+            style={[
+                styles.drawer,
+                variant === 'sidebar' && { width: '100%', borderRightWidth: 0 },
+                !isDark && { backgroundColor: '#ffffff', borderRightColor: '#e5e7eb' },
+                variant === 'overlay' && { transform: [{ translateX: slideAnim }] }
+            ]}
+            onStartShouldSetResponder={() => true}
         >
-            <TouchableOpacity
-                style={styles.overlay}
-                activeOpacity={1}
-                onPress={onClose}
-            >
-                <Animated.View
+            {/* Header */}
+            <View style={[styles.header, !isDark && { borderBottomColor: '#e5e7eb' }]}>
+                <Text style={[styles.title, !isDark && { color: '#000' }]} onPress={() => router.push('/')}>REMI</Text>
+                {variant === 'overlay' && (
+                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                        <X size={24} color={!isDark ? '#111' : '#fff'} />
+                    </TouchableOpacity>
+                )}
+            </View>
+
+            <ScrollView style={styles.content}>
+                {/* New Sim Button */}
+                <TouchableOpacity
                     style={[
-                        styles.drawer,
-                        { transform: [{ translateX: slideAnim }] }
+                        styles.newSimButton,
+                        !isDark && { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb' }
                     ]}
-                    onStartShouldSetResponder={() => true}
+                    onPress={handleNewSimulation}
                 >
-                    {/* Header */}
-                    <View style={styles.header}>
-                        <Text style={styles.title}>REMI</Text>
-                        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                            <X size={24} color="#fff" />
-                        </TouchableOpacity>
-                    </View>
+                    <Plus size={20} color={!isDark ? '#111' : '#fff'} />
+                    <Text style={[styles.newSimText, !isDark && { color: '#111' }]}>Nueva simulación</Text>
+                </TouchableOpacity>
 
-                    <ScrollView style={styles.content}>
-                        {/* New Simulation Button */}
-                        <TouchableOpacity
-                            style={styles.newSimButton}
-                            onPress={handleNewSimulation}
-                        >
-                            <Plus size={20} color="#fff" />
-                            <Text style={styles.newSimText}>Nueva simulación</Text>
-                        </TouchableOpacity>
+                {/* Profiles List */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Tus perfiles</Text>
+                    {profiles.length === 0 ? (
+                        <Text style={styles.emptyText}>
+                            No hay perfiles aún. Crea uno nuevo arriba.
+                        </Text>
+                    ) : (
+                        profiles.map(profile => (
+                            <View key={profile.id}>
+                                <Pressable
+                                    style={({ pressed }) => [
+                                        styles.profileItem,
+                                        variant === 'sidebar' && styles.profileItemSidebar, // Compact for sidebar
+                                        !isDark && { backgroundColor: '#ffffff', borderColor: '#e5e7eb' },
+                                        ((currentProfileId === profile.id || currentProfileId === profile.supabaseId)) &&
+                                        (isDark ? styles.profileItemActive : { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }),
+                                        hoveredProfile === profile.id && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f9fafb' }),
+                                        pressed && { opacity: 0.7 }
+                                    ]}
+                                    onPress={() => handleProfileSelect(profile)}
+                                    // @ts-ignore
+                                    onHoverIn={() => setHoveredProfile(profile.id)}
+                                    // @ts-ignore
+                                    onHoverOut={() => setHoveredProfile(null)}
+                                >
+                                    <MessageCircle size={variant === 'sidebar' ? 16 : 20} color="#9ca3af" />
+                                    <Text
+                                        style={[
+                                            styles.profileName,
+                                            variant === 'sidebar' && styles.profileNameSidebar,
+                                            !isDark && { color: '#111' }
+                                        ]}
+                                        numberOfLines={1}
+                                    >
+                                        {profile.exName}
+                                    </Text>
+                                    <Text style={[styles.profileChatHint, variant === 'sidebar' && { fontSize: 10 }]}>Chatear →</Text>
+                                </Pressable>
 
-                        {/* Profiles List */}
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Tus perfiles</Text>
-                            {profiles.length === 0 ? (
-                                <Text style={styles.emptyText}>
-                                    No hay perfiles aún. Crea uno nuevo arriba.
+                                <View style={styles.profileActions}>
+                                    <TouchableOpacity
+                                        style={styles.deleteBtn}
+                                        onPress={() => handleDeleteProfile(profile)}
+                                    >
+                                        <Trash2 size={14} color="#ef4444" />
+                                        <Text style={styles.deleteBtnText}>Eliminar</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        ))
+                    )}
+                </View>
+
+                {/* Coach Button */}
+                <Pressable
+                    style={({ pressed }) => [
+                        styles.coachButton,
+                        !isDark && { borderColor: 'rgba(168, 85, 247, 0.4)' },
+                        hoveredCoach && (isDark ? { backgroundColor: 'rgba(168, 85, 247, 0.1)' } : { backgroundColor: '#fdf4ff' }),
+                        pressed && { opacity: 0.7 }
+                    ]}
+                    onPress={handleCoachPress}
+                    // @ts-ignore
+                    onHoverIn={() => setHoveredCoach(true)}
+                    // @ts-ignore
+                    onHoverOut={() => setHoveredCoach(false)}
+                >
+                    <Sparkles size={18} color="#a855f7" style={{ marginRight: 8 }} />
+                    <Text style={styles.coachText}>Coach IA</Text>
+                </Pressable>
+            </ScrollView>
+
+            {/* Footer */}
+            <View style={[styles.footer, !isDark && { borderTopColor: '#e5e7eb' }]}>
+                {showUserMenu && (
+                    <View style={[
+                        styles.userMenuContent,
+                        !isDark && { backgroundColor: '#ffffff', borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.1, elevation: 4 },
+                        { bottom: '100%', marginBottom: 10, maxHeight: 400 }
+                    ]}>
+                        <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+                            <Pressable
+                                style={({ pressed }) => [
+                                    styles.userMenuItem,
+                                    hoveredMenuItem === 'profile' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
+                                    pressed && { opacity: 0.7 }
+                                ]}
+                                onPress={() => { if (variant === 'overlay') onClose(); router.push('/profile'); }}
+                                // @ts-ignore
+                                onHoverIn={() => setHoveredMenuItem('profile')}
+                                // @ts-ignore
+                                onHoverOut={() => setHoveredMenuItem(null)}
+                            >
+                                <User size={16} color="#9ca3af" />
+                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>Mi Perfil</Text>
+                            </Pressable>
+
+                            <Pressable
+                                style={({ pressed }) => [
+                                    styles.userMenuItem,
+                                    hoveredMenuItem === 'preferences' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
+                                    pressed && { opacity: 0.7 }
+                                ]}
+                                onPress={() => { if (variant === 'overlay') onClose(); router.push('/preferences'); }}
+                                // @ts-ignore
+                                onHoverIn={() => setHoveredMenuItem('preferences')}
+                                // @ts-ignore
+                                onHoverOut={() => setHoveredMenuItem(null)}
+                            >
+                                <Settings size={16} color="#9ca3af" />
+                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>Preferencias</Text>
+                            </Pressable>
+
+                            {/* Theme Toggle in Menu */}
+                            <Pressable
+                                style={({ pressed }) => [
+                                    styles.userMenuItem,
+                                    hoveredMenuItem === 'theme' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
+                                    pressed && { opacity: 0.7 }
+                                ]}
+                                onPress={() => {
+                                    toggleTheme();
+                                }}
+                                // @ts-ignore
+                                onHoverIn={() => setHoveredMenuItem('theme')}
+                                // @ts-ignore
+                                onHoverOut={() => setHoveredMenuItem(null)}
+                            >
+                                {isDark ? <Sun size={16} color="#9ca3af" /> : <Moon size={16} color="#9ca3af" />}
+                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>
+                                    {isDark ? 'Modo Claro' : 'Modo Oscuro'}
                                 </Text>
-                            ) : (
-                                profiles.map(profile => (
-                                    <View key={profile.id}>
-                                        <TouchableOpacity
-                                            style={[
-                                                styles.profileItem,
-                                                currentProfileId === profile.id && styles.profileItemActive
-                                            ]}
-                                            onPress={() => handleProfileSelect(profile)}
-                                        >
-                                            <MessageCircle size={20} color="#9ca3af" />
-                                            <Text style={styles.profileName} numberOfLines={1}>{profile.exName}</Text>
-                                            <Text style={styles.profileChatHint}>Chatear →</Text>
-                                        </TouchableOpacity>
+                            </Pressable>
 
-                                        {/* Action Buttons */}
-                                        <View style={styles.profileActions}>
-                                            {/* Analysis Button */}
-
-
-
-                                            {/* Delete Button */}
-                                            <TouchableOpacity
-                                                style={styles.deleteBtn}
-                                                onPress={() => handleDeleteProfile(profile)}
-                                            >
-                                                <Trash2 size={14} color="#ef4444" />
-                                                <Text style={styles.deleteBtnText}>Eliminar</Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
-                                ))
+                            {!isGuest && (
+                                <Pressable
+                                    style={({ pressed }) => [
+                                        styles.userMenuItem,
+                                        hoveredMenuItem === 'switch' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
+                                        pressed && { opacity: 0.7 }
+                                    ]}
+                                    onPress={handleLogout}
+                                    // @ts-ignore
+                                    onHoverIn={() => setHoveredMenuItem('switch')}
+                                    // @ts-ignore
+                                    onHoverOut={() => setHoveredMenuItem(null)}
+                                >
+                                    <LogIn size={16} color="#9ca3af" />
+                                    <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>Cambiar cuenta</Text>
+                                </Pressable>
                             )}
-                        </View>
 
-                        {/* Coach IA */}
-                        <TouchableOpacity
-                            style={styles.coachButton}
-                            onPress={handleCoachPress}
-                        >
-                            <Sparkles size={18} color="#a855f7" style={{ marginRight: 8 }} />
-                            <Text style={styles.coachText}>Coach IA</Text>
-                        </TouchableOpacity>
-                    </ScrollView>
+                            <Pressable
+                                style={({ pressed }) => [
+                                    styles.userMenuItem,
+                                    hoveredMenuItem === 'privacy' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
+                                    pressed && { opacity: 0.7 }
+                                ]}
+                                onPress={() => { if (variant === 'overlay') onClose(); router.push('/legal/privacy'); }}
+                                // @ts-ignore
+                                onHoverIn={() => setHoveredMenuItem('privacy')}
+                                // @ts-ignore
+                                onHoverOut={() => setHoveredMenuItem(null)}
+                            >
+                                <Lock size={16} color="#9ca3af" />
+                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>Privacidad</Text>
+                            </Pressable>
 
-                    {/* Footer / Account Section (Legacy Style) */}
-                    <View style={styles.footer}>
-                        {/* Dropdown Menu (Appears above button) */}
-                        {showUserMenu && (
-                            <View style={styles.userMenuContent}>
-                                {/* Settings inside Dropdown */}
-                                <TouchableOpacity style={styles.userMenuItem} onPress={() => { onClose(); router.push('/profile'); }}>
-                                    <User size={16} color="#9ca3af" />
-                                    <Text style={styles.userMenuText}>Mi Perfil</Text>
+                            {!isPremium && (
+                                <TouchableOpacity
+                                    style={[styles.upgradeMenuItem, !isDark && { backgroundColor: '#fef3c7' }]}
+                                    onPress={() => {
+                                        if (variant === 'overlay') onClose();
+                                        router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
+                                    }}
+                                >
+                                    <Crown size={16} color="#f59e0b" />
+                                    <Text style={styles.upgradeMenuText}>Ver Planes Premium</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={styles.userMenuItem} onPress={() => { onClose(); router.push('/preferences'); }}>
-                                    <Settings size={16} color="#9ca3af" />
-                                    <Text style={styles.userMenuText}>Preferencias</Text>
-                                </TouchableOpacity>
-
-                                {!isGuest && (
-                                    <TouchableOpacity
-                                        style={styles.userMenuItem}
-                                        onPress={async () => {
-                                            await handleLogout();
-                                        }}
-                                    >
-                                        <LogIn size={16} color="#9ca3af" />
-                                        <Text style={styles.userMenuText}>Cambiar cuenta</Text>
-                                    </TouchableOpacity>
-                                )}
-
-                                <TouchableOpacity style={styles.userMenuItem} onPress={() => { onClose(); router.push('/legal/privacy'); }}>
-                                    <Lock size={16} color="#9ca3af" />
-                                    <Text style={styles.userMenuText}>Privacidad</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.userMenuItem} onPress={() => { onClose(); router.push('/legal/terms'); }}>
-                                    <FileText size={16} color="#9ca3af" />
-                                    <Text style={styles.userMenuText}>Términos</Text>
-                                </TouchableOpacity>
-
-                                <View style={styles.userMenuDivider} />
-
-                                {!isPremium && (
-                                    <>
-                                        <TouchableOpacity
-                                            style={styles.upgradeMenuItem}
-                                            onPress={() => {
-                                                onClose();
-                                                router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
-                                            }}
-                                        >
-                                            <Crown size={16} color="#f59e0b" />
-                                            <Text style={styles.upgradeMenuText}>Ver Planes Premium</Text>
-                                        </TouchableOpacity>
-                                        <View style={styles.userMenuDivider} />
-                                    </>
-                                )}
-
-                                {isGuest ? (
-                                    <TouchableOpacity
-                                        style={styles.userMenuItem}
-                                        onPress={() => {
-                                            onClose();
-                                            router.push('/auth');
-                                        }}
-                                    >
-                                        <LogIn size={16} color="#22c55e" />
-                                        <Text style={[styles.userMenuText, { color: '#22c55e' }]}>Iniciar sesión</Text>
-                                    </TouchableOpacity>
-                                ) : (
-                                    <TouchableOpacity
-                                        style={styles.userMenuItem}
-                                        onPress={handleLogout}
-                                    >
-                                        <LogOut size={16} color="#ef4444" />
-                                        <Text style={[styles.userMenuText, { color: '#ef4444' }]}>Cerrar sesión</Text>
-                                    </TouchableOpacity>
-                                )}
-
-                            </View>
-                        )}
-
-                        {/* Guest Banner */}
-                        {isGuest && !showUserMenu && (
-                            <View style={styles.guestBanner}>
-                                <Text style={styles.guestBannerText}>
-                                    Estás en modo invitado. Tus chats se guardan solo en este dispositivo.
-                                </Text>
-                            </View>
-                        )}
-
-                        {/* User Profile Button */}
-                        <TouchableOpacity
-                            style={styles.userBtn}
-                            onPress={() => setShowUserMenu(!showUserMenu)}
-                        >
-                            <View style={[styles.userAvatar, isGuest && { backgroundColor: '#6b7280' }]}>
-                                <User size={20} color="#fff" />
-                            </View>
-                            <View style={styles.userInfo}>
-                                <Text style={styles.userName} numberOfLines={1}>
-                                    {isGuest ? 'Invitado' : (userEmail || 'Mi cuenta')}
-                                </Text>
-                                <Text style={isGuest ? styles.userPlanFree : (isPremium ? styles.userPlan : styles.userPlanFree)}>
-                                    {isGuest ? 'Plan Gratuito' : (isPremium ? 'Premium' : 'Plan Gratuito')}
-                                </Text>
-                            </View>
-                            {showUserMenu ? (
-                                <ChevronUp size={16} color="#9ca3af" />
-                            ) : (
-                                <ChevronDown size={16} color="#9ca3af" />
                             )}
-                        </TouchableOpacity>
+                            <View style={[styles.userMenuDivider, !isDark && { backgroundColor: '#e5e7eb' }]} />
+                            {isGuest ? (
+                                <Pressable
+                                    style={({ pressed }) => [
+                                        styles.userMenuItem,
+                                        hoveredMenuItem === 'login' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
+                                        pressed && { opacity: 0.7 }
+                                    ]}
+                                    onPress={() => { if (variant === 'overlay') onClose(); router.push('/auth'); }}
+                                    // @ts-ignore
+                                    onHoverIn={() => setHoveredMenuItem('login')}
+                                    // @ts-ignore
+                                    onHoverOut={() => setHoveredMenuItem(null)}
+                                >
+                                    <LogIn size={16} color="#22c55e" />
+                                    <Text style={[styles.userMenuText, { color: '#22c55e' }]}>Iniciar sesión</Text>
+                                </Pressable>
+                            ) : (
+                                <Pressable
+                                    style={({ pressed }) => [
+                                        styles.userMenuItem,
+                                        hoveredMenuItem === 'logout' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
+                                        pressed && { opacity: 0.7 }
+                                    ]}
+                                    onPress={handleLogout}
+                                    // @ts-ignore
+                                    onHoverIn={() => setHoveredMenuItem('logout')}
+                                    // @ts-ignore
+                                    onHoverOut={() => setHoveredMenuItem(null)}
+                                >
+                                    <LogOut size={16} color="#ef4444" />
+                                    <Text style={[styles.userMenuText, { color: '#ef4444' }]}>Cerrar sesión</Text>
+                                </Pressable>
+                            )}
+                        </ScrollView>
                     </View>
-                </Animated.View>
-            </TouchableOpacity>
+                )}
 
-            {/* Custom Delete Confirmation Overlay */}
+                <TouchableOpacity
+                    style={styles.userBtn}
+                    onPress={() => setShowUserMenu(!showUserMenu)}
+                >
+                    <View style={[styles.userAvatar, isGuest && { backgroundColor: '#6b7280' }]}>
+                        <User size={20} color="#fff" />
+                    </View>
+                    <View style={styles.userInfo}>
+                        <Text style={[styles.userName, !isDark && { color: '#111' }]} numberOfLines={1}>
+                            {isGuest ? 'Invitado' : (userEmail || 'Mi cuenta')}
+                        </Text>
+                        <Text style={isGuest ? styles.userPlanFree : (isPremium ? styles.userPlan : styles.userPlanFree)}>
+                            {isGuest ? 'Plan Gratuito' : (isPremium ? 'Premium' : 'Plan Gratuito')}
+                        </Text>
+                    </View>
+                    {showUserMenu ? <ChevronUp size={16} color="#9ca3af" /> : <ChevronDown size={16} color="#9ca3af" />}
+                </TouchableOpacity>
+            </View>
+        </Animated.View>
+    );
+
+    const renderAlerts = () => (
+        <>
+            {/* Confirmation Overlay */}
             {showDeleteConfirm && (
                 <View style={[styles.alertOverlay, { zIndex: 9999, elevation: 5 }]}>
                     <View style={styles.alertBox}>
@@ -564,96 +650,72 @@ export default function ProfileDrawer({
                             {"\n\n"}Esta acción borrará el análisis y todo el historial de conversación para siempre.
                         </Text>
                         <View style={styles.alertButtons}>
-                            <TouchableOpacity
-                                style={styles.alertButtonCancel}
-                                onPress={() => setShowDeleteConfirm(false)}
-                            >
+                            <TouchableOpacity style={styles.alertButtonCancel} onPress={() => setShowDeleteConfirm(false)}>
                                 <Text style={styles.alertButtonCancelText}>Cancelar</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.alertButtonConfirm}
-                                onPress={() => {
-                                    setShowDeleteConfirm(false);
-                                    if (profileToDelete) performDelete(profileToDelete);
-                                }}
-                            >
+                            <TouchableOpacity style={styles.alertButtonConfirm} onPress={() => { setShowDeleteConfirm(false); if (profileToDelete) performDelete(profileToDelete); }}>
                                 <Text style={styles.alertButtonConfirmText}>Eliminar</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
             )}
-
-            {/* Custom Generic Alert Overlay (for Upsell) */}
+            {/* Generic Alert */}
             {customAlert.visible && (
                 <View style={[styles.alertOverlay, { zIndex: 9999, elevation: 5 }]}>
-                    <View style={styles.alertBox}>
-                        <View style={[
-                            styles.alertIconContainer,
-                            customAlert.type === 'error' ? { backgroundColor: 'rgba(239, 68, 68, 0.1)' } :
-                                customAlert.type === 'warning' ? { backgroundColor: 'rgba(245, 158, 11, 0.1)' } :
-                                    customAlert.type === 'success' ? { backgroundColor: 'rgba(34, 197, 94, 0.1)' } :
-                                        { backgroundColor: 'rgba(59, 130, 246, 0.1)' }
-                        ]}>
-                            {customAlert.type === 'error' && <Trash2 size={32} color="#ef4444" />} {/* Fallback icon */}
-                            {customAlert.type === 'warning' && <Crown size={32} color="#f59e0b" />}
-                            {customAlert.type === 'success' && <Sparkles size={32} color="#22c55e" />}
-                            {customAlert.type === 'info' && <HelpCircle size={32} color="#3b82f6" />}
-                        </View>
-                        <Text style={styles.alertTitle}>{customAlert.title}</Text>
-                        <Text style={styles.alertMessage}>
-                            {customAlert.message}
-                        </Text>
+                    <View style={[styles.alertBox, !isDark && { backgroundColor: '#ffffff' }]}>
+                        <Text style={[styles.alertTitle, !isDark && { color: '#111' }]}>{customAlert.title}</Text>
+                        <Text style={[styles.alertMessage, !isDark && { color: '#4b5563' }]}>{customAlert.message}</Text>
                         <View style={styles.alertButtons}>
-                            {!customAlert.buttons || customAlert.buttons.length === 0 ? (
+                            {(customAlert.buttons || [{ text: 'OK' }]).map((btn, idx) => (
                                 <TouchableOpacity
-                                    style={styles.alertButtonConfirm}
-                                    onPress={closeAlert}
+                                    key={idx}
+                                    style={[styles.alertButtonConfirm, { flex: 1, marginHorizontal: 4 }]}
+                                    onPress={() => { if (btn.onPress) btn.onPress(); else closeAlert(); }}
                                 >
-                                    <Text style={styles.alertButtonConfirmText}>OK</Text>
+                                    <Text style={styles.alertButtonConfirmText}>{btn.text}</Text>
                                 </TouchableOpacity>
-                            ) : (
-                                customAlert.buttons.map((btn, idx) => (
-                                    <TouchableOpacity
-                                        key={idx}
-                                        style={[
-                                            btn.style === 'cancel' ? styles.alertButtonCancel :
-                                                btn.style === 'default' && customAlert.type === 'warning' ? styles.alertButtonPremium : // Use premium style for warning/upsell
-                                                    styles.alertButtonConfirm,
-                                            { flex: 1, marginHorizontal: 4 }
-                                        ]}
-                                        onPress={() => {
-                                            if (btn.onPress) btn.onPress();
-                                            else closeAlert();
-                                        }}
-                                    >
-                                        <Text style={[
-                                            btn.style === 'cancel' ? styles.alertButtonCancelText :
-                                                btn.style === 'default' && customAlert.type === 'warning' ? styles.alertButtonPremiumText :
-                                                    styles.alertButtonConfirmText
-                                        ]}>{btn.text}</Text>
-                                    </TouchableOpacity>
-                                ))
-                            )}
+                            ))}
                         </View>
                     </View>
                 </View>
             )}
-
-            {/* Success Overlay */}
+            {/* Success */}
             {showSuccessModal && (
                 <View style={[styles.alertOverlay, { zIndex: 9999, elevation: 5 }]}>
-                    <View style={[styles.alertBox, { alignItems: 'center', paddingTop: 30, paddingBottom: 30 }]}>
-                        <View style={[styles.alertIconContainer, { backgroundColor: 'rgba(34, 197, 94, 0.1)' }]}>
-                            <Sparkles size={32} color="#22c55e" />
-                        </View>
-                        <Text style={[styles.alertTitle, { marginTop: 16 }]}>¡Perfil Eliminado!</Text>
-                        <Text style={[styles.alertMessage, { textAlign: 'center', marginTop: 8 }]}>
-                            El perfil ha sido borrado correctamente.
-                        </Text>
+                    <View style={styles.alertBox}>
+                        <Sparkles size={32} color="#22c55e" />
+                        <Text style={styles.alertTitle}>¡Perfil Eliminado!</Text>
                     </View>
                 </View>
             )}
+        </>
+    );
+
+    if (variant === 'sidebar') {
+        return (
+            <View style={{ flex: 1, height: '100%', borderRightWidth: 1, borderRightColor: isDark ? '#333' : '#e5e7eb', backgroundColor: isDark ? '#000' : '#fff' }}>
+                {renderDrawerContent()}
+                {renderAlerts()}
+            </View>
+        );
+    }
+
+    return (
+        <Modal
+            visible={visible}
+            transparent
+            animationType="none"
+            onRequestClose={onClose}
+        >
+            <TouchableOpacity
+                style={styles.overlay}
+                activeOpacity={1}
+                onPress={onClose}
+            >
+                {renderDrawerContent()}
+            </TouchableOpacity>
+            {renderAlerts()}
         </Modal>
     );
 }
@@ -831,14 +893,30 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '500',
     },
+    profileItemSidebar: {
+        paddingVertical: 6,
+        paddingHorizontal: 8,
+        gap: 6,
+        marginBottom: 1,
+    },
+    profileNameSidebar: {
+        fontSize: 12,
+    },
+    // Legacy Account Styles
     // Legacy Account Styles
     userMenuContent: {
         backgroundColor: '#1A1A1A',
         borderRadius: 12,
         padding: 8,
-        marginBottom: 12,
+        position: 'absolute',
+        bottom: 80, // Fixed position above footer
+        left: 16,
+        right: 16,
+        gap: 2,
         borderWidth: 1,
         borderColor: '#333',
+        zIndex: 100,
+        maxHeight: 280, // Prevent growing too tall
     },
     upgradeMenuItem: {
         flexDirection: 'row',
@@ -961,49 +1039,47 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     // Custom Alert Styles
+    // Custom Alert Styles (Eleven Labs Modern)
     alertOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.85)',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.6)',
         justifyContent: 'center',
         alignItems: 'center',
         padding: 24,
     },
     alertBox: {
-        backgroundColor: '#1E1E1E',
-        borderRadius: 20,
-        padding: 24,
         width: '100%',
         maxWidth: 340,
-        borderWidth: 1,
-        borderColor: '#333',
+        backgroundColor: '#1c1c1e',
+        borderRadius: 16,
+        padding: 24,
         alignItems: 'center',
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.5,
-        shadowRadius: 20,
-        elevation: 10,
     },
     alertIconContainer: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 20,
+        marginBottom: 16,
     },
     alertTitle: {
         color: '#fff',
-        fontSize: 20,
-        fontWeight: 'bold',
-        marginBottom: 12,
+        fontSize: 18,
+        fontWeight: '700',
+        marginBottom: 8,
         textAlign: 'center',
+        letterSpacing: -0.5,
     },
     alertMessage: {
         color: '#9ca3af',
-        fontSize: 15,
+        fontSize: 14,
         textAlign: 'center',
-        lineHeight: 22,
+        lineHeight: 20,
         marginBottom: 24,
     },
     alertButtons: {
@@ -1013,50 +1089,55 @@ const styles = StyleSheet.create({
     },
     alertButton: {
         flex: 1,
-        paddingVertical: 14,
+        paddingVertical: 12,
         borderRadius: 12,
         backgroundColor: '#333',
         alignItems: 'center',
+        justifyContent: 'center',
     },
     alertButtonPrimary: {
-        backgroundColor: '#3b82f6',
+        backgroundColor: '#fff',
     },
     alertButtonCancel: {
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderColor: '#333',
     },
     alertButtonCancelText: {
         color: '#fff',
         fontWeight: '600',
-        fontSize: 15,
+        fontSize: 14,
     },
     alertButtonConfirm: {
         flex: 1,
-        paddingVertical: 14,
+        paddingVertical: 12,
         borderRadius: 12,
-        backgroundColor: 'rgba(239, 68, 68, 0.2)',
-        borderWidth: 1,
-        borderColor: '#ef4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
         alignItems: 'center',
+        justifyContent: 'center',
+        // Removed border to match cleaner look
     },
     alertButtonConfirmText: {
         color: '#ef4444',
         fontWeight: '600',
-        fontSize: 15,
+        fontSize: 14,
     },
     alertButtonPremium: {
         flex: 1,
-        paddingVertical: 14,
+        paddingVertical: 12,
         borderRadius: 12,
         backgroundColor: '#f59e0b',
         alignItems: 'center',
+        justifyContent: 'center',
         shadowColor: '#f59e0b',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
+        shadowOpacity: 0.2,
         shadowRadius: 8,
         elevation: 6,
     },
     alertButtonPremiumText: {
         color: '#000',
-        fontWeight: 'bold',
-        fontSize: 15,
+        fontWeight: '700',
+        fontSize: 14,
     },
 });

@@ -18,6 +18,7 @@ import { Eye, EyeOff, Brain } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import { useTheme } from '../../lib/ThemeContext';
 
 // Try to import native Google Sign-In
 let GoogleSignin: any = null;
@@ -194,27 +195,44 @@ export default function AuthScreen() {
         }
     };
 
+    // Theme Aware UI
+    const { isDark } = useTheme(); // Note: ensure ThemeContext is imported if not already. 
+    // If not, we'll add the import in a separate step or assume it's available in snippet context.
+
+    // Theme Colors
+    const bgColors = isDark ? '#000000' : '#ffffff';
+    const textColor = isDark ? '#FFF' : '#111827';
+    const subTextColor = isDark ? '#E9D5FF' : '#7c3aed'; // Purple shade for light mode
+    const brainBg = isDark ? '#1A1A1A' : '#f3f4f6';
+    const brainBorder = isDark ? '#333' : '#e5e7eb';
+    const tagBg = isDark ? 'rgba(20, 20, 20, 0.9)' : 'rgba(255, 255, 255, 0.9)';
+    const tagBorder = isDark ? '#333' : '#e5e7eb';
+    const tagText = isDark ? '#E9D5FF' : '#6d28d9';
+    const googleBtnBg = isDark ? '#FFF' : '#111827';
+    const googleBtnText = isDark ? '#000' : '#FFF';
+    const googleIconColor = isDark ? '#000' : '#FFF';
+
     return (
-        <View style={styles.container}>
-            <StatusBar style="light" />
+        <View style={[styles.container, { backgroundColor: bgColors }]}>
+            <StatusBar style={isDark ? "light" : "dark"} />
             <View style={styles.heroSection}>
                 <View style={styles.imageWrapper}>
-                    <View style={styles.brainIconContainer}>
+                    <View style={[styles.brainIconContainer, { backgroundColor: brainBg, borderColor: brainBorder }]}>
                         <Brain size={80} color="#a855f7" strokeWidth={1.5} />
                     </View>
-                    <View style={[styles.floatingTag, styles.tagLeft]}>
+                    <View style={[styles.floatingTag, styles.tagLeft, { backgroundColor: tagBg, borderColor: tagBorder }]}>
                         <Text style={styles.tagEmoji}>💜</Text>
-                        <Text style={styles.tagText}>Sanación</Text>
+                        <Text style={[styles.tagText, { color: tagText }]}>Sanación</Text>
                     </View>
-                    <View style={[styles.floatingTag, styles.tagRight]}>
+                    <View style={[styles.floatingTag, styles.tagRight, { backgroundColor: tagBg, borderColor: tagBorder }]}>
                         <Text style={styles.tagEmoji}>🤖</Text>
-                        <Text style={styles.tagText}>IA Coach</Text>
+                        <Text style={[styles.tagText, { color: tagText }]}>IA Coach</Text>
                     </View>
                 </View>
             </View>
 
             <View style={styles.bottomSection}>
-                <Text style={styles.title}>Tu coach de IA para{'\n'}superar el pasado</Text>
+                <Text style={[styles.title, { color: textColor }]}>Tu coach de IA para{'\n'}superar el pasado</Text>
 
                 {errorMsg && (
                     <View style={styles.errorBox}>
@@ -224,11 +242,15 @@ export default function AuthScreen() {
 
                 <View style={{ height: 20 }} />
                 <View style={styles.buttonsContainer}>
-                    <TouchableOpacity style={styles.googleButton} onPress={() => handleOAuthLogin('google')} disabled={oauthLoading !== null}>
-                        {oauthLoading === 'google' ? <ActivityIndicator color="#000" size="small" /> : (
+                    <TouchableOpacity
+                        style={[styles.googleButton, { backgroundColor: googleBtnBg, borderWidth: isDark ? 0 : 1, borderColor: '#111' }]}
+                        onPress={() => handleOAuthLogin('google')}
+                        disabled={oauthLoading !== null}
+                    >
+                        {oauthLoading === 'google' ? <ActivityIndicator color={googleBtnText} size="small" /> : (
                             <>
-                                <Text style={styles.googleIcon}>G</Text>
-                                <Text style={styles.googleButtonText}>Continuar con Google</Text>
+                                <Text style={[styles.googleIcon, { color: googleIconColor }]}>G</Text>
+                                <Text style={[styles.googleButtonText, { color: googleBtnText }]}>Continuar con Google</Text>
                             </>
                         )}
                     </TouchableOpacity>
@@ -241,7 +263,6 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#000000', // Pure Black
     },
     heroSection: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 40 },
     imageWrapper: {
@@ -255,15 +276,12 @@ const styles = StyleSheet.create({
         width: 160,
         height: 160,
         borderRadius: 80,
-        backgroundColor: '#1A1A1A',
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 2,
-        borderColor: '#333',
     },
     floatingTag: {
         position: 'absolute',
-        backgroundColor: 'rgba(20, 20, 20, 0.9)',
         borderRadius: 20,
         paddingVertical: 8,
         paddingHorizontal: 16,
@@ -271,23 +289,22 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
         borderWidth: 1,
-        borderColor: '#333',
         zIndex: 10,
     },
     tagLeft: { top: '15%', left: 0, transform: [{ rotate: '-5deg' }] },
     tagRight: { bottom: '15%', right: 0, transform: [{ rotate: '5deg' }] },
-    tagText: { color: '#E9D5FF', fontWeight: '600' },
+    tagText: { fontWeight: '600' },
     tagEmoji: { fontSize: 16 },
 
     bottomSection: { paddingHorizontal: 24, paddingBottom: 48 },
-    title: { fontSize: 30, fontWeight: '800', color: '#FFF', textAlign: 'center', marginBottom: 16 },
+    title: { fontSize: 30, fontWeight: '800', textAlign: 'center', marginBottom: 16 },
 
     buttonsContainer: { gap: 16 },
     googleButton: {
-        backgroundColor: '#FFF', borderRadius: 18, height: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12
+        borderRadius: 18, height: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12
     },
-    googleIcon: { fontSize: 22, fontWeight: '700', color: '#000' },
-    googleButtonText: { color: '#000', fontSize: 16, fontWeight: '600' },
+    googleIcon: { fontSize: 22, fontWeight: '700' },
+    googleButtonText: { fontSize: 16, fontWeight: '600' },
 
     errorBox: { backgroundColor: 'rgba(220,38,38,0.2)', padding: 12, borderRadius: 12, marginBottom: 16 },
     errorText: { color: '#FCA5A5', textAlign: 'center' },

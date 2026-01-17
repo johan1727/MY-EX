@@ -8,11 +8,13 @@ import {
     ActivityIndicator,
     Modal,
     Animated,
+    Platform,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     ArrowLeft,
     Brain,
@@ -36,8 +38,12 @@ import { validateRelationshipType, formatValidationMessage } from '@/lib/relatio
 import { canCreateProfileThisMonth, incrementMonthlyProfileCount } from '@/lib/exSimulator';
 import { useSubscription } from '@/lib/SubscriptionContext';
 
+import { useTheme } from '@/lib/ThemeContext';
+import AnalysisLoadingPremium from '@/components/AnalysisLoadingPremium';
+
 export default function AnalysisScreen() {
     const router = useRouter();
+    const { isDark } = useTheme(); // Global Theme
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState<any>(null);
 
@@ -61,305 +67,218 @@ export default function AnalysisScreen() {
     const [customAlert, setCustomAlert] = useState<AlertConfig>({ visible: false, title: '', message: '' });
 
     const showAlert = (title: string, message: string, buttons?: AlertConfig['buttons'], type: AlertConfig['type'] = 'info') => {
-        setCustomAlert({
-            visible: true,
-            title,
-            message,
-            buttons,
-            type
-        });
+        setCustomAlert({ visible: true, title, message, buttons, type });
     };
 
     const closeAlert = () => {
         setCustomAlert(prev => ({ ...prev, visible: false }));
     };
 
+    // Check for params in route (passed from import.tsx)
+    const { update_profile_id, profile_id } = useLocalSearchParams<{ update_profile_id?: string; profile_id?: string }>();
 
-    // Use focus effect to check for data whenever the screen comes into focus
-    // This is critical because router.push might rely on existing mounted component
-    useFocusEffect(
-        useCallback(() => {
-            console.log('[AnalysisScreen] Screen focused, checking for data...');
-            checkForAnalysisOrProfile();
-        }, [])
-    );
+    useEffect(() => {
+        checkForAnalysisOrProfile();
+
+        // Subscribe to background analysis events
+        const unsubscribe = BackgroundAnalysisManager.onAnalysisCompleted(async (data) => {
+            console.log('[AnalysisScreen] Analysis completed event received:', data);
+            // Reload to show results
+            await loadProfile(data.profileId);
+            setIsAnalyzing(false);
+            setLoading(false);
+        });
+
+        // Also subscribe to specific progress updates if we know the ID
+        // (This gets refined inside checkForAnalysisOrProfile)
+
+        return () => {
+            unsubscribe();
+        };
+    }, []);
 
     const checkForAnalysisOrProfile = async () => {
         try {
-            console.log('[AnalysisScreen] STARTING CHECK');
+            setLoading(true);
 
-            // Check if we need to START a new analysis
-            const analyzeData = await storage.getItem('exSimulator_analyzeData');
-
-            // 0. CHECK FOR RESUMABLE ACTIVE ANALYSIS (Robustness for refresh)
-
+            // 1. Check if we have an analysis running in background
             const activeAnalyses = await BackgroundAnalysisManager.getActiveAnalyses();
-            if (activeAnalyses.length > 0 && !analyzeData) {
-                const runningId = activeAnalyses[0];
-                console.log('[AnalysisScreen] Resuming active analysis:', runningId);
-                const state = await BackgroundAnalysisManager.getState(runningId);
+            console.log('[AnalysisScreen] Active analyses:', activeAnalyses);
 
-                if (state && (state.status === 'running' || state.status === 'paused')) {
-                    setIsAnalyzing(true);
-                    setAnalysisState(state);
-                    setLoading(false);
+            // Determine relevant profile ID:
+            // - Priority 1: Explicit profile_id from route params
+            // - Priority 2: update_profile_id (for updates)
+            // - Priority 3: Currently running analysis
+            // - Priority 4: Current active profile in storage
+            let targetProfileId = profile_id || update_profile_id;
 
-                    BackgroundAnalysisManager.onProgressUpdate(runningId, (updatedState) => {
-                        setAnalysisState(updatedState);
-                        setAnalysisLogs(updatedState.logs || []);
-                        if (updatedState.status === 'completed') {
-                            setIsAnalyzing(false);
-                            const finalProfile = updatedState.result;
-                            const profileData = (finalProfile as any).profile || finalProfile;
-                            setProfile(profileData ? { ...finalProfile, ...profileData } : finalProfile);
-                        }
-                    });
+            if (!targetProfileId && activeAnalyses.length > 0) {
+                targetProfileId = activeAnalyses[0]; // Take the first active one
+            }
 
-                    BackgroundAnalysisManager.onAnalysisCompleted(() => {
-                        setTimeout(() => router.replace('/'), 1000);
-                    });
+            if (targetProfileId) {
+                // Check status
+                const analysisState = await BackgroundAnalysisManager.getState(targetProfileId);
+
+                if (analysisState && (analysisState.status === 'running' || analysisState.status === 'paused')) {
+                    console.log('[AnalysisScreen] Found active analysis:', targetProfileId);
+                    setupAnalysisSubscription(targetProfileId);
+                    return; // EXIT: We are analyzing
+                } else if (analysisState && analysisState.status === 'completed') {
+                    console.log('[AnalysisScreen] Analysis completed for:', targetProfileId);
+                    await loadProfile(targetProfileId);
+                    return; // EXIT: Loaded result
+                }
+            }
+
+            // 2. If no active analysis, check if we have PENDING chunks from import.tsx
+            // This happens when we just navigated from Import
+            const chunksKeys = await AsyncStorage.getAllKeys();
+            const chunkKey = chunksKeys.find(k => k.startsWith('chat_import_chunk_')); // Look for any chunk
+
+            if (chunkKey) {
+                console.log('[AnalysisScreen] Found pending chat chunks. Starting analysis...');
+                setIsAnalyzing(true); // Show loading UI immediately
+
+                // Reassemble messages
+                let allMessages: any[] = [];
+                const allChunkKeys = chunksKeys.filter(k => k.startsWith('chat_import_chunk_')).sort();
+
+                for (const key of allChunkKeys) {
+                    const chunk = await AsyncStorage.getItem(key);
+                    if (chunk) {
+                        allMessages = [...allMessages, ...JSON.parse(chunk)];
+                        // Cleanup as we go (or after)
+                        await AsyncStorage.removeItem(key);
+                    }
+                }
+
+                // Get Metadata
+                const metaJson = await AsyncStorage.getItem('chat_import_metadata');
+                if (metaJson) {
+                    const meta = JSON.parse(metaJson);
+                    await AsyncStorage.removeItem('chat_import_metadata'); // Cleanup
+
+                    // Generate a new ID if not updating
+                    const idToUse = update_profile_id || crypto.randomUUID();
+
+                    // START BACKGROUND MANAGER
+                    // (This handles the heavy lifting)
+                    await BackgroundAnalysisManager.startAnalysis(
+                        idToUse,
+                        allMessages,
+                        meta.exName,
+                        meta.relationshipType,
+                        update_profile_id
+                    );
+
+                    setupAnalysisSubscription(idToUse);
                     return;
                 }
             }
 
-            if (analyzeData) {
+            // 3. Last fallback: Load current viewed profile
+            await loadProfile();
 
-                // Check if using chunked storage (new format) or legacy format
-                const metadata = JSON.parse(analyzeData);
-                let parsedMessages: any[];
-                let exName: string;
-                let relationshipType: string;
-                let userName: string | undefined;
+        } catch (error) {
+            console.error('[AnalysisScreen] Error verifying state:', error);
+            setLoading(false);
+        }
+    };
 
-                if (metadata.totalChunks) {
-                    // NEW: Chunked storage format - reassemble messages from chunks
-                    console.log(`[AnalysisScreen] Reading ${metadata.totalChunks} chunks (${metadata.totalMessages} messages)`);
-                    parsedMessages = [];
+    const setupAnalysisSubscription = (id: string) => {
+        setIsAnalyzing(true);
+        setLoading(false); // Show the analysis UI instead of spinner
 
-                    for (let i = 0; i < metadata.totalChunks; i++) {
-                        const chunkData = await storage.getItem(`exSimulator_chunk_${i}`);
-                        if (chunkData) {
-                            const chunk = JSON.parse(chunkData);
-                            parsedMessages.push(...chunk);
-                            // Clean up chunk after reading
-                            await storage.removeItem(`exSimulator_chunk_${i}`);
-                        }
-                    }
+        // Initial state
+        BackgroundAnalysisManager.getState(id).then(state => {
+            if (state) setAnalysisState(state);
+        });
 
-                    exName = metadata.exName;
-                    relationshipType = metadata.relationshipType;
-                    userName = metadata.userName;
-                    console.log(`[AnalysisScreen] Reassembled ${parsedMessages.length} messages from chunks`);
+        // Subscribe
+        const unsub = BackgroundAnalysisManager.onProgressUpdate(id, (state) => {
+            setAnalysisState(state);
+            if (state.status === 'completed') {
+                setIsAnalyzing(false);
+                loadProfile(id);
+            }
+        });
+
+        // Cleanup this specific sub when component unmounts is tricky inside function,
+        // but global load will handle 'completed' event. 
+        // We rely on the setIsAnalyzing(false) to switch views.
+    };
+
+    const loadProfile = async (specificId?: string) => {
+        try {
+            setLoading(true);
+            let profileToLoad: any = null;
+
+            if (specificId) {
+                // If we know the ID (e.g. just finished analyzing)
+                // Try to get from BackgroundManager result first (most fresh)
+                const state = await BackgroundAnalysisManager.getState(specificId);
+                if (state?.result) {
+                    profileToLoad = state.result;
                 } else {
-                    // LEGACY: Old format with parsedMessages directly in storage
-                    console.log('[AnalysisScreen] Using legacy storage format');
-                    parsedMessages = metadata.parsedMessages;
-                    exName = metadata.exName;
-                    relationshipType = metadata.relationshipType;
-                    userName = metadata.userName;
-                }
-
-                // REMOVED premature deletion to prevent data loss on error
-                // await storage.removeItem('exSimulator_analyzeData');
-
-                // 🔒 CHECK MONTHLY PROFILE LIMIT BEFORE PROCEEDING
-                console.log('[AnalysisScreen] Checking auth user...');
-
-
-                // Add Timeout to getUser to prevent hang
-                const userPromise = supabase.auth.getUser();
-                const timeoutPromise = new Promise<{ data: { user: any }, error: any }>((_, reject) =>
-                    setTimeout(() => reject(new Error('Auth check timed out')), 8000)
-                );
-
-                // @ts-ignore
-                const result: any = await Promise.race([userPromise, timeoutPromise]);
-                const user = result?.data?.user || null;
-                const authError = result?.error;
-
-                if (authError) {
-                    console.log('[AnalysisScreen] Auth check returned error (continuing as guest):', authError.message);
-                }
-
-                console.log('[AnalysisScreen] User found:', user?.id);
-
-                let subscriptionTier = 'survivor'; // default
-                if (user) {
-                    console.log('[AnalysisScreen] Fetching profile tier...');
-
-
-                    const { data: profile } = await supabase
-                        .from('profiles')
-                        .select('subscription_tier')
-                        .eq('id', user.id)
-                        .single();
-                    subscriptionTier = profile?.subscription_tier || 'survivor';
-                    console.log('[AnalysisScreen] Subscription tier:', subscriptionTier);
-                }
-
-                console.log('[AnalysisScreen] Checking monthly limits...');
-                console.log('[AnalysisScreen] Checking monthly limits...');
-                const limitCheck = await canCreateProfileThisMonth(subscriptionTier);
-                console.log('[AnalysisScreen] Limit check result:', JSON.stringify(limitCheck));
-
-                if (!limitCheck.canCreate) {
-                    console.log('[AnalysisScreen] Limit reached, aborting.');
-                    setLoading(false);
-                    showAlert(
-                        '🚫 Límite Alcanzado',
-                        limitCheck.message || `Has alcanzado tu límite de perfiles este mes.`,
-                        [
-                            { text: 'Ver Planes', onPress: () => router.push('/paywall') },
-                            { text: 'OK', onPress: () => router.back() }
-                        ],
-                        'warning'
-                    );
-                    return;
-                }
-
-                console.log('[AnalysisScreen] Limit check passed. Setting analyzing=true');
-
-                setIsAnalyzing(true);
-                setLoading(false);
-
-                // Start background analysis with progress tracking
-                const profileId = `profile_${Date.now()}`;
-                console.log('[AnalysisScreen] Generated ProfileID:', profileId);
-
-                // Subscribe to progress updates
-                console.log('[AnalysisScreen] Subscribing to progress updates...');
-                const unsubscribe = BackgroundAnalysisManager.onProgressUpdate(profileId, (state) => {
-                    console.log('[AnalysisScreen] Progress Update:', state.status, state.progress);
-                    setAnalysisState(state);
-                    setAnalysisLogs(state.logs || []);
-
-                    if (state.status === 'completed') {
-                        console.log('[AnalysisScreen] Analysis completed!');
-                        setIsAnalyzing(false);
-                        // Flatten the result so UI can access properties directly
-                        const finalProfile = state.result;
-                        // Fix for type error: explicitly cast or check property existence if needed
-                        const profileData = (finalProfile as any).profile || finalProfile;
-                        setProfile(profileData ? { ...finalProfile, ...profileData } : finalProfile);
-
-                        // INCREMENT GUEST USAGE
-                        supabase.auth.getUser().then(({ data: { user } }) => {
-                            if (!user) {
-                                storage.getItem('guest_analysis_count').then(current => {
-                                    const newVal = (current ? parseInt(current) : 0) + 1;
-                                    storage.setItem('guest_analysis_count', newVal.toString());
-                                });
-                            }
-                        });
-
-                        // 📊 INCREMENT MONTHLY PROFILE COUNT (limits per plan)
-                        incrementMonthlyProfileCount()
-                            .then(() => console.log('[AnalysisScreen] Monthly profile count incremented'))
-                            .catch(err => console.error('[AnalysisScreen] Failed to increment profile count:', err));
-
-                        // Navigate to chat after completion
-                        setTimeout(() => {
-                            router.replace('/');
-                        }, 1000); // 1 second for state to settle
+                    // Or fetch from DB/Storage
+                    const stored = await storage.getItem(`profile_${specificId}`); // Generic getter if you have one
+                    // Fallback check 'exSimulator_currentProfile'
+                    const currentVar = await storage.getItem('exSimulator_currentProfile');
+                    if (currentVar && JSON.parse(currentVar).id === specificId) {
+                        profileToLoad = JSON.parse(currentVar);
                     }
+                }
+            }
 
-                    if (state.status === 'error') {
-                        console.error('[AnalysisScreen] Analysis failed:', state.error);
-                        setIsAnalyzing(false);
-                        showAlert('Error', state.error || 'Error en el análisis', [{ text: 'OK' }], 'error');
-                    }
-                });
+            if (!profileToLoad) {
+                // Default behavior: load 'current'
+                const storedProfile = await storage.getItem('exSimulator_currentProfile'); // OR 'analysis_view_profile'
+                if (storedProfile) {
+                    profileToLoad = JSON.parse(storedProfile);
+                }
+            }
 
-                // ✨ VALIDATE RELATIONSHIP TYPE BEFORE ANALYSIS
-                console.log('[AnalysisScreen] Validating relationship type...');
-                const validation = validateRelationshipType(parsedMessages, relationshipType || 'ex', exName);
-                console.log('[Analysis] Validation result:', validation);
+            if (profileToLoad) {
+                console.log('[AnalysisScreen] Loaded profile:', profileToLoad.exName);
 
-                if (!validation.isValid && validation.detectedType !== 'unknown') {
-                    console.log('[AnalysisScreen] Validation warning shown');
-                    // Show custom warning UI instead of Alert (safer for Web)
+                // DATA MIGRATION / NORMALIZATION
+                // Ensure we have a consistent structure between 'profile' and result
+                setProfile(profileToLoad);
+
+                // Check validation warnings (e.g. weak analysis)
+                if (profileToLoad.profile?.validationWarning) {
                     setValidationWarning({
-                        validation,
-                        onConfirm: async () => {
-                            setValidationWarning(null); // Clear warning
-                            // Start the analysis
-                            console.log('[AnalysisScreen] Warning confirmed. Starting analysis...');
-                            await BackgroundAnalysisManager.startAnalysis(
-                                profileId,
-                                parsedMessages,
-                                exName,
-                                relationshipType || 'ex'
-                            );
-                            // Cleanup after successful start
-                            await storage.removeItem('exSimulator_analyzeData');
-                        },
-                        onCancel: async () => {
-                            console.log('[AnalysisScreen] Warning cancelled');
-                            setIsAnalyzing(false);
-                            setLoading(false);
+                        validation: profileToLoad.profile.validationWarning,
+                        onConfirm: () => setValidationWarning(null),
+                        onCancel: () => {
                             setValidationWarning(null);
-                            // Cleanup on cancel to prevent loop
-                            await storage.removeItem('exSimulator_analyzeData');
                             router.back();
                         }
                     });
-                } else {
-                    // Validation passed or unknown - start analysis
-                    console.log('[AnalysisScreen] Validation passed. Starting analysis...');
-                    await BackgroundAnalysisManager.startAnalysis(
-                        profileId,
-                        parsedMessages,
-                        exName,
-                        relationshipType || 'ex'
-                    );
-                    // Cleanup after successful start
-                    await storage.removeItem('exSimulator_analyzeData');
                 }
-
-                return;
-            }
-
-            // No new analysis - try to load existing profile
-
-
-            console.log('[AnalysisScreen] No new analysis data found. Checking stored profile...');
-            let stored = await storage.getItem('analysis_view_profile');
-            if (stored) {
-                console.log('[AnalysisScreen] Loaded analysis_view_profile');
-                const parsed = JSON.parse(stored);
-                // Flatten: merge inner profile properties to top level
-                setProfile(parsed.profile ? { ...parsed, ...parsed.profile } : parsed);
             } else {
-                stored = await storage.getItem('exSimulator_currentProfile');
-                if (stored) {
-                    console.log('[AnalysisScreen] Loaded exSimulator_currentProfile');
-                    const parsed = JSON.parse(stored);
-                    setProfile(parsed.profile ? { ...parsed, ...parsed.profile } : parsed);
-                } else {
-                    console.log('[AnalysisScreen] No profile found anywhere.');
-                }
+                console.log('[AnalysisScreen] No profile found.');
+                // Don't auto-redirect back, just show empty state
             }
-        } catch (error: any) {
-            console.error('[AnalysisScreen] CRITICAL ERROR in checkForAnalysisOrProfile:', error);
-            // Show error to user so they know why it failed (instead of just "No Profile")
-            showAlert(
-                'Error de Inicio',
-                `No se pudo iniciar el análisis.\n\nDetalle: ${error.message || 'Error desconocido'}`,
-                [{ text: 'OK', onPress: () => router.back() }],
-                'error'
-            );
+        } catch (e) {
+            console.error(e);
         } finally {
-            console.log('[AnalysisScreen] finally block reached. Setting loading=false');
             setLoading(false);
         }
     };
 
     if (loading) {
         return (
-            <View style={styles.container}>
-                <StatusBar style="light" />
+            <View style={[styles.container, !isDark && { backgroundColor: '#ffffff' }]}>
+                <StatusBar style={isDark ? "light" : "dark"} />
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#a855f7" />
+                    <Text style={{
+                        marginTop: 20,
+                        color: isDark ? '#aaa' : '#555',
+                        fontStyle: 'italic'
+                    }}>Verificando estado...</Text>
                 </View>
             </View>
         );
@@ -368,8 +287,8 @@ export default function AnalysisScreen() {
     // === VALIDATION WARNING (Anti-Crash for Web) ===
     if (validationWarning) {
         return (
-            <View style={styles.container}>
-                <StatusBar style="light" />
+            <View style={[styles.container, !isDark && { backgroundColor: '#ffffff' }]}>
+                <StatusBar style={isDark ? "light" : "dark"} />
                 <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
                     <View style={{
                         width: 80, height: 80, borderRadius: 40,
@@ -379,15 +298,18 @@ export default function AnalysisScreen() {
                         <AlertTriangle size={40} color="#ef4444" />
                     </View>
 
-                    <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' }}>
+                    <Text style={{ color: isDark ? '#fff' : '#111', fontSize: 24, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' }}>
                         ⚠️ Tipo de Relación Dudoso
                     </Text>
 
-                    <View style={{ backgroundColor: '#1a1a1a', padding: 16, borderRadius: 12, width: '100%', marginBottom: 32 }}>
-                        <Text style={{ color: '#d1d5db', fontSize: 16, lineHeight: 24, textAlign: 'center' }}>
+                    <View style={{
+                        backgroundColor: isDark ? '#1a1a1a' : '#f3f4f6',
+                        padding: 16, borderRadius: 12, width: '100%', marginBottom: 32
+                    }}>
+                        <Text style={{ color: isDark ? '#d1d5db' : '#374151', fontSize: 16, lineHeight: 24, textAlign: 'center' }}>
                             {formatValidationMessage(validationWarning.validation)}
                         </Text>
-                        <Text style={{ color: '#9ca3af', fontSize: 14, marginTop: 16, textAlign: 'center' }}>
+                        <Text style={{ color: isDark ? '#9ca3af' : '#6b7280', fontSize: 14, marginTop: 16, textAlign: 'center' }}>
                             ¿Quieres continuar de todos modos?
                         </Text>
                     </View>
@@ -415,10 +337,10 @@ export default function AnalysisScreen() {
                                 borderRadius: 12,
                                 alignItems: 'center',
                                 borderWidth: 1,
-                                borderColor: '#374151'
+                                borderColor: isDark ? '#374151' : '#d1d5db'
                             }}
                         >
-                            <Text style={{ color: '#9ca3af', fontSize: 16 }}>
+                            <Text style={{ color: isDark ? '#9ca3af' : '#6b7280', fontSize: 16 }}>
                                 Cancelar y Corregir
                             </Text>
                         </TouchableOpacity>
@@ -432,112 +354,26 @@ export default function AnalysisScreen() {
     if (isAnalyzing) {
         // Fallback for initialization race condition
         const progress = analysisState?.progress || 0;
-        const currentPhase = analysisState?.currentPhase || 'init';
-
         // Use logs if available, or default message
         const statusMessage = analysisState?.logs?.slice(-1)[0] || 'Iniciando motor de IA...';
 
-        // Animate progress smoothly
-        Animated.timing(animatedProgress, {
-            toValue: progress,
-            duration: 500,
-            useNativeDriver: false,
-        }).start();
-
-        const phases = [
-            { id: 'init', label: 'Iniciando análisis...', done: progress > 5 },
-            { id: 'psych', label: 'Analizando psicología...', done: progress > 30 },
-            { id: 'prompt', label: 'Generando sistema maestro...', done: progress > 75 },
-            { id: 'saving', label: 'Guardando perfil...', done: progress > 90 },
-        ];
-
-
-        return (
-            <View style={styles.container}>
-                <StatusBar style="light" />
-                <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-                    {/* Brain Icon */}
-                    <View style={{
-                        width: 100, height: 100, borderRadius: 50,
-                        backgroundColor: 'rgba(168, 85, 247, 0.2)',
-                        alignItems: 'center', justifyContent: 'center', marginBottom: 24
-                    }}>
-                        <Brain size={48} color="#a855f7" />
-                    </View>
-
-                    {/* Title */}
-                    <Text style={{ color: '#fff', fontSize: 28, fontWeight: 'bold', marginBottom: 8 }}>
-                        Analizando
-                    </Text>
-                    <Text style={{ color: '#9ca3af', fontSize: 14, marginBottom: 24 }}>
-                        Esto puede tomar hasta 5 minutos...
-                    </Text>
-
-                    {/* Progress Bar - Animated for smooth transitions */}
-                    <View style={{ width: '100%', marginBottom: 8 }}>
-                        <View style={{ height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' }}>
-                            <Animated.View style={{
-                                height: '100%',
-                                width: animatedProgress.interpolate({
-                                    inputRange: [0, 100],
-                                    outputRange: ['0%', '100%'],
-                                }),
-                                backgroundColor: '#22c55e',
-                                borderRadius: 4
-                            }} />
-                        </View>
-                    </View>
-                    <Text style={{ color: '#22c55e', fontSize: 16, fontWeight: '600', marginBottom: 32 }}>
-                        {Math.round(progress)}%
-                    </Text>
-
-                    {/* Phases Checklist */}
-                    <View style={{
-                        backgroundColor: 'rgba(255,255,255,0.05)',
-                        borderRadius: 16, padding: 16, width: '100%', marginBottom: 24
-                    }}>
-                        {phases.map((phase, i) => (
-                            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                                <View style={{
-                                    width: 24, height: 24, borderRadius: 12,
-                                    backgroundColor: phase.done ? '#22c55e' : 'rgba(255,255,255,0.1)',
-                                    alignItems: 'center', justifyContent: 'center', marginRight: 12
-                                }}>
-                                    {phase.done && <Text style={{ color: '#fff', fontSize: 12 }}>✓</Text>}
-                                </View>
-                                <Text style={{
-                                    color: phase.done ? '#fff' : '#6b7280',
-                                    fontSize: 14
-                                }}>
-                                    {phase.label}
-                                </Text>
-                            </View>
-                        ))}
-                    </View>
-
-                    {/* Engine Label */}
-                    <Text style={{ color: '#6b7280', fontSize: 12 }}>
-                        REMI AI ENGINE 2.0
-                    </Text>
-                </SafeAreaView>
-            </View>
-        );
+        return <AnalysisLoadingPremium progress={progress} currentStage={statusMessage} />;
     }
 
     if (!profile) {
         return (
-            <View style={styles.container}>
-                <StatusBar style="light" />
-                <SafeAreaView style={styles.header}>
+            <View style={[styles.container, !isDark && { backgroundColor: '#ffffff' }]}>
+                <StatusBar style={isDark ? "light" : "dark"} />
+                <SafeAreaView style={[styles.header, !isDark && { borderBottomColor: '#e5e7eb', backgroundColor: '#fff' }]}>
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <ArrowLeft size={24} color="#fff" />
+                        <ArrowLeft size={24} color={isDark ? "#fff" : "#000"} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Análisis</Text>
+                    <Text style={[styles.headerTitle, !isDark && { color: '#000' }]}>Análisis</Text>
                     <View style={styles.headerSpacer} />
                 </SafeAreaView>
                 <View style={styles.emptyContainer}>
                     <Brain size={64} color="#6b7280" />
-                    <Text style={styles.emptyText}>No hay perfil para analizar</Text>
+                    <Text style={[styles.emptyText, !isDark && { color: '#374151' }]}>No hay perfil para analizar</Text>
 
 
 
@@ -717,16 +553,16 @@ export default function AnalysisScreen() {
     );
 
     return (
-        <View style={styles.container}>
-            <StatusBar style="light" />
+        <View style={[styles.container, !isDark && { backgroundColor: '#ffffff' }]}>
+            <StatusBar style={isDark ? "light" : "dark"} />
 
             {/* Header */}
-            <SafeAreaView edges={['top']} style={styles.headerSafe}>
-                <View style={styles.header}>
+            <SafeAreaView edges={['top']} style={[styles.headerSafe, !isDark && { backgroundColor: '#fff' }]}>
+                <View style={[styles.header, !isDark && { borderBottomColor: '#e5e7eb' }]}>
                     <TouchableOpacity onPress={() => router.push('/')} style={styles.backButton}>
-                        <ArrowLeft size={24} color="#fff" />
+                        <ArrowLeft size={24} color={isDark ? "#fff" : "#000"} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Análisis de {name}</Text>
+                    <Text style={[styles.headerTitle, !isDark && { color: '#000' }]}>Análisis de {name}</Text>
                     <View style={styles.headerSpacer} />
                 </View>
             </SafeAreaView>
@@ -762,27 +598,27 @@ export default function AnalysisScreen() {
                 {/* === SIMPLE SUMMARY CARDS === */}
 
                 {/* Communication Style */}
-                <View style={styles.simpleCard}>
+                <View style={[styles.simpleCard, !isDark && { backgroundColor: '#f9fafb', borderColor: '#e5e7eb' }]}>
                     <View style={styles.simpleCardHeader}>
                         <MessageCircle size={18} color="#6366f1" />
                         <Text style={[styles.simpleCardTitle, { color: '#6366f1' }]}>
                             Estilo de Comunicación
                         </Text>
                     </View>
-                    <Text style={styles.simpleCardValue}>
+                    <Text style={[styles.simpleCardValue, !isDark && { color: '#1f2937' }]}>
                         {communicationStyle}
                     </Text>
                 </View>
 
                 {/* Emotional Patterns */}
-                <View style={styles.simpleCard}>
+                <View style={[styles.simpleCard, !isDark && { backgroundColor: '#f9fafb', borderColor: '#e5e7eb' }]}>
                     <View style={styles.simpleCardHeader}>
                         <Heart size={18} color="#ec4899" />
                         <Text style={[styles.simpleCardTitle, { color: '#ec4899' }]}>
                             Patrones Emocionales
                         </Text>
                     </View>
-                    <Text style={styles.simpleCardValue}>
+                    <Text style={[styles.simpleCardValue, !isDark && { color: '#1f2937' }]}>
                         {emotionalPattern}
                     </Text>
                 </View>
@@ -1414,9 +1250,16 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
+        // Web: Center alignment for the scroll view itself
+        ...(Platform.OS === 'web' ? {
+            alignSelf: 'center',
+            width: '100%',
+            maxWidth: 600,
+        } : {}),
     },
     contentContainer: {
         padding: 16,
+        paddingBottom: 40,
     },
     summaryCard: {
         borderRadius: 20,

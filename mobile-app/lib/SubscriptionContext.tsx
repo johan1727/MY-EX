@@ -46,6 +46,7 @@ const TIER_LIMITS = {
         mood_journal: false,
         export_data: false,
         ex_simulator: false,
+        voice_call: false, // NO ACCESS
     },
     explorer: {
         daily_messages: 500, // 150k tokens / 300
@@ -54,6 +55,7 @@ const TIER_LIMITS = {
         mood_journal: true,
         export_data: true,
         ex_simulator: true,
+        voice_call: false, // NO ACCESS (Warrior+)
     },
     warrior: {
         daily_messages: 1300, // 400k tokens / 300
@@ -62,6 +64,7 @@ const TIER_LIMITS = {
         mood_journal: true,
         export_data: true,
         ex_simulator: true,
+        voice_call: true, // ACCESS GRANTED
     },
     phoenix: {
         daily_messages: 6500, // 2M tokens / 300 (Virtualmente ilimitado)
@@ -70,6 +73,7 @@ const TIER_LIMITS = {
         mood_journal: true,
         export_data: true,
         ex_simulator: true,
+        voice_call: true, // ACCESS GRANTED
     },
 };
 
@@ -137,7 +141,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             console.log('[Subscription] Profile data from Supabase:', profile);
 
             if (profile && profile.subscription_tier) {
-                let newTier = profile.subscription_tier as SubscriptionTier;
+                // Ensure we handle case-insensitivity
+                let newTier = (profile.subscription_tier as string).toLowerCase() as SubscriptionTier;
 
                 // CHECK IF SUBSCRIPTION EXPIRED
                 const expiresAt = profile.subscription_expires_at || profile.subscription_current_period_end;
@@ -146,30 +151,15 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                     const now = new Date();
 
                     if (now > expireDate) {
-                        console.log('[Subscription] ⚠️ Subscription expired:', {
+                        console.log('[Subscription] ⚠️ Subscription expired locally:', {
                             tier: newTier,
                             expiresAt: expiresAt,
                             now: now.toISOString(),
                         });
 
-                        // Downgrade to free tier
-                        newTier = 'survivor';
-
-                        // Update in Supabase (fire and forget, don't block UI)
-                        (async () => {
-                            try {
-                                await supabase
-                                    .from('profiles')
-                                    .update({
-                                        subscription_tier: 'survivor',
-                                        subscription_status: 'expired',
-                                    })
-                                    .eq('id', userId);
-                                console.log('[Subscription] ✅ Auto-downgraded expired subscription');
-                            } catch (err) {
-                                console.error('[Subscription] Error auto-downgrading:', err);
-                            }
-                        })();
+                        // CRITICAL FIX: Do NOT auto-downgrade locally yet. 
+                        // Trust the DB value until backend updates it.
+                        // newTier = 'survivor'; 
                     } else {
                         console.log('[Subscription] ✅ Subscription active until:', expireDate.toISOString());
                     }
@@ -179,7 +169,6 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
                 // Force a re-render by setting the tier again after a short delay
                 setTimeout(() => {
-                    console.log('[Subscription] Confirming tier:', newTier);
                     setTier(newTier);
                 }, 100);
             } else {

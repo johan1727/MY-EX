@@ -7,6 +7,8 @@ import {
 } from 'react-native';
 import {
     Menu,
+    Moon,
+    Sun,
 } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { haptics } from '@/lib/haptics';
@@ -18,9 +20,11 @@ export type ChatTheme = 'default' | 'dark' | 'purple' | 'blue' | 'green';
 interface ChatHeaderProps {
     exName: string;
     messageCount?: number;
-    onMenuPress: () => void;
+    onMenuPress?: () => void;
     isPremium?: boolean;
     onUpgradePress?: () => void;
+    isDark?: boolean;
+    onToggleTheme?: () => void;
     // Legacy props kept for compatibility but unused
     currentTheme?: ChatTheme;
 }
@@ -91,25 +95,33 @@ export default function ChatHeader({
     exName = 'Ex',
     onMenuPress,
     isPremium = false,
-    onUpgradePress
+    onUpgradePress,
+    isDark = false,
+    onToggleTheme
 }: ChatHeaderProps) {
+    const themeColor = isDark ? '#ffffff' : '#111827';
+    const headerBg = isDark ? 'rgba(33, 33, 33, 0.85)' : 'rgba(255, 255, 255, 0.85)';
+    const headerBorder = isDark ? 'rgba(255,255,255,0.1)' : '#f3f4f6';
+
     return (
-        <BlurView intensity={80} tint="dark" style={styles.header}>
-            <TouchableOpacity
-                onPress={() => {
-                    haptics.impact(haptics.ImpactFeedbackStyle.Light);
-                    onMenuPress();
-                }}
-                style={styles.menuButton}
-            >
-                <Menu size={24} color="#ECECEC" />
-            </TouchableOpacity>
+        <BlurView intensity={90} tint={isDark ? 'dark' : 'light'} style={[styles.header, { backgroundColor: headerBg, borderBottomColor: headerBorder }]}>
+            {onMenuPress && (
+                <TouchableOpacity
+                    onPress={() => {
+                        haptics.impact(haptics.ImpactFeedbackStyle.Light);
+                        onMenuPress?.();
+                    }}
+                    style={styles.menuButton}
+                >
+                    <Menu size={24} color={themeColor} />
+                </TouchableOpacity>
+            )}
 
             <TouchableOpacity
                 style={styles.profileInfo}
                 onPress={() => {
                     haptics.impact(haptics.ImpactFeedbackStyle.Light);
-                    onMenuPress();
+                    onMenuPress?.();
                 }}
             >
                 <LinearGradient
@@ -121,7 +133,7 @@ export default function ChatHeader({
                     </Text>
                 </LinearGradient>
                 <View style={styles.nameContainer}>
-                    <Text style={styles.name}>{exName}</Text>
+                    <Text style={[styles.name, { color: themeColor }]}>{exName}</Text>
                     <Text style={styles.status}>
                         en línea
                     </Text>
@@ -129,6 +141,11 @@ export default function ChatHeader({
             </TouchableOpacity>
 
             <View style={styles.actions}>
+                {onToggleTheme && (
+                    <TouchableOpacity onPress={onToggleTheme} style={{ marginRight: 12, padding: 4 }}>
+                        {isDark ? <Sun size={24} color="#fff" /> : <Moon size={24} color="#111827" />}
+                    </TouchableOpacity>
+                )}
                 {/* Small Premium Button - Only shows if NOT premium */}
                 {!isPremium && (
                     <TouchableOpacity
@@ -163,9 +180,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 12,
         paddingVertical: 10,
-        backgroundColor: 'rgba(33, 33, 33, 0.6)', // Semi-transparent Matte Black
+        backgroundColor: 'rgba(255, 255, 255, 0.85)', // Semi-transparent White
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
+        borderBottomColor: '#f3f4f6',
         // position: 'absolute', // Uncomment to overlay content
         // top: 0,
         // left: 0,
@@ -209,7 +226,7 @@ const styles = StyleSheet.create({
     avatarText: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#ECECEC',
+        color: '#ffffff',
     },
     nameContainer: {
         marginLeft: 12,
@@ -217,11 +234,11 @@ const styles = StyleSheet.create({
     name: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#ECECEC',
+        color: '#111827',
     },
     status: {
         fontSize: 12,
-        color: '#9CA3AF',
+        color: '#6b7280',
         marginTop: 2,
     },
     actions: {

@@ -460,7 +460,7 @@ export async function saveImportantDates(
             description: date.description,
             emotional_charge: date.emotionalCharge,
             significance: date.significance,
-            detected_from_message: date.detectedFromMessage
+            detected_from_messages: date.detectedFromMessage ? [date.detectedFromMessage] : []
         }));
 
         const { error } = await supabase
@@ -498,7 +498,7 @@ export async function loadImportantDates(profileId: string): Promise<ImportantDa
             description: row.description,
             emotionalCharge: row.emotional_charge,
             significance: row.significance,
-            detectedFromMessage: row.detected_from_message
+            detectedFromMessage: row.detected_from_messages?.[0]
         }));
     } catch (error) {
         console.error('[DateExtractor] Error cargando fechas:', error);

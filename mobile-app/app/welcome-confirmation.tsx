@@ -4,54 +4,65 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Shield, AlertTriangle, ArrowRight } from 'lucide-react-native';
+import { useTheme } from '../lib/ThemeContext';
 
 export default function WelcomeConfirmationScreen() {
     const router = useRouter();
 
+    const { isDark } = useTheme();
+
     const handleContinue = () => {
-        router.replace('/(tabs)');
+        router.replace('/');
     };
 
+    const bgColor = isDark ? '#000000' : '#ffffff';
+    const textColor = isDark ? '#FFFFFF' : '#111827';
+    const subTextColor = isDark ? '#9CA3AF' : '#4b5563';
+    const cardBg = isDark ? '#1A1A1A' : '#f3f4f6';
+    const cardBorder = isDark ? '#333' : '#e5e7eb';
+    const cardTextColor = isDark ? '#d1d5db' : '#374151';
+    const cardBoldColor = isDark ? '#fff' : '#111';
+
     return (
-        <View style={styles.container}>
-            <StatusBar style="light" />
+        <View style={[styles.container, { backgroundColor: bgColor }]}>
+            <StatusBar style={isDark ? "light" : "dark"} />
             <SafeAreaView style={styles.safeArea}>
                 <View style={styles.content}>
                     {/* Header */}
-                    <Text style={styles.title}>Bienvenido a SOYREMI</Text>
-                    <Text style={styles.subtitle}>Tu espacio seguro de sanación y análisis.</Text>
+                    <Text style={[styles.title, { color: textColor }]}>Bienvenido a SOYREMI</Text>
+                    <Text style={[styles.subtitle, { color: subTextColor }]}>Tu espacio seguro de sanación y análisis.</Text>
 
                     {/* Warning Card */}
-                    <View style={styles.card}>
+                    <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
                         <View style={styles.cardHeader}>
                             <AlertTriangle size={24} color="#f59e0b" />
                             <Text style={styles.cardTitle}>Importante</Text>
                         </View>
-                        <Text style={styles.cardText}>
+                        <Text style={[styles.cardText, { color: cardTextColor }]}>
                             SOYREMI utiliza Inteligencia Artificial avanzada para analizar tus conversaciones.
                             Aunque es muy precisa, la IA puede cometer errores.
                         </Text>
-                        <Text style={styles.cardTextBold}>
+                        <Text style={[styles.cardTextBold, { color: cardBoldColor }]}>
                             Esta herramienta no sustituye la terapia profesional ni el consejo médico.
                         </Text>
                     </View>
 
                     {/* Privacy Card */}
-                    <View style={styles.card}>
+                    <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
                         <View style={styles.cardHeader}>
                             <Shield size={24} color="#10b981" />
                             <Text style={[styles.cardTitle, { color: '#10b981' }]}>Tu Privacidad</Text>
                         </View>
-                        <Text style={styles.cardText}>
+                        <Text style={[styles.cardText, { color: cardTextColor }]}>
                             Tus conversaciones son analizadas de forma anónima y segura.
-                            <Text style={{ fontWeight: '700', color: '#fff' }}> NO guardamos tus mensajes originales</Text>, solo el análisis resultante.
+                            <Text style={{ fontWeight: '700', color: cardBoldColor }}> NO guardamos tus mensajes originales</Text>, solo el análisis resultante.
                         </Text>
                     </View>
 
                     <View style={{ flex: 1 }} />
 
                     {/* Footer / Terms */}
-                    <Text style={styles.footerText}>
+                    <Text style={[styles.footerText, { color: subTextColor }]}>
                         Al continuar, aceptas nuestros{' '}
                         <Text style={styles.link} onPress={() => router.push('/terms')}>Términos de Servicio</Text>
                         {' '}y{' '}
@@ -59,9 +70,9 @@ export default function WelcomeConfirmationScreen() {
                     </Text>
 
                     {/* Continue Button */}
-                    <TouchableOpacity style={styles.button} onPress={handleContinue}>
-                        <Text style={styles.buttonText}>Aceptar y Continuar</Text>
-                        <ArrowRight size={20} color="#fff" />
+                    <TouchableOpacity style={[styles.button, isDark ? { backgroundColor: '#FFFFFF' } : { backgroundColor: '#111827' }]} onPress={handleContinue}>
+                        <Text style={[styles.buttonText, isDark ? { color: '#000000' } : { color: '#FFFFFF' }]}>Aceptar y Continuar</Text>
+                        <ArrowRight size={20} color={isDark ? "#000" : "#fff"} />
                     </TouchableOpacity>
                 </View>
             </SafeAreaView>
@@ -72,7 +83,6 @@ export default function WelcomeConfirmationScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#000000',
     },
     safeArea: {
         flex: 1,
@@ -84,22 +94,18 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 32,
         fontWeight: 'bold',
-        color: '#FFFFFF',
         marginTop: 20,
         marginBottom: 8,
     },
     subtitle: {
         fontSize: 18,
-        color: '#9CA3AF',
         marginBottom: 40,
     },
     card: {
-        backgroundColor: '#1A1A1A',
         borderRadius: 16,
         padding: 20,
         marginBottom: 20,
         borderWidth: 1,
-        borderColor: '#333',
     },
     cardHeader: {
         flexDirection: 'row',
@@ -113,19 +119,16 @@ const styles = StyleSheet.create({
         color: '#f59e0b',
     },
     cardText: {
-        color: '#d1d5db',
         fontSize: 15,
         lineHeight: 24,
         marginBottom: 8,
     },
     cardTextBold: {
-        color: '#fff',
         fontSize: 15,
         lineHeight: 24,
         fontWeight: '600',
     },
     footerText: {
-        color: '#6b7280',
         fontSize: 13,
         textAlign: 'center',
         marginBottom: 24,
@@ -137,7 +140,6 @@ const styles = StyleSheet.create({
         textDecorationLine: 'underline',
     },
     button: {
-        backgroundColor: '#FFFFFF',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -146,7 +148,6 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     buttonText: {
-        color: '#000000',
         fontSize: 18,
         fontWeight: '700',
     },

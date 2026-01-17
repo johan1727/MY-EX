@@ -5,24 +5,73 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, withSpring, withDelay, useDerivedValue, interpolate } from 'react-native-reanimated';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { BlurView } from 'expo-blur';
-import OrganicOrb from '../../../components/OrganicOrb';
 import { elevenLabsService } from '../../../lib/ElevenLabsService';
 import { callLimitService } from '../../../lib/CallLimitService';
 import { supabase } from '../../../lib/supabase';
+import OrganicOrb from '../../../components/OrganicOrb'; // Re-using the nice Orb
+import Animated, { FadeIn, useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
+import { BlurView } from 'expo-blur';
 
+// --- HELPER: Pulse Rings for Visual Depth ---
+const PulseRings = () => {
+    const scale = useSharedValue(1);
+    const opacity = useSharedValue(0.3);
 
-const { width, height } = Dimensions.get('window');
+    useEffect(() => {
+        scale.value = withRepeat(withTiming(1.8, { duration: 2500, easing: Easing.out(Easing.ease) }), -1, false);
+        opacity.value = withRepeat(withTiming(0, { duration: 2500, easing: Easing.out(Easing.ease) }), -1, false);
+    }, []);
+
+    const style = useAnimatedStyle(() => ({
+        transform: [{ scale: scale.value }],
+        opacity: opacity.value,
+    }));
+
+    return (
+        <View style={StyleSheet.absoluteFill}>
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Animated.View
+                    style={[
+                        { width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(16, 185, 129, 0.15)' },
+                        style
+                    ]}
+                />
+            </View>
+        </View>
+    );
+};
+
+// --- HELPER: Typewriter Component with Smooth Fade ---
+const TypewriterText = ({ text, style, speed = 30 }: { text: string, style: any, speed?: number }) => {
+    const [displayed, setDisplayed] = useState('');
+
+    useEffect(() => {
+        setDisplayed('');
+        let i = 0;
+        const timer = setInterval(() => {
+            if (i < text.length) {
+                setDisplayed(prev => prev + text.charAt(i));
+                i++;
+            } else {
+                clearInterval(timer);
+            }
+        }, speed);
+        return () => clearInterval(timer);
+    }, [text]);
+
+    return (
+        <Animated.Text entering={FadeIn.duration(400)} style={style}>
+            {displayed}
+            {/* Blinking Cursor - Classic Console Style but slimmer */}
+            <Text style={{ opacity: 0.5, color: '#34d399', fontWeight: '200' }}>|</Text>
+        </Animated.Text>
+    );
+};
 
 // --- CONFIG ---
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY || '');
-const VAD_THRESHOLD = -45; // dB
-const SILENCE_DURATION = 1500; // ms to trigger end of speech
-
-
 
 export default function ActiveCallScreen() {
     const router = useRouter();
@@ -30,374 +79,341 @@ export default function ActiveCallScreen() {
 
     // States
     const [callState, setCallState] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
-    const [statusText, setStatusText] = useState('Conectando...');
+    const [statusText, setStatusText] = useState('Mantén presionado para hablar');
+    const [usagePercent, setUsagePercent] = useState(0);
     const [recording, setRecording] = useState<Audio.Recording | null>(null);
     const [sound, setSound] = useState<Audio.Sound | null>(null);
-    const [currentVolume, setCurrentVolume] = useState(-160);
+    const [currentVolume, setCurrentVolume] = useState(-160); // Metering dB
 
-    // VAD Refs
-    const lastSpeechTime = useRef<number>(Date.now());
-    const isSpeaking = useRef(false);
-    const silenceTimer = useRef<NodeJS.Timeout | null>(null);
-
-    // Context/Memory
+    // Context/Memory (Last 2 exchanges for context)
     const conversationHistory = useRef<string[]>([]);
     const [systemPrompt, setSystemPrompt] = useState('');
 
-    // State for user ID
-    const [userId, setUserId] = useState<string | null>(null);
-
-    const loadChatHistory = async () => {
-        try {
-            if (!profileId) return;
-            const { data, error } = await supabase
-                .from('chat_messages')
-                .select('is_user, content')
-                .eq('profile_id', profileId)
-                .order('created_at', { ascending: false })
-                .limit(10);
-
-            if (data) {
-                const history = data.reverse().map(msg =>
-                    `${msg.is_user ? 'User' : 'Ex'}: ${msg.content}`
-                );
-                conversationHistory.current = history;
-                console.log('[Call] Loaded history context:', history.length, 'messages');
-            }
-        } catch (e) {
-            console.error('[Call] Error loading history:', e);
-        }
-    };
+    // Usage Tracking State
+    const sessionSeconds = useRef(0);
+    const lastLoggedSeconds = useRef(0);
+    const usageTimer = useRef<NodeJS.Timeout | null>(null);
 
     // Lifecycle
     useEffect(() => {
         const setup = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) setUserId(user.id);
-
             await Audio.requestPermissionsAsync();
             await Audio.setAudioModeAsync({
                 allowsRecordingIOS: true,
                 playsInSilentModeIOS: true,
-                shouldDuckAndroid: true,
-                playThroughEarpieceAndroid: false,
             });
             await loadProfileData();
-            await loadChatHistory(); // Load context
-
-            // Auto-start listening after setup only on native
-            if (Platform.OS !== 'web') {
-                setTimeout(() => startRecording(), 500);
-            }
+            await checkLimits(); // Initial check
         };
         setup();
 
+        // Start Usage Timer (Every 10 seconds check validity, Every minute log)
+        usageTimer.current = setInterval(() => {
+            sessionSeconds.current += 10;
+            checkTimeAndLog();
+        }, 10000); // 10s interval
+
         return () => {
-            cleanup();
+            if (sound) sound.unloadAsync();
+            if (usageTimer.current) clearInterval(usageTimer.current);
+
+            // Log remaining unlogged time on exit (Best Effort)
+            const pending = sessionSeconds.current - lastLoggedSeconds.current;
+            if (pending > 0 && profileId) {
+                const effectiveProfileId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileId) ? profileId : '00000000-0000-0000-0000-000000000000';
+                supabase.auth.getUser().then(({ data: { user } }) => {
+                    if (user) callLimitService.logUsage(user.id, effectiveProfileId, pending);
+                });
+            }
         };
     }, []);
 
-    const cleanup = async () => {
-        if (recording) await recording.stopAndUnloadAsync();
-        if (sound) await sound.unloadAsync();
-        if (silenceTimer.current) clearTimeout(silenceTimer.current);
+    const checkTimeAndLog = async () => {
+        const pending = sessionSeconds.current - lastLoggedSeconds.current;
+
+        // Log every 30 seconds to be safe
+        if (pending >= 30) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const effectiveProfileId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileId) ? profileId : '00000000-0000-0000-0000-000000000000';
+                await callLimitService.logUsage(user.id, effectiveProfileId, pending);
+                lastLoggedSeconds.current = sessionSeconds.current;
+
+                // Refresh Status
+                const status = await callLimitService.checkUsageStatus(user.id);
+                setUsagePercent(status.usagePercent);
+                if (!status.canCall) {
+                    Alert.alert('Tiempo Agotado', 'Has alcanzado tu límite mensual.', [
+                        { text: 'OK', onPress: () => disconnect() }
+                    ]);
+                    disconnect();
+                } else if (status.minutesRemaining <= 2) {
+                    setStatusText(`⚠️ Quedan ${status.minutesRemaining.toFixed(1)} min`);
+                }
+            }
+        }
     };
 
     // Load Profile Data
     const loadProfileData = async () => {
         try {
-            // ... existing loadProfileData logic (simplified for brevity) ...
-            // CORRECTION: Select from ex_profiles
-            const { data: profileData } = await supabase
-                .from('ex_profiles')
-                .select('*')
-                .eq('id', profileId)
-                .single();
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileId);
+            let data = null;
 
-            // Construct Prompt
-            let instructions = "Actúa como mi Ex.";
-            if (profileData) {
-                // Note: ex_profiles uses 'ex_name', not 'name' in some schemas, but let's check profile_data jsonb too
-                const exName = profileData.ex_name || name;
-                instructions = `Tu nombre es ${exName}. ${profileData.profile_data?.master_prompt || 'Personalidad: Sarcástica.'}`;
+            if (isUUID) {
+                const { data: profileData } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', profileId)
+                    .single();
+                data = profileData;
             }
+
+            if (!data) {
+                setSystemPrompt(`Actúa como mi Ex pareja. Tu nombre es ${name || 'Ex'}.`);
+                return;
+            }
+
+            const relType = data.relationship_type || 'ex';
+            const baseMap: Record<string, string> = {
+                'ex': 'Actúa como mi Ex pareja.',
+                'partner': 'Actúa como mi Pareja actual.',
+                'crush': 'Actúa como mi Crush (interés romántico).',
+                'friend': 'Actúa como mi mejor amigo/a.',
+                'family': 'Actúa como un familiar cercano.',
+                'fallecido': 'Actúa como una persona fallecida muy querida.'
+            };
+
+            const coreInstruction = baseMap[relType] || baseMap['ex'];
+            const personality = data.master_prompt
+                ? `PERSONALIDAD: ${data.master_prompt.substring(0, 500)}...`
+                : 'Personalidad: Sarcástica y directa.';
 
             setSystemPrompt(`
-                 ${instructions}
-                 CONTEXTO: LLAMADA DE VOZ (Audio).
-                 INSTRUCCIONES:
-                 1. Respuestas MUY CORTAS (1-2 oraciones). Conversacional.
-                 2. Siente la emoción del usuario.
-             `);
+                ${coreInstruction}
+                Tu nombre es ${data.name || name}.
+                ${personality}
+                
+                CONTEXTO: Conversación TELEFÓNICA REAL TIEMPO REAL.
+                
+                INSTRUCCIONES CRÍTICAS DE FORMATO:
+                1. SOLO TEXTO HABLADO. NUNCA escribas acciones entre paréntesis ni corchetes.
+                   - MAL: "(suspiro) Hola..." o "[tono molesto] ¿Qué quieres?" o "*Cuelga*"
+                   - BIEN: "¿Qué quieres?"
+                2. RESPUESTAS CORTAS (1-2 frases máximo). Es un chat de voz fluido.
+                3. Tono: ${data.master_prompt ? 'Usa la personalidad definida.' : 'Sarcástica y directa.'}
+                
+                IMPORTANTE: Si el usuario no dice nada o hay ruido, di "¿Hola?" o "¿Sigues ahí?". NO inventes una conversación.
+            `);
+
         } catch (e) {
-            console.log('Error loading profile', e);
+            console.error('Error constructing prompt', e);
         }
     };
 
-    // --- VAD LOGIC ---
-    const onAudioStatusUpdate = (status: Audio.RecordingStatus) => {
-        if (!status.isRecording) return;
+    const checkLimits = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        let userId = session?.user?.id;
+        if (!userId && __DEV__) userId = 'mock_user_id_dev';
+        if (!userId) return;
+        if (userId === 'mock_user_id_dev') return;
 
-        // WEB FALLBACK: Metering is often unavailable on Web
-        if (Platform.OS === 'web' || !status.metering) {
-            // Only log once every 50 updates to avoid spam
-            if (Math.random() < 0.02) console.log('[Call] VAD: Metering unavailable (Web mode)');
-            return;
-        }
+        const status = await callLimitService.checkUsageStatus(userId);
+        setUsagePercent(status.usagePercent);
 
-        const volume = status.metering;
-        setCurrentVolume(volume);
-
-        if (volume > VAD_THRESHOLD) {
-            // User is speaking
-            isSpeaking.current = true;
-            lastSpeechTime.current = Date.now();
-
-            if (silenceTimer.current) {
-                clearTimeout(silenceTimer.current);
-                silenceTimer.current = null;
-            }
-        } else if (isSpeaking.current) {
-            // Silence detected after speech
-            const timeSinceSpeech = Date.now() - lastSpeechTime.current;
-
-            if (!silenceTimer.current) {
-                silenceTimer.current = setTimeout(() => {
-                    console.log('VAD: Silence detected (1.5s), auto-stopping...');
-                    stopRecording();
-                    isSpeaking.current = false;
-                }, SILENCE_DURATION);
+        if (!status.canCall) {
+            if (Platform.OS !== 'web') {
+                Alert.alert('Límite Alcanzado', 'Tu plan no tiene minutos disponibles o se han agotado.', [
+                    { text: 'Entendido', onPress: () => disconnect() }
+                ]);
+            } else {
+                // For web, use Alert.alert which will show a better modal
+                Alert.alert(
+                    'Límite Alcanzado',
+                    'Tu plan no tiene minutos disponibles o se han agotado. Por favor actualiza tu plan.',
+                    [{ text: 'Entendido', onPress: () => disconnect() }]
+                );
             }
         }
     };
 
-    // 2. Start Recording
     const startRecording = async () => {
         try {
-            console.log('[Call] Starting recording...');
-            if (recording) {
-                await recording.stopAndUnloadAsync();
-                setRecording(null);
-            }
-            if (sound) {
-                await sound.unloadAsync();
-                setSound(null);
-            }
-
             await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-
-            const { recording: newRecording } = await Audio.Recording.createAsync(
+            const { recording } = await Audio.Recording.createAsync(
                 Audio.RecordingOptionsPresets.HIGH_QUALITY,
-                onAudioStatusUpdate,
+                (status) => {
+                    if (status.metering) setCurrentVolume(status.metering);
+                },
                 100
             );
-
-            setRecording(newRecording);
+            setRecording(recording);
             setCallState('listening');
-            setStatusText(Platform.OS === 'web' ? 'Presiona el mic para enviar' : 'Escuchando...');
-            isSpeaking.current = false;
-            console.log('[Call] Recording started');
+            setStatusText('Escuchando...');
         } catch (err) {
-            console.error('[Call] Failed to start recording', err);
-            Alert.alert('Error Micrófono', 'No pudimos acceder al micrófono.');
+            console.error('Failed to start recording', err);
         }
     };
 
-    // 3. Stop & Process
     const stopRecording = async () => {
         if (!recording) return;
-
         setCallState('thinking');
         setStatusText('Pensando...');
 
-        try {
-            await recording.stopAndUnloadAsync();
-            const uri = recording.getURI();
-            setRecording(null);
-            console.log('[Call] Recording stopped, URI:', uri);
+        await recording.stopAndUnloadAsync();
+        const uri = recording.getURI();
+        setRecording(null);
 
-            if (uri) await processAudioResponse(uri);
-        } catch (e) {
-            console.error('[Call] Error stopping', e);
-            startRecording();
+        if (uri) {
+            await processAudioResponse(uri);
         }
     };
 
-    // Manual Toggle for Web/Override
-    const handleMicPress = () => {
-        if (callState === 'listening') {
-            // If we are listening, STOP and SEND (Manual trigger)
-            console.log('[Call] Manual Stop Triggered');
-            stopRecording();
-        } else if (callState === 'idle') {
-            // If idle, START
-            startRecording();
-        }
-    };
-
-    // 4. Process Audio
     const processAudioResponse = async (audioUri: string) => {
         try {
-            console.log('[Call] Processing Audio...');
             let base64Audio = '';
-            let mimeType = 'audio/m4a';
-
             if (Platform.OS === 'web') {
                 const res = await fetch(audioUri);
                 const blob = await res.blob();
-                console.log('[Call] Web Blob size:', blob.size, 'Type:', blob.type);
-                mimeType = blob.type || 'audio/webm';
-                base64Audio = await new Promise((resolve) => {
+                base64Audio = await new Promise((resolve, reject) => {
                     const reader = new FileReader();
-                    reader.onloadend = () => {
-                        const base64 = (reader.result as string).split(',')[1];
-                        resolve(base64);
-                    };
+                    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+                    reader.onerror = reject;
                     reader.readAsDataURL(blob);
-                }) as string;
+                });
             } else {
                 base64Audio = await FileSystem.readAsStringAsync(audioUri, { encoding: FileSystem.EncodingType.Base64 });
             }
 
-            console.log('[Call] Sending to Gemini with history...');
+            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+            const finalPrompt = `
+                ${systemPrompt || 'Actúa como mi Ex.'}
+                HISTORIAL RECIENTE: ${conversationHistory.current.join(' | ')}
+                
+                Instrucción: El usuario te acaba de enviar un audio. Responde de forma hablada y natural.
+            `;
 
-            // Build History Text for Context
-            const historyText = conversationHistory.current.join('\n');
-            const promptConfig = [
-                { text: `PREVIOUS CONTEXT (History of chat):\n${historyText}\n\nUSER'S NEW AUDIO INPUT (Repond to this):` },
-                { inlineData: { data: base64Audio, mimeType } }
-            ];
+            const result = await model.generateContent([
+                finalPrompt,
+                { inlineData: { data: base64Audio, mimeType: 'audio/m4a' } }
+            ]);
 
-            const model = genAI.getGenerativeModel({
-                model: "gemini-2.0-flash-exp",
-                systemInstruction: systemPrompt
-            });
+            const cleanReply = result.response.text()
+                .replace(/[\(\[\{].*?[\)\]\}]/g, '') // Remove (text), [text], {text}
+                .replace(/\*.*?\*/g, '')             // Remove *text*
+                .trim();
 
-            const result = await model.generateContent(promptConfig as any);
-            const replyText = result.response.text();
-            console.log('Gemini Reply:', replyText);
+            conversationHistory.current.push(`Ex: ${cleanReply}`);
+            if (conversationHistory.current.length > 4) conversationHistory.current.shift();
 
-            // 1. Update Local History
-            conversationHistory.current.push(`User: (Audio Message)`);
-            conversationHistory.current.push(`Ex: ${replyText}`);
-            if (conversationHistory.current.length > 20) conversationHistory.current = conversationHistory.current.slice(-20);
-
-            // 2. Save to Supabase (Persistence)
-            if (userId && profileId) {
-                // Insert User Audio Placeholder
-                await supabase.from('chat_messages').insert({
-                    profile_id: profileId,
-                    is_user: true,
-                    content: '🎤 Mensaje de voz enviado',
-                });
-
-                // Insert Ex Response
-                await supabase.from('chat_messages').insert({
-                    profile_id: profileId,
-                    is_user: false,
-                    content: replyText,
-                });
-            }
-
-            setStatusText('Sintetizando voz...');
-            const audioPath = await elevenLabsService.streamTextToSpeech(replyText, voiceId);
-            await playResponse(audioPath, replyText);
+            // Start TTS with CLEAN text
+            const audioPath = await elevenLabsService.streamTextToSpeech(cleanReply, voiceId);
+            await playResponse(audioPath, cleanReply);
 
         } catch (error: any) {
-            console.error('[Call] Processing error', error);
-            setStatusText('Error: ' + error.message);
-            // Retry logic removed to prevent loops
+            console.error('Process Error:', error);
+            setStatusText('Error de conexión');
+            setCallState('idle');
         }
     };
 
-    // 5. Play Response
     const playResponse = async (uri: string, text: string) => {
         try {
-            console.log('[Call] Playing response:', uri);
             setCallState('speaking');
-            setStatusText(text);
+            setStatusText(text); // Pass full text, UI will type it out
 
             await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
-
-            // Web Logic: HTML5 Audio might be needed if Expo Sound fails on Blob URLs sometimes, but usually it works.
-            const { sound: playbackSound } = await Audio.Sound.createAsync({ uri });
+            const { sound: playbackSound, status } = await Audio.Sound.createAsync({ uri });
             setSound(playbackSound);
 
+            // @ts-ignore
+            const durationSec = status.durationMillis ? (status.durationMillis / 1000) : 0;
             await playbackSound.playAsync();
 
-            playbackSound.setOnPlaybackStatusUpdate((status) => {
+            playbackSound.setOnPlaybackStatusUpdate(async (status) => {
                 if (status.isLoaded && status.didJustFinish) {
-                    console.log('[Call] Playback finished');
                     setCallState('idle');
-                    // Auto-resume listening only on Mobile/Native (where VAD works)
-                    if (Platform.OS !== 'web') {
-                        setTimeout(() => startRecording(), 500);
-                    } else {
-                        setStatusText('Presiona para responder');
-                    }
+                    setStatusText('Tu turno...');
                 }
             });
 
         } catch (error) {
-            console.error('[Call] Playback error', error);
-            startRecording();
+            console.error('Playback Error', error);
+            setCallState('idle');
+        }
+    };
+
+    const disconnect = () => {
+        if (sound) sound.unloadAsync();
+        if (router.canGoBack()) {
+            router.back();
+        } else {
+            if (Platform.OS === 'web') window.history.back();
+            else router.replace('/');
         }
     };
 
     return (
         <View style={styles.container}>
             <LinearGradient
-                colors={['#000000', '#111827']}
+                colors={['#09090b', '#18181b', '#000000']}
+                locations={[0, 0.4, 0.9]}
                 style={StyleSheet.absoluteFill}
             />
 
+            {/* Header */}
             <View style={styles.header}>
-                <View style={[styles.liveTag, Platform.OS === 'web' && { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
-                    <View style={[styles.dot, Platform.OS === 'web' && { backgroundColor: '#fcd34d' }]} />
-                    <Text style={styles.liveText}>{Platform.OS === 'web' ? 'WEB MODE' : 'Live'}</Text>
+                <BlurView intensity={20} tint="dark" style={styles.liveTagContainer}>
+                    <View style={[styles.dot, Platform.OS === 'web' && { backgroundColor: '#10b981' }]} />
+                    <Text style={styles.liveText}>REMI LIVE</Text>
+                </BlurView>
+            </View>
+
+            {/* Main Visualizer */}
+            <View style={styles.centerContent}>
+                {callState === 'speaking' && <PulseRings />}
+                <OrganicOrb state={callState} volume={currentVolume} />
+
+                {/* Floating Glass Card for Text */}
+                <View style={styles.textCard}>
+                    {callState === 'speaking' ? (
+                        <TypewriterText
+                            text={statusText}
+                            style={styles.mainStatus}
+                            speed={35}
+                        />
+                    ) : (
+                        <Text style={[styles.mainStatus, { opacity: 0.6, fontSize: 16 }]}>
+                            {statusText === 'Thinking...' ? 'Pensando...' : statusText}
+                        </Text>
+                    )}
                 </View>
             </View>
 
-            <View style={styles.centerContent}>
-                <OrganicOrb state={callState} volume={currentVolume} />
-                <Text style={[styles.mainStatus, { marginTop: 40 }]}>
-                    {statusText}
-                </Text>
-                {Platform.OS === 'web' && callState === 'listening' && (
-                    <Text style={{ color: '#6b7280', marginTop: 10, fontSize: 12 }}>
-                        (Presiona para enviar)
-                    </Text>
-                )}
-            </View>
-
-            {/* Subtle Gradient Footer instead of "Box" */}
-            <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.8)']}
-                style={StyleSheet.absoluteFill}
-                pointerEvents="none"
-            />
-
+            {/* Footer */}
             <View style={styles.bottomBar}>
-                {/* Spacer to balance Hangup button */}
-                <View style={{ width: 56 }} />
+                <View style={{ width: 60 }} />
 
-                {/* MIC BUTTON - CENTERED */}
+                {/* Talk Button (Hold) */}
                 <TouchableOpacity
                     style={[
-                        styles.iconButton,
-                        { width: 80, height: 80, borderRadius: 40, backgroundColor: callState === 'listening' ? 'white' : 'rgba(255,255,255,0.1)' }
+                        styles.talkButton,
+                        callState === 'listening' ? styles.talkButtonActive : null
                     ]}
-                    onPress={handleMicPress}
+                    onPressIn={() => callState === 'idle' && startRecording()}
+                    onPressOut={() => callState === 'listening' && stopRecording()}
+                    disabled={callState === 'thinking' || callState === 'speaking'}
+                    activeOpacity={0.8}
                 >
                     <Ionicons
-                        name={callState === 'listening' ? "arrow-up" : "mic"}
-                        size={36}
-                        color={callState === 'listening' ? "black" : "white"}
+                        name={callState === 'thinking' ? "ellipsis-horizontal" : "mic"}
+                        size={32}
+                        color="white"
                     />
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => { cleanup(); router.back(); }} style={styles.hangupButton}>
-                    <Ionicons name="call" size={32} color="white" style={{ transform: [{ rotate: '135deg' }] }} />
+                <TouchableOpacity onPress={disconnect} style={styles.hangupButton}>
+                    <Ionicons name="close" size={28} color="white" />
                 </TouchableOpacity>
             </View>
         </View>
@@ -412,31 +428,54 @@ const styles = StyleSheet.create({
         paddingTop: 60,
         zIndex: 10
     },
-    liveTag: {
+    liveTagContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        backgroundColor: 'rgba(255,255,255,0.08)',
-        borderRadius: 20
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 100,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)',
+        overflow: 'hidden'
     },
-    dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10b981', marginRight: 6 },
-    liveText: { color: 'white', fontSize: 13, fontWeight: '600' },
+    dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10b981', marginRight: 8 },
+    liveText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: '700',
+        letterSpacing: 2,
+        textTransform: 'uppercase'
+    },
 
     centerContent: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: 32,
+        paddingHorizontal: 20,
         zIndex: 5
+    },
+    textCard: {
+        marginTop: 50,
+        width: '90%',
+        paddingVertical: 20,
+        paddingHorizontal: 20,
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 100
     },
     mainStatus: {
         color: 'white',
-        fontSize: 24,
-        fontWeight: '500',
+        fontSize: 20,
+        fontWeight: '500', // Cleaner weight
         textAlign: 'center',
-        opacity: 0.9,
-        lineHeight: 34
+        lineHeight: 28,
+        //Clean Sans-Serif system font
+        fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
     },
 
     bottomBar: {
@@ -448,20 +487,29 @@ const styles = StyleSheet.create({
         paddingTop: 20,
         zIndex: 20
     },
-    iconButton: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+    talkButton: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: 'rgba(255,255,255,0.08)',
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)'
+    },
+    talkButtonActive: {
+        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+        borderColor: '#10b981',
+        transform: [{ scale: 1.05 }]
     },
     hangupButton: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: '#ef4444',
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+        borderWidth: 1,
+        borderColor: 'rgba(239, 68, 68, 0.3)',
         justifyContent: 'center',
-        alignItems: 'center',
+        alignItems: 'center'
     }
 });

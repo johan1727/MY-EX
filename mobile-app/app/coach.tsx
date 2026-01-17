@@ -17,7 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Send, Heart, Sparkles, Crown, Image as ImageIcon, X, HelpCircle, LogOut, Flag, MoreVertical } from 'lucide-react-native';
+import { ArrowLeft, Send, Heart, Sparkles, Crown, Image as ImageIcon, X, HelpCircle, LogOut, Flag, MoreVertical, Moon, Sun } from 'lucide-react-native';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { storage } from '../lib/storage';
 import { supabase } from '../lib/supabase';
@@ -61,6 +61,7 @@ export default function CoachScreen() {
     const [dailyMessageCount, setDailyMessageCount] = useState(0);
     const [showLimitWarning, setShowLimitWarning] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [isDark, setIsDark] = useState(false); // Default to Light theme
 
     // Custom Alert State
     interface AlertConfig {
@@ -246,8 +247,8 @@ RESPONDE:`;
     const remainingMessages = Math.max(0, FREE_COACH_MESSAGE_LIMIT - dailyMessageCount);
 
     return (
-        <View style={styles.container}>
-            <StatusBar style="light" />
+        <View style={[styles.container, isDark && { backgroundColor: '#000000' }]}>
+            <StatusBar style={isDark ? "light" : "dark"} />
 
             {/* Header */}
             <SafeAreaView edges={['top']} style={styles.headerSafe}>
@@ -264,14 +265,19 @@ RESPONDE:`;
                     >
                         <ArrowLeft size={22} color="#9ca3af" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Coach IA</Text>
-                    {isPremium ? (
-                        <View style={styles.headerSpacer} />
-                    ) : (
-                        <View style={styles.headerRight}>
-                            <UpgradeBanner variant="header" />
-                        </View>
-                    )}
+                    <Text style={[styles.headerTitle, isDark && { color: '#fff' }]}>Coach IA</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <TouchableOpacity onPress={() => setIsDark(!isDark)} style={{ padding: 4 }}>
+                            {isDark ? <Sun size={22} color="#fff" /> : <Moon size={22} color="#374151" />}
+                        </TouchableOpacity>
+                        {isPremium ? (
+                            <View style={styles.headerSpacer} />
+                        ) : (
+                            <View style={styles.headerRight}>
+                                <UpgradeBanner variant="header" />
+                            </View>
+                        )}
+                    </View>
                 </View>
             </SafeAreaView>
 
@@ -290,7 +296,7 @@ RESPONDE:`;
                             <View style={styles.emptyChatIcon}>
                                 <Heart size={28} color="#ec4899" />
                             </View>
-                            <Text style={styles.emptyChatTitle}>Coach de Bienestar</Text>
+                            <Text style={[styles.emptyChatTitle, isDark && { color: '#fff' }]}>Coach de Bienestar</Text>
                             <Text style={styles.emptyChatSubtitle}>
                                 Estoy aquí para escucharte y ayudarte a procesar tus emociones.
                             </Text>
@@ -303,10 +309,10 @@ RESPONDE:`;
                                 ].map((suggestion, i) => (
                                     <TouchableOpacity
                                         key={i}
-                                        style={styles.suggestion}
+                                        style={[styles.suggestion, isDark && { backgroundColor: '#1f2937', borderColor: '#374151' }]}
                                         onPress={() => setInputText(suggestion)}
                                     >
-                                        <Text style={styles.suggestionText}>{suggestion}</Text>
+                                        <Text style={[styles.suggestionText, isDark && { color: '#e5e7eb' }]}>{suggestion}</Text>
                                     </TouchableOpacity>
                                 ))}
                             </View>
@@ -329,7 +335,7 @@ RESPONDE:`;
                             <View style={{ flexDirection: 'row', alignItems: 'flex-end', maxWidth: '100%' }}>
                                 <View style={[
                                     styles.messageBubble,
-                                    msg.role === 'user' ? styles.userBubble : styles.assistantBubble,
+                                    msg.role === 'user' ? styles.userBubble : [styles.assistantBubble, isDark && { backgroundColor: '#1f2937', borderColor: '#374151' }],
                                     { maxWidth: msg.role === 'assistant' ? '78%' : '75%' }
                                 ]}>
                                     {/* Display image if present */}
@@ -343,7 +349,7 @@ RESPONDE:`;
                                     {msg.content && msg.content !== '(imagen enviada)' ? (
                                         <Text style={[
                                             styles.messageText,
-                                            msg.role === 'user' ? styles.userText : styles.assistantText,
+                                            msg.role === 'user' ? styles.userText : [styles.assistantText, !isDark && { color: '#111' }],
                                         ]}>
                                             {msg.content}
                                         </Text>
@@ -443,11 +449,11 @@ RESPONDE:`;
                             <ImageIcon size={22} color="#9ca3af" />
                         </TouchableOpacity>
                         <TextInput
-                            style={styles.input}
+                            style={[styles.input, isDark && { color: '#fff', backgroundColor: '#1f2937', borderColor: '#374151' }]}
                             value={inputText}
                             onChangeText={setInputText}
                             placeholder="¿Cómo te sientes hoy?"
-                            placeholderTextColor="#6b7280"
+                            placeholderTextColor={isDark ? "#9ca3af" : "#6b7280"}
                             multiline
                             maxLength={1000}
                             editable={isPremium || remainingMessages > 0}
@@ -529,12 +535,12 @@ RESPONDE:`;
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#000000',
+        backgroundColor: '#ffffff',
     },
     headerSafe: {
-        backgroundColor: '#000000',
+        backgroundColor: '#ffffff',
         borderBottomWidth: 1,
-        borderBottomColor: '#333',
+        borderBottomColor: '#f3f4f6',
     },
     header: {
         flexDirection: 'row',
@@ -546,12 +552,12 @@ const styles = StyleSheet.create({
     backButton: {
         padding: 8,
         borderRadius: 12,
-        backgroundColor: '#1A1A1A',
+        backgroundColor: '#f3f4f6',
     },
     headerTitle: {
         fontSize: 17,
         fontWeight: '600',
-        color: '#fff',
+        color: '#111827',
         letterSpacing: 0.5,
     },
     headerSpacer: {
@@ -589,7 +595,7 @@ const styles = StyleSheet.create({
     emptyChatTitle: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#fff',
+        color: '#111827',
         marginBottom: 8,
     },
     emptyChatSubtitle: {
@@ -606,15 +612,15 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
     },
     suggestion: {
-        backgroundColor: '#1A1A1A',
+        backgroundColor: '#f3f4f6',
         paddingVertical: 14,
         paddingHorizontal: 16,
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: '#e5e7eb',
     },
     suggestionText: {
-        color: '#d1d5db',
+        color: '#374151',
         fontSize: 14,
         textAlign: 'center',
         fontWeight: '500',
@@ -648,14 +654,14 @@ const styles = StyleSheet.create({
         borderRadius: 20,
     },
     userBubble: {
-        backgroundColor: '#2A2A2A',
+        backgroundColor: '#111827',
         borderBottomRightRadius: 4,
     },
     assistantBubble: {
-        backgroundColor: '#1A1A1A',
+        backgroundColor: '#f3f4f6',
         borderBottomLeftRadius: 4,
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: '#e5e7eb',
     },
     messageText: {
         fontSize: 16,
@@ -665,7 +671,7 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     assistantText: {
-        color: '#f3f4f6',
+        color: '#111827',
     },
     typingDots: {
         color: '#9ca3af',
@@ -706,9 +712,9 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     inputSafe: {
-        backgroundColor: '#000000',
+        backgroundColor: '#ffffff',
         borderTopWidth: 1,
-        borderTopColor: '#333',
+        borderTopColor: '#f3f4f6',
     },
     inputContainer: {
         flexDirection: 'row',
@@ -719,21 +725,21 @@ const styles = StyleSheet.create({
     },
     input: {
         flex: 1,
-        backgroundColor: '#2A2A2A',
+        backgroundColor: '#f3f4f6',
         borderRadius: 20,
         paddingHorizontal: 16,
         paddingVertical: 12,
         fontSize: 16,
-        color: '#fff',
+        color: '#111827',
         maxHeight: 100,
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: '#e5e7eb',
     },
     sendButton: {
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: '#fff',
+        backgroundColor: '#111827',
         alignItems: 'center',
         justifyContent: 'center',
         shadowColor: '#000',
@@ -772,7 +778,7 @@ const styles = StyleSheet.create({
     imageButton: {
         padding: 10,
         borderRadius: 20,
-        backgroundColor: '#1A1A1A',
+        backgroundColor: '#f3f4f6',
     },
     messageImage: {
         width: '100%',

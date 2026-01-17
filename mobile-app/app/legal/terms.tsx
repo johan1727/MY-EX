@@ -3,21 +3,31 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking } from 'r
 import { useRouter } from 'expo-router';
 import { ArrowLeft, FileText, AlertTriangle } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../../lib/ThemeContext';
 
 export default function TermsOfService() {
     const router = useRouter();
+    const { isDark } = useTheme();
+
+    const bgColor = isDark ? '#000' : '#f9fafb';
+    const textColor = isDark ? '#fff' : '#111';
+    const subTextColor = isDark ? '#9ca3af' : '#4b5563';
+    const cardBg = isDark ? '#1a1a1a' : '#ffffff';
+    const cardBorder = isDark ? '#333' : '#e5e7eb';
+    const headerBg = isDark ? '#000' : '#fff';
+    const headerBorder = isDark ? '#333' : '#e5e7eb';
 
     const openExternalTerms = () => {
         Linking.openURL('https://doc-hosting.flycricket.io/remi-terms-of-use/2c7da39a-0b5d-4b93-81dd-4be8290ef358/terms');
     };
 
     return (
-        <View style={styles.container}>
-            <SafeAreaView edges={['top']} style={styles.header}>
+        <View style={[styles.container, { backgroundColor: bgColor }]}>
+            <SafeAreaView edges={['top']} style={[styles.header, { backgroundColor: headerBg, borderBottomColor: headerBorder }]}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <ArrowLeft size={24} color="white" />
+                    <ArrowLeft size={24} color={isDark ? "white" : "#000"} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Términos de Servicio</Text>
+                <Text style={[styles.headerTitle, { color: textColor }]}>Términos de Servicio</Text>
             </SafeAreaView>
 
             <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
@@ -29,7 +39,7 @@ export default function TermsOfService() {
                 </View>
 
                 {/* Crisis Warning */}
-                <View style={styles.warningBox}>
+                <View style={[styles.warningBox, !isDark && { backgroundColor: '#fee2e2', borderColor: '#fecaca' }]}>
                     <AlertTriangle size={20} color="#ef4444" />
                     <Text style={styles.warningText}>
                         Si estás en crisis: Llama al 911 (MX) o 988 (US)
@@ -37,7 +47,7 @@ export default function TermsOfService() {
                 </View>
 
                 {/* Main Card */}
-                <View style={styles.card}>
+                <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }, !isDark && { shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 }]}>
                     <Text style={styles.updateText}>
                         Última actualización: 23 de diciembre de 2025
                     </Text>
@@ -46,33 +56,33 @@ export default function TermsOfService() {
                         <Text style={styles.externalButtonText}>🌐 Ver Términos Oficiales (Online)</Text>
                     </TouchableOpacity>
 
-                    <Text style={styles.sectionTitle}>1. Descargo de Responsabilidad</Text>
-                    <Text style={styles.paragraph}>
+                    <Text style={[styles.sectionTitle, { color: textColor }]}>1. Descargo de Responsabilidad</Text>
+                    <Text style={[styles.paragraph, { color: subTextColor }]}>
                         SOYREMI <Text style={styles.redText}>NO ES</Text> un servicio médico ni psicológico. Es una herramienta de apoyo emocional y coaching de relaciones. No reemplaza la terapia profesional.
                     </Text>
 
-                    <Text style={styles.sectionTitle}>2. Contenido Generado por IA</Text>
-                    <Text style={styles.paragraph}>
+                    <Text style={[styles.sectionTitle, { color: textColor }]}>2. Contenido Generado por IA</Text>
+                    <Text style={[styles.paragraph, { color: subTextColor }]}>
                         Esta app usa Google Gemini AI. La IA puede cometer errores o generar información inexacta. NO es un terapeuta humano y no puede diagnosticar condiciones de salud mental.
                     </Text>
 
-                    <Text style={styles.sectionTitle}>3. Suscripciones y Pagos</Text>
-                    <Text style={styles.bulletPoint}>• Los pagos se procesan via Google Play Store</Text>
-                    <Text style={styles.bulletPoint}>• Reembolsos solo en las primeras 48 horas</Text>
-                    <Text style={styles.bulletPoint}>• SOYREMI no gestiona reembolsos directamente</Text>
+                    <Text style={[styles.sectionTitle, { color: textColor }]}>3. Suscripciones y Pagos</Text>
+                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>• Los pagos se procesan via Google Play Store</Text>
+                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>• Reembolsos solo en las primeras 48 horas</Text>
+                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>• SOYREMI no gestiona reembolsos directamente</Text>
 
-                    <Text style={styles.sectionTitle}>4. Limitación de Responsabilidad</Text>
-                    <Text style={styles.paragraph}>
+                    <Text style={[styles.sectionTitle, { color: textColor }]}>4. Limitación de Responsabilidad</Text>
+                    <Text style={[styles.paragraph, { color: subTextColor }]}>
                         NO somos responsables por decisiones tomadas basándose en el contenido de la app, ni por daños emocionales, psicológicos o financieros derivados del uso.
                     </Text>
 
-                    <Text style={styles.sectionTitle}>5. Uso Aceptable</Text>
-                    <Text style={styles.bulletPoint}>• No usar para acosar o dañar a otros</Text>
-                    <Text style={styles.bulletPoint}>• No compartir contenido ilegal</Text>
-                    <Text style={styles.bulletPoint}>• Ser mayor de 18 años</Text>
+                    <Text style={[styles.sectionTitle, { color: textColor }]}>5. Uso Aceptable</Text>
+                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>• No usar para acosar o dañar a otros</Text>
+                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>• No compartir contenido ilegal</Text>
+                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>• Ser mayor de 18 años</Text>
                 </View>
 
-                <Text style={styles.footer}>
+                <Text style={[styles.footer, { color: subTextColor }]}>
                     Al usar SOYREMI, aceptas estos Términos de Servicio.
                 </Text>
             </ScrollView>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Modal, Alert, KeyboardAvoidingView, Image, Animated, Keyboard } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Modal, Alert, KeyboardAvoidingView, Image, Animated, Keyboard, useWindowDimensions } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,8 +8,9 @@ import { loadMasterPrompt } from '../../lib/masterPromptSupabase';
 import { storage } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { checkProhibitedContent } from '../../lib/contentModeration';
-import { Send, Sparkles, ImageIcon, Brain, Menu, Flag, MoreVertical, Zap, Headphones, AudioLines } from 'lucide-react-native';
+import { Send, Sparkles, ImageIcon, Brain, Menu, Flag, MoreVertical, Zap, Headphones, AudioLines, Sun, Moon } from 'lucide-react-native';
 import { useSubscription } from '../../lib/SubscriptionContext';
+import { useTheme } from '../../lib/ThemeContext';
 import { reportAIContent } from '../../lib/aiContentModeration';
 import ChatHeader, { CHAT_THEMES, ChatTheme } from '../../components/ChatHeader';
 import SuggestionBanner from '../../components/SuggestionBanner';
@@ -65,6 +66,8 @@ interface Message {
 
 export default function ExSimulatorChat() {
     const router = useRouter();
+    const { width } = useWindowDimensions();
+    const isDesktop = width > 768;
     const scrollViewRef = useRef<ScrollView>(null);
     const [profileData, setProfileData] = useState<any>(null);
 
@@ -77,6 +80,9 @@ export default function ExSimulatorChat() {
     const [reportModalVisible, setReportModalVisible] = useState(false);
     const [reportData, setReportData] = useState({ id: '', content: '' });
     const [suggestionBanner, setSuggestionBanner] = useState<{ visible: boolean; message: string; icon: string } | null>(null);
+
+    // Use Global Theme Context
+    const { isDark, toggleTheme } = useTheme();
 
     const handleReport = (msg: any, index: number) => {
         setReportData({ id: `sim_msg_${index}`, content: msg.content });
@@ -104,6 +110,7 @@ export default function ExSimulatorChat() {
     const [energyWaitTime, setEnergyWaitTime] = useState(0);
     const [showInsightTeaser, setShowInsightTeaser] = useState(false); // New State
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [showVoiceUpgradeModal, setShowVoiceUpgradeModal] = useState(false);
     const [hasShownLoginPrompt, setHasShownLoginPrompt] = useState(false);
     const [usageData, setUsageData] = useState<{ allowed: boolean, reason?: 'daily' | 'burst', waitTime?: number } | null>(null);
     // Theme state
@@ -571,31 +578,38 @@ export default function ExSimulatorChat() {
 
     if (!profileData && !isLoadingProfile) {
         return (
-            <View style={styles.container}>
-                <StatusBar style="light" />
+            <View style={[styles.container, isDark && { backgroundColor: '#000000' }]}>
+                <StatusBar style={isDark ? "light" : "dark"} />
                 <SafeAreaView style={{ flex: 1 }}>
                     <View style={styles.headerSafe}>
                         <View style={styles.header}>
                             <TouchableOpacity onPress={() => setDrawerVisible(true)} style={{ padding: 8 }}>
-                                <Menu size={24} color="#fff" />
+                                <Menu size={24} color={isDark ? "#fff" : "#111"} />
                             </TouchableOpacity>
-                            {!isPremium && (
-                                <TouchableOpacity
-                                    style={{
-                                        backgroundColor: 'rgba(168, 85, 247, 0.2)',
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 16,
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        gap: 4
-                                    }}
-                                    onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
-                                >
-                                    <Sparkles size={14} color="#a855f7" />
-                                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>Mejorar plan</Text>
+
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                <TouchableOpacity onPress={toggleTheme} style={{ padding: 8 }}>
+                                    {isDark ? <Sun size={24} color="#fff" /> : <Moon size={24} color="#111" />}
                                 </TouchableOpacity>
-                            )}
+
+                                {!isPremium && (
+                                    <TouchableOpacity
+                                        style={{
+                                            backgroundColor: 'rgba(168, 85, 247, 0.2)',
+                                            paddingHorizontal: 12,
+                                            paddingVertical: 6,
+                                            borderRadius: 16,
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            gap: 4
+                                        }}
+                                        onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
+                                    >
+                                        <Sparkles size={14} color="#a855f7" />
+                                        <Text style={{ color: isDark ? '#fff' : '#111', fontWeight: '600', fontSize: 13 }}>Mejorar</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
                         </View>
                     </View>
 
@@ -604,17 +618,17 @@ export default function ExSimulatorChat() {
                             width: 80,
                             height: 80,
                             borderRadius: 40,
-                            backgroundColor: '#1A1A1A',
+                            backgroundColor: isDark ? '#1f2937' : '#f3f4f6',
                             alignItems: 'center',
                             justifyContent: 'center',
                             marginBottom: 24,
                             borderWidth: 1,
-                            borderColor: '#333'
+                            borderColor: isDark ? '#374151' : '#e5e7eb'
                         }}>
-                            <Brain size={40} color="#fff" />
+                            <Brain size={40} color={isDark ? '#fff' : '#111'} />
                         </View>
 
-                        <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 16 }}>Análisis de Patrones</Text>
+                        <Text style={{ fontSize: 24, fontWeight: 'bold', color: isDark ? '#fff' : '#111', marginBottom: 16 }}>Análisis de Patrones</Text>
 
                         <Text style={{
                             fontSize: 16,
@@ -628,7 +642,7 @@ export default function ExSimulatorChat() {
 
                         <TouchableOpacity
                             style={{
-                                backgroundColor: '#fff',
+                                backgroundColor: '#111',
                                 paddingVertical: 16,
                                 paddingHorizontal: 32,
                                 borderRadius: 12,
@@ -640,8 +654,8 @@ export default function ExSimulatorChat() {
                             }}
                             onPress={() => router.push('/tools/ex-simulator/import')}
                         >
-                            <Send size={20} color="#000" />
-                            <Text style={{ color: '#000', fontSize: 16, fontWeight: '700' }}>Importar Chat</Text>
+                            <Send size={20} color="#fff" />
+                            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Importar Chat</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
@@ -685,468 +699,650 @@ export default function ExSimulatorChat() {
     }
 
     return (
-        <View style={styles.container}>
-            <StatusBar style="light" />
+        <View style={[styles.container, isDark && { backgroundColor: '#000000' }, isDesktop && { flexDirection: 'row' }]}>
+            <StatusBar style={isDark ? "light" : "dark"} />
 
-            <SafeAreaView edges={['top']} style={{ zIndex: 10 }}>
-                {/* Use the Enhanced Header Component */}
-                <ChatHeader
-                    exName={profileData.exName || 'Ex'}
-                    onMenuPress={() => setDrawerVisible(true)}
-                    isPremium={isPremium}
-                    onUpgradePress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
-                />
-            </SafeAreaView>
+            {isDesktop && (
+                <View style={{ width: 300, borderRightWidth: 1, borderColor: isDark ? '#333' : '#e5e7eb', height: '100%' }}>
+                    <ProfileDrawer
+                        visible={true}
+                        variant="sidebar"
+                        onClose={() => { }}
+                        currentProfileId={profileData?.id || profileData?.supabaseId}
+                        onProfileSwitch={async (profile) => {
+                            setDrawerVisible(false);
+                            setIsLoadingProfile(true);
+                            setProfileData(null);
+                            setMessages([]);
+                            setTimeout(async () => {
+                                await loadProfile();
+                                setTimeout(() => setIsLoadingProfile(false), 500);
+                            }, 150);
+                        }}
+                        onProfileDeleted={() => { setProfileData(null); setMessages([]); }}
+                    />
+                </View>
+            )}
 
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                style={{ flex: 1 }}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-            >
-                {/* Messages */}
-                <ScrollView
-                    ref={scrollViewRef}
-                    style={styles.messagesContainer}
-                    contentContainerStyle={styles.messagesContent}
-                    showsVerticalScrollIndicator={false}
+            <View style={{ flex: 1 }}>
+                <SafeAreaView edges={['top']} style={{ zIndex: 10 }}>
+                    {/* Use the Enhanced Header Component */}
+                    <ChatHeader
+                        exName={profileData.exName || 'Ex'}
+                        onMenuPress={!isDesktop ? () => setDrawerVisible(true) : undefined}
+                        isPremium={isPremium}
+                        onUpgradePress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
+                        isDark={isDark}
+                        onToggleTheme={toggleTheme}
+                    />
+                </SafeAreaView>
+
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    style={{ flex: 1 }}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
                 >
-                    {messages.length === 0 && (
-                        <View style={styles.emptyStateContainer}>
-                            <View style={styles.emptyStateIcon}>
-                                <Sparkles size={40} color="#a855f7" />
-                            </View>
-                            <Text style={styles.emptyStateTitle}>¿Cómo te sientes hoy?</Text>
-                            <Text style={styles.emptyStateText}>
-                                Estoy aquí para escucharte y analizar tu situación.
-                            </Text>
-
-                            <View style={{ width: '100%', paddingHorizontal: 20, marginTop: 24 }}>
-                                <Text style={{ color: '#6b7280', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
-                                    Sugerencias para iniciar:
+                    {/* Messages */}
+                    <ScrollView
+                        ref={scrollViewRef}
+                        style={styles.messagesContainer}
+                        contentContainerStyle={styles.messagesContent}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        {messages.length === 0 && (
+                            <View style={styles.emptyStateContainer}>
+                                <View style={[styles.emptyStateIcon, isDark && { backgroundColor: '#1f2937', borderColor: '#374151' }]}>
+                                    <Sparkles size={40} color="#a855f7" />
+                                </View>
+                                <Text style={[styles.emptyStateTitle, isDark && { color: '#fff' }]}>¿Cómo te sientes hoy?</Text>
+                                <Text style={styles.emptyStateText}>
+                                    Estoy aquí para escucharte y analizar tu situación.
                                 </Text>
-                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-                                    {[
-                                        "Hola",
-                                        "Te extraño",
-                                        "¿Podemos hablar?",
-                                        "No dejo de pensar en ti",
-                                        "¿Cómo has estado?"
-                                    ].map((text, index) => (
-                                        <TouchableOpacity
-                                            key={index}
-                                            style={{
-                                                backgroundColor: '#2A2A2A',
-                                                paddingHorizontal: 16,
-                                                paddingVertical: 10,
-                                                borderRadius: 20,
-                                                borderWidth: 1,
-                                                borderColor: '#333'
-                                            }}
-                                            onPress={() => sendMessage(text)}
-                                        >
-                                            <Text style={{ color: '#fff', fontSize: 14 }}>{text}</Text>
-                                        </TouchableOpacity>
-                                    ))}
+
+                                <View style={{ width: '100%', paddingHorizontal: 20, marginTop: 24 }}>
+                                    <Text style={{ color: '#6b7280', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
+                                        Sugerencias para iniciar:
+                                    </Text>
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                                        {[
+                                            "Hola",
+                                            "Te extraño",
+                                            "¿Podemos hablar?",
+                                            "No dejo de pensar en ti",
+                                            "¿Cómo has estado?"
+                                        ].map((text, index) => (
+                                            <TouchableOpacity
+                                                key={index}
+                                                style={{
+                                                    backgroundColor: isDark ? '#1f2937' : '#ffffff',
+                                                    paddingHorizontal: 16,
+                                                    paddingVertical: 10,
+                                                    borderRadius: 20,
+                                                    borderWidth: 1,
+                                                    borderColor: isDark ? '#374151' : '#e5e7eb'
+                                                }}
+                                                onPress={() => sendMessage(text)}
+                                            >
+                                                <Text style={{ color: isDark ? '#fff' : '#111', fontSize: 14 }}>{text}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
                                 </View>
                             </View>
-                        </View>
-                    )}
+                        )}
 
-                    {messages.map((msg, idx) => (
-                        <View
-                            key={idx}
-                            style={[
-                                styles.messageRow,
-                                msg.role === 'user' ? styles.messageRowUser : styles.messageRowAssistant
-                            ]}
-                        >
-                            {msg.role === 'assistant' && (
+                        {messages.map((msg, idx) => (
+                            <View
+                                key={idx}
+                                style={[
+                                    styles.messageRow,
+                                    msg.role === 'user' ? styles.messageRowUser : styles.messageRowAssistant
+                                ]}
+                            >
+                                {msg.role === 'assistant' && (
+                                    <View style={styles.messageAvatar}>
+                                        <Text style={styles.messageAvatarText}>{profileData.exName[0]}</Text>
+                                    </View>
+                                )}
+                                <View style={{ flexDirection: 'row', alignItems: 'flex-end', maxWidth: '100%' }}>
+                                    <View style={[
+                                        styles.messageBubble,
+                                        msg.role === 'user' ? styles.userBubble : [styles.assistantBubble, isDark && { backgroundColor: '#1f2937', borderColor: '#374151' }],
+                                        { maxWidth: msg.role === 'assistant' ? '78%' : '78%' }
+                                    ]}>
+                                        <Text style={[
+                                            styles.messageText,
+                                            { color: msg.role === 'user' ? '#fff' : (isDark ? '#e5e5e5' : '#111111') }
+                                        ]}>
+                                            {msg.content}
+                                        </Text>
+                                        <Text style={styles.messageTime}>
+                                            {new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                            {msg.role === 'user' && msg.seen && ' • Leído'}
+                                        </Text>
+                                    </View>
+
+                                    {msg.role === 'assistant' && (
+                                        <TouchableOpacity
+                                            onPress={() => handleReport(msg, idx)}
+                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                            style={{ marginLeft: 4, marginBottom: 4 }}
+                                        >
+                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                <MoreVertical size={16} color="#6b7280" />
+                                            </View>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </View>
+                        ))}
+
+                        {isTyping && (
+                            <View style={[styles.messageRow, styles.messageRowAssistant]}>
                                 <View style={styles.messageAvatar}>
                                     <Text style={styles.messageAvatarText}>{profileData.exName[0]}</Text>
                                 </View>
-                            )}
-                            <View style={{ flexDirection: 'row', alignItems: 'flex-end', maxWidth: '100%' }}>
-                                <View style={[
-                                    styles.messageBubble,
-                                    msg.role === 'user' ? styles.userBubble : styles.assistantBubble,
-                                    { maxWidth: msg.role === 'assistant' ? '78%' : '78%' }
-                                ]}>
-                                    <Text style={[
-                                        styles.messageText,
-                                        { color: msg.role === 'user' ? '#fff' : '#e5e5e5' }
-                                    ]}>
-                                        {msg.content}
-                                    </Text>
-                                    <Text style={styles.messageTime}>
-                                        {new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                                        {msg.role === 'user' && msg.seen && ' • Leído'}
-                                    </Text>
+                                <View style={styles.typingBubble}>
+                                    <Text style={styles.typingText}>...</Text>
                                 </View>
+                            </View>
+                        )}
+                    </ScrollView>
+                    <AIReportModal
+                        visible={reportModalVisible}
+                        onClose={() => setReportModalVisible(false)}
+                        messageId={reportData.id}
+                        content={reportData.content}
+                        context="ex_simulator"
+                        userId={userId || 'current_user_id'}
+                    />
 
-                                {msg.role === 'assistant' && (
-                                    <TouchableOpacity
-                                        onPress={() => handleReport(msg, idx)}
-                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                        style={{ marginLeft: 4, marginBottom: 4 }}
+                    {/* Recharge Banner (for free users) */}
+                    {usageData && !usageData.allowed && (
+                        <View style={{
+                            backgroundColor: '#1E1B4B',
+                            padding: 12,
+                            marginHorizontal: 16,
+                            marginBottom: 8,
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: '#4338CA',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between'
+                        }}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13, marginBottom: 2 }}>
+                                    {usageData.reason === 'daily' ? 'Límite diario alcanzado' : 'Recargando energía...'}
+                                </Text>
+                                <Text style={{ color: '#A5B4FC', fontSize: 12 }}>
+                                    {usageData.reason === 'daily'
+                                        ? 'Vuelve mañana para seguir sanando.'
+                                        : `Tómate un respiro. Recargaremos en ${usageData.waitTime} min.`}
+                                </Text>
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
+                                style={{
+                                    backgroundColor: '#4338CA',
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 6,
+                                    borderRadius: 8
+                                }}
+                            >
+                                <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>Upgrade</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                    {/* Suggestion Banner */}
+                    {suggestionBanner && (
+                        <View style={{ position: 'absolute', bottom: 100, left: 0, right: 0, zIndex: 50 }}>
+                            <SuggestionBanner
+                                visible={suggestionBanner.visible}
+                                message={suggestionBanner.message}
+                                icon={suggestionBanner.icon}
+                                onAccept={() => {
+                                    setSuggestionBanner(null);
+                                    router.push('/(tabs)/profile');
+                                }}
+                                onDismiss={() => setSuggestionBanner(null)}
+                            />
+                        </View>
+                    )}
+
+                    {/* Input */}
+                    <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'transparent' }}>
+                        {/* Gemini-style Preview Bubble - MOVED ABOVE INPUT */}
+                        {inputText.trim() !== '' && (
+                            <Animated.View
+                                style={[
+                                    styles.previewBubble,
+                                    {
+                                        opacity: 1, // Simple opacity
+                                        transform: [{ translateY: 0 }],
+                                    }
+                                ]}
+                            >
+                                <Text style={styles.previewText} numberOfLines={1} ellipsizeMode="tail">
+                                    {inputText}
+                                </Text>
+                            </Animated.View>
+                        )}
+
+                        <View style={[styles.inputContainer, isDark && { backgroundColor: '#000' }]}>
+                            <View style={[styles.inputWrapper, isDark && { backgroundColor: '#1f2937', borderColor: '#374151' }]}>
+                                {/* Image Picker Button */}
+                                <TouchableOpacity
+                                    onPress={async () => {
+                                        try {
+                                            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                                            if (status !== 'granted') {
+                                                Alert.alert('Permiso necesario', 'Necesitamos acceso a tus fotos.');
+                                                return;
+                                            }
+                                            const result = await ImagePicker.launchImageLibraryAsync({
+                                                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                                                quality: 0.7,
+                                            });
+                                            if (!result.canceled) {
+                                                Alert.alert('Análisis de imagen', 'Función de análisis de imágenes próximamente.');
+                                            }
+                                        } catch (error) {
+                                            console.error('ImagePicker error:', error);
+                                        }
+                                    }}
+                                    style={styles.imageButton}
+                                >
+                                    <ImageIcon size={20} color="#9ca3af" />
+                                </TouchableOpacity>
+                                <TextInput
+                                    style={[styles.input, isDark && { color: '#fff' }]}
+                                    placeholder="Escribe un mensaje..."
+                                    placeholderTextColor={isDark ? "#9ca3af" : "#6b7280"}
+                                    value={inputText}
+                                    onChangeText={setInputText}
+                                    onSubmitEditing={() => sendMessage()}
+                                    multiline
+                                />
+
+                                {/* VOICE MODE BUTTON - PREMIUM UI */}
+                                {/* VOICE MODE BUTTON - GEMINI STYLE */}
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        console.log('[Voice Button] Clicked. ProfileData:', profileData);
+                                        console.log('[Voice Button] Current tier:', tier);
+
+                                        if (!profileData) {
+                                            Alert.alert('Error', 'Cargando perfil...');
+                                            return;
+                                        }
+
+                                        // Check subscription tier for voice access
+                                        if (tier !== 'warrior' && tier !== 'phoenix') {
+                                            console.log('[Voice Button] Access denied - showing upgrade modal');
+                                            setShowVoiceUpgradeModal(true);
+                                            return;
+                                        }
+
+                                        console.log('[Voice Button] Access granted - navigating to voice');
+                                        const hasVoice = !!profileData.voice_id;
+                                        const target = hasVoice ? '/(app)/voice/call' : '/(app)/voice/configure';
+                                        router.push({
+                                            pathname: target,
+                                            params: {
+                                                profileId: profileData.id || profileData.supabaseId,
+                                                name: profileData.exName || profileData.name,
+                                                voiceId: profileData.voice_id
+                                            }
+                                        });
+                                    }}
+                                    style={{
+                                        marginRight: 12,
+                                        // Removed container shadows to avoid "square" artifact on Android
+                                    }}
+                                >
+                                    <LinearGradient
+                                        colors={['#2563eb', '#7c3aed', '#db2777']} // Slightly deeper/premium tones
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                        style={{
+                                            width: 48,
+                                            height: 48,
+                                            borderRadius: 24,
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            borderWidth: 1,
+                                            borderColor: 'rgba(255,255,255,0.25)',
+                                            // Self-contained shadow
+                                            shadowColor: '#7c3aed',
+                                            shadowOffset: { width: 0, height: 4 },
+                                            shadowOpacity: 0.4,
+                                            shadowRadius: 8,
+                                            elevation: 8
+                                        }}
                                     >
-                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                            <MoreVertical size={16} color="#6b7280" />
+                                        {/* Inner Glow Effect using View */}
+                                        <View style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.1)' }} />
+
+                                        <AudioLines
+                                            size={24}
+                                            color="white"
+                                            style={{ opacity: 1 }}
+                                        />
+                                        <View style={{ position: 'absolute', bottom: 10, right: 10 }}>
+                                            <Sparkles size={10} color="#fbbf24" style={{ opacity: 0.9 }} />
                                         </View>
+                                    </LinearGradient>
+                                </TouchableOpacity>
+                                {/* Send Button */}
+                                {inputText.trim() !== '' && (
+                                    <TouchableOpacity
+                                        onPress={() => sendMessage()}
+                                        disabled={isTyping}
+                                        style={styles.sendButton}
+                                    >
+                                        <Send size={20} color="white" />
                                     </TouchableOpacity>
                                 )}
                             </View>
                         </View>
-                    ))}
+                    </SafeAreaView>
+                </KeyboardAvoidingView>
 
-                    {isTyping && (
-                        <View style={[styles.messageRow, styles.messageRowAssistant]}>
-                            <View style={styles.messageAvatar}>
-                                <Text style={styles.messageAvatarText}>{profileData.exName[0]}</Text>
-                            </View>
-                            <View style={styles.typingBubble}>
-                                <Text style={styles.typingText}>...</Text>
-                            </View>
-                        </View>
-                    )}
-                </ScrollView>
-                <AIReportModal
-                    visible={reportModalVisible}
-                    onClose={() => setReportModalVisible(false)}
-                    messageId={reportData.id}
-                    content={reportData.content}
-                    context="ex_simulator"
-                    userId={userId || 'current_user_id'}
+                {/* ENERGY RECHARGE MODAL */}
+                <EnergyRechargeModal
+                    visible={showEnergyModal}
+                    waitTimeMinutes={energyWaitTime}
+                    onDismiss={() => setShowEnergyModal(false)}
+                    onUpgrade={() => {
+                        setShowEnergyModal(false);
+                        router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
+                    }}
                 />
 
-                {/* Recharge Banner (for free users) */}
-                {usageData && !usageData.allowed && (
-                    <View style={{
-                        backgroundColor: '#1E1B4B',
-                        padding: 12,
-                        marginHorizontal: 16,
-                        marginBottom: 8,
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        borderColor: '#4338CA',
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                    }}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13, marginBottom: 2 }}>
-                                {usageData.reason === 'daily' ? 'Límite diario alcanzado' : 'Recargando energía...'}
-                            </Text>
-                            <Text style={{ color: '#A5B4FC', fontSize: 12 }}>
-                                {usageData.reason === 'daily'
-                                    ? 'Vuelve mañana para seguir sanando.'
-                                    : `Tómate un respiro. Recargaremos en ${usageData.waitTime} min.`}
-                            </Text>
-                        </View>
-                        <TouchableOpacity
-                            onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
-                            style={{
-                                backgroundColor: '#4338CA',
-                                paddingHorizontal: 12,
-                                paddingVertical: 6,
-                                borderRadius: 8
-                            }}
-                        >
-                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>Upgrade</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
+                {/* NEW INSIGHT TEASER MODAL */}
+                <InsightTeaserModal
+                    visible={showInsightTeaser}
+                    onDismiss={() => setShowInsightTeaser(false)}
+                />
 
-                {/* Suggestion Banner */}
-                {suggestionBanner && (
-                    <View style={{ position: 'absolute', bottom: 100, left: 0, right: 0, zIndex: 50 }}>
-                        <SuggestionBanner
-                            visible={suggestionBanner.visible}
-                            message={suggestionBanner.message}
-                            icon={suggestionBanner.icon}
-                            onAccept={() => {
-                                setSuggestionBanner(null);
-                                router.push('/(tabs)/profile');
-                            }}
-                            onDismiss={() => setSuggestionBanner(null)}
-                        />
-                    </View>
-                )}
-
-                {/* Input */}
-                <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'transparent' }}>
-                    {/* Gemini-style Preview Bubble - MOVED ABOVE INPUT */}
-                    {inputText.trim() !== '' && (
-                        <Animated.View
-                            style={[
-                                styles.previewBubble,
-                                {
-                                    opacity: 1, // Simple opacity
-                                    transform: [{ translateY: 0 }],
-                                }
-                            ]}
-                        >
-                            <Text style={styles.previewText} numberOfLines={1} ellipsizeMode="tail">
-                                {inputText}
+                {/* LOGIN RECOMMENDATION MODAL */}
+                <Modal
+                    visible={showLoginModal}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowLoginModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
+                            <View style={styles.modalIcon}>
+                                <Sparkles size={40} color="#a855f7" />
+                            </View>
+                            <Text style={styles.modalTitle}>¡Guarda tu conversación!</Text>
+                            <Text style={styles.modalText}>
+                                Crea una cuenta para que tu simulación y análisis se guarden automáticamente.
+                                Sin cuenta, podrías perder tus datos.
                             </Text>
-                        </Animated.View>
-                    )}
-
-                    <View style={styles.inputContainer}>
-                        <View style={styles.inputWrapper}>
-                            {/* Image Picker Button */}
                             <TouchableOpacity
-                                onPress={async () => {
-                                    try {
-                                        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                                        if (status !== 'granted') {
-                                            Alert.alert('Permiso necesario', 'Necesitamos acceso a tus fotos.');
-                                            return;
-                                        }
-                                        const result = await ImagePicker.launchImageLibraryAsync({
-                                            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                                            quality: 0.7,
-                                        });
-                                        if (!result.canceled) {
-                                            Alert.alert('Análisis de imagen', 'Función de análisis de imágenes próximamente.');
-                                        }
-                                    } catch (error) {
-                                        console.error('ImagePicker error:', error);
-                                    }
-                                }}
-                                style={styles.imageButton}
-                            >
-                                <ImageIcon size={20} color="#9ca3af" />
-                            </TouchableOpacity>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Escribe un mensaje..."
-                                placeholderTextColor="#666"
-                                value={inputText}
-                                onChangeText={setInputText}
-                                onSubmitEditing={() => sendMessage()}
-                                multiline
-                            />
-
-                            {/* VOICE MODE BUTTON - PREMIUM UI */}
-                            {/* VOICE MODE BUTTON - GEMINI STYLE */}
-                            <TouchableOpacity
+                                style={styles.modalPrimaryBtn}
                                 onPress={() => {
-                                    if (!profileData) {
-                                        Alert.alert('Error', 'Cargando perfil...');
-                                        return;
-                                    }
-                                    const hasVoice = !!profileData.voice_id;
-                                    const target = hasVoice ? '/(app)/voice/call' : '/(app)/voice/configure';
-                                    router.push({
-                                        pathname: target,
-                                        params: {
-                                            profileId: profileData.id || profileData.supabaseId,
-                                            name: profileData.exName || profileData.name,
-                                            voiceId: profileData.voice_id
-                                        }
-                                    });
-                                }}
-                                style={{
-                                    marginRight: 12,
-                                    // Removed container shadows to avoid "square" artifact on Android
+                                    setShowLoginModal(false);
+                                    router.push('/auth');
                                 }}
                             >
-                                <LinearGradient
-                                    colors={['#2563eb', '#7c3aed', '#db2777']} // Slightly deeper/premium tones
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={{
-                                        width: 48,
-                                        height: 48,
-                                        borderRadius: 24,
-                                        justifyContent: 'center',
-                                        alignItems: 'center',
-                                        borderWidth: 1,
-                                        borderColor: 'rgba(255,255,255,0.25)',
-                                        // Self-contained shadow
-                                        shadowColor: '#7c3aed',
-                                        shadowOffset: { width: 0, height: 4 },
-                                        shadowOpacity: 0.4,
-                                        shadowRadius: 8,
-                                        elevation: 8
-                                    }}
-                                >
-                                    {/* Inner Glow Effect using View */}
-                                    <View style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.1)' }} />
-
-                                    <AudioLines
-                                        size={24}
-                                        color="white"
-                                        style={{ opacity: 1 }}
-                                    />
-                                    <View style={{ position: 'absolute', bottom: 10, right: 10 }}>
-                                        <Sparkles size={10} color="#fbbf24" style={{ opacity: 0.9 }} />
-                                    </View>
-                                </LinearGradient>
+                                <Text style={styles.modalPrimaryText}>Crear cuenta / Iniciar sesión</Text>
                             </TouchableOpacity>
-                            {/* Send Button */}
-                            {inputText.trim() !== '' && (
-                                <TouchableOpacity
-                                    onPress={() => sendMessage()}
-                                    disabled={isTyping}
-                                    style={styles.sendButton}
-                                >
-                                    <Send size={20} color="white" />
-                                </TouchableOpacity>
-                            )}
+                            <TouchableOpacity
+                                style={styles.modalSecondaryBtn}
+                                onPress={() => setShowLoginModal(false)}
+                            >
+                                <Text style={styles.modalSecondaryText}>Continuar sin guardar</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
-                </SafeAreaView>
-            </KeyboardAvoidingView>
+                </Modal>
 
-            {/* ENERGY RECHARGE MODAL */}
-            <EnergyRechargeModal
-                visible={showEnergyModal}
-                waitTimeMinutes={energyWaitTime}
-                onDismiss={() => setShowEnergyModal(false)}
-                onUpgrade={() => {
-                    setShowEnergyModal(false);
-                    router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
-                }}
-            />
-
-            {/* NEW INSIGHT TEASER MODAL */}
-            <InsightTeaserModal
-                visible={showInsightTeaser}
-                onDismiss={() => setShowInsightTeaser(false)}
-            />
-
-            {/* LOGIN RECOMMENDATION MODAL */}
-            <Modal
-                visible={showLoginModal}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowLoginModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalIcon}>
-                            <Sparkles size={40} color="#a855f7" />
-                        </View>
-                        <Text style={styles.modalTitle}>¡Guarda tu conversación!</Text>
-                        <Text style={styles.modalText}>
-                            Crea una cuenta para que tu simulación y análisis se guarden automáticamente.
-                            Sin cuenta, podrías perder tus datos.
-                        </Text>
-                        <TouchableOpacity
-                            style={styles.modalPrimaryBtn}
-                            onPress={() => {
-                                setShowLoginModal(false);
-                                router.push('/auth');
-                            }}
-                        >
-                            <Text style={styles.modalPrimaryText}>Crear cuenta / Iniciar sesión</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.modalSecondaryBtn}
-                            onPress={() => setShowLoginModal(false)}
-                        >
-                            <Text style={styles.modalSecondaryText}>Continuar sin guardar</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* UPGRADE MODAL - When free messages run out */}
-            <Modal
-                visible={showUpgradeModal}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowUpgradeModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, { padding: 32, borderRadius: 24, backgroundColor: '#18181b', borderWidth: 1, borderColor: '#27272a' }]}>
-                        <View style={{
-                            width: 64, height: 64, borderRadius: 32,
-                            backgroundColor: 'rgba(168, 85, 247, 0.15)',
-                            alignItems: 'center', justifyContent: 'center',
-                            marginBottom: 20
-                        }}>
-                            <Sparkles size={32} color="#a855f7" />
-                        </View>
-
-                        <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginBottom: 12 }}>
-                            Has alcanzado el límite
-                        </Text>
-
-                        <Text style={{
-                            fontSize: 16, color: '#a1a1aa', textAlign: 'center',
-                            marginBottom: 28, lineHeight: 24
-                        }}>
-                            Los usuarios gratuitos tienen 10 mensajes por simulación.
-                            Actualiza a Premium para chatear sin límites y desbloquear el análisis profundo.
-                        </Text>
-
-                        <TouchableOpacity
-                            style={{
-                                backgroundColor: '#a855f7',
-                                width: '100%',
-                                paddingVertical: 16,
-                                borderRadius: 16,
+                {/* VOICE UPGRADE MODAL */}
+                <Modal
+                    visible={showVoiceUpgradeModal}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowVoiceUpgradeModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={[
+                            styles.modalContent,
+                            {
+                                padding: 32,
+                                borderRadius: 24,
+                                backgroundColor: isDark ? '#18181b' : '#ffffff',
+                                borderWidth: 1,
+                                borderColor: isDark ? '#27272a' : '#e5e7eb',
+                                maxWidth: 420
+                            }
+                        ]}>
+                            {/* Animated Icon */}
+                            <View style={{
+                                width: 80,
+                                height: 80,
+                                borderRadius: 40,
                                 alignItems: 'center',
-                                shadowColor: '#a855f7',
-                                shadowOffset: { width: 0, height: 4 },
-                                shadowOpacity: 0.3,
-                                shadowRadius: 8,
-                                elevation: 4,
-                                marginBottom: 16
-                            }}
-                            onPress={() => {
-                                setShowUpgradeModal(false);
-                                router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
-                            }}
-                        >
-                            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Ver planes Premium</Text>
-                        </TouchableOpacity>
+                                justifyContent: 'center',
+                                marginBottom: 24,
+                                position: 'relative'
+                            }}>
+                                {/* Pulsing background animation */}
+                                <View style={{
+                                    position: 'absolute',
+                                    width: 80,
+                                    height: 80,
+                                    borderRadius: 40,
+                                    backgroundColor: 'rgba(168, 85, 247, 0.2)',
+                                }} />
+                                <View style={{
+                                    position: 'absolute',
+                                    width: 64,
+                                    height: 64,
+                                    borderRadius: 32,
+                                    backgroundColor: 'rgba(168, 85, 247, 0.15)',
+                                }} />
+                                {/* Icon container with gradient-like effect */}
+                                <View style={{
+                                    width: 56,
+                                    height: 56,
+                                    borderRadius: 28,
+                                    backgroundColor: '#a855f7',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    shadowColor: '#a855f7',
+                                    shadowOffset: { width: 0, height: 4 },
+                                    shadowOpacity: 0.4,
+                                    shadowRadius: 12,
+                                    elevation: 8,
+                                }}>
+                                    <AudioLines size={28} color="#fff" strokeWidth={2.5} />
+                                </View>
+                            </View>
 
-                        <TouchableOpacity
-                            style={{ padding: 12 }}
-                            onPress={() => setShowUpgradeModal(false)}
-                        >
-                            <Text style={{ color: '#71717a', fontSize: 15, fontWeight: '500' }}>Quizás después</Text>
-                        </TouchableOpacity>
+                            {/* Title */}
+                            <Text style={{
+                                fontSize: 24,
+                                fontWeight: 'bold',
+                                color: isDark ? '#fff' : '#111',
+                                textAlign: 'center',
+                                marginBottom: 12
+                            }}>
+                                REMI LIVE
+                            </Text>
+
+                            {/* Subtitle badge */}
+                            <View style={{
+                                backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                                paddingHorizontal: 16,
+                                paddingVertical: 6,
+                                borderRadius: 20,
+                                marginBottom: 20
+                            }}>
+                                <Text style={{
+                                    fontSize: 13,
+                                    fontWeight: '600',
+                                    color: '#a855f7',
+                                    textAlign: 'center'
+                                }}>
+                                    Warrior • Phoenix
+                                </Text>
+                            </View>
+
+                            {/* Description */}
+                            <Text style={{
+                                fontSize: 16,
+                                color: isDark ? '#a1a1aa' : '#6b7280',
+                                textAlign: 'center',
+                                marginBottom: 32,
+                                lineHeight: 24
+                            }}>
+                                Las llamadas de voz requieren un plan Warrior o Phoenix.
+                                {'\n'}Actualiza tu plan para hablar directamente con tu simulación.
+                            </Text>
+
+                            {/* CTA Button */}
+                            <TouchableOpacity
+                                style={{
+                                    backgroundColor: '#a855f7',
+                                    width: '100%',
+                                    paddingVertical: 16,
+                                    borderRadius: 16,
+                                    alignItems: 'center',
+                                    shadowColor: '#a855f7',
+                                    shadowOffset: { width: 0, height: 4 },
+                                    shadowOpacity: 0.3,
+                                    shadowRadius: 8,
+                                    elevation: 4,
+                                    marginBottom: 12
+                                }}
+                                onPress={() => {
+                                    setShowVoiceUpgradeModal(false);
+                                    router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
+                                }}
+                            >
+                                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Ver planes Premium</Text>
+                            </TouchableOpacity>
+
+                            {/* Cancel button */}
+                            <TouchableOpacity
+                                style={{ padding: 12 }}
+                                onPress={() => setShowVoiceUpgradeModal(false)}
+                            >
+                                <Text style={{
+                                    color: isDark ? '#71717a' : '#9ca3af',
+                                    fontSize: 15,
+                                    fontWeight: '500',
+                                    textAlign: 'center'
+                                }}>Quizás después</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                </View>
-            </Modal>
+                </Modal>
 
-            {/* ProfileDrawer */}
-            <ProfileDrawer
-                visible={drawerVisible}
-                onClose={() => setDrawerVisible(false)}
-                currentProfileId={profileData?.id || profileData?.supabaseId}
-                onProfileSwitch={async (profile) => {
-                    console.log('[ExChat] Profile switched to:', profile.exName);
-                    setDrawerVisible(false);
+                {/* UPGRADE MODAL */}
+                <Modal
+                    visible={showUpgradeModal}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowUpgradeModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={[styles.modalContent, { padding: 32, borderRadius: 24, backgroundColor: '#18181b', borderWidth: 1, borderColor: '#27272a' }]}>
+                            <View style={{
+                                width: 64, height: 64, borderRadius: 32,
+                                backgroundColor: 'rgba(168, 85, 247, 0.15)',
+                                alignItems: 'center', justifyContent: 'center',
+                                marginBottom: 20
+                            }}>
+                                <Sparkles size={32} color="#a855f7" />
+                            </View>
 
-                    // Explicitly show loading state
-                    setIsLoadingProfile(true);
-                    setProfileData(null);
-                    setMessages([]);
+                            <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginBottom: 12 }}>
+                                Has alcanzado el límite
+                            </Text>
 
-                    // Small delay to ensure state clears then reload
-                    setTimeout(async () => {
-                        await loadProfile();
-                        // Ensure loading is turned off if it stuck
-                        setTimeout(() => setIsLoadingProfile(false), 500);
-                    }, 150);
-                }}
-                onProfileDeleted={() => {
-                    console.log('[ExChat] Profile deleted, resetting state...');
-                    setProfileData(null);
-                    setMessages([]);
-                    setMemoryFacts([]);
-                    setEmotionalSession(null);
-                    setConversationMemory('');
-                    setUserName('');
-                    setPastSummaries('');
-                    // Do not reload profile immediately, stick to empty state
-                }}
-            />
+                            <Text style={{
+                                fontSize: 16, color: '#a1a1aa', textAlign: 'center',
+                                marginBottom: 28, lineHeight: 24
+                            }}>
+                                Los usuarios gratuitos tienen 10 mensajes por simulación.
+                                Actualiza a Premium para chatear sin límites y desbloquear el análisis profundo.
+                            </Text>
+
+                            <TouchableOpacity
+                                style={{
+                                    backgroundColor: '#a855f7',
+                                    width: '100%',
+                                    paddingVertical: 16,
+                                    borderRadius: 16,
+                                    alignItems: 'center',
+                                    shadowColor: '#a855f7',
+                                    shadowOffset: { width: 0, height: 4 },
+                                    shadowOpacity: 0.3,
+                                    shadowRadius: 8,
+                                    elevation: 4,
+                                    marginBottom: 16
+                                }}
+                                onPress={() => {
+                                    setShowUpgradeModal(false);
+                                    router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
+                                }}
+                            >
+                                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Ver planes Premium</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={{ padding: 12 }}
+                                onPress={() => setShowUpgradeModal(false)}
+                            >
+                                <Text style={{ color: '#71717a', fontSize: 15, fontWeight: '500' }}>Quizás después</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </Modal>
+
+                {/* ProfileDrawer */}
+                {!isDesktop && (
+                    <ProfileDrawer
+                        visible={drawerVisible}
+                        onClose={() => setDrawerVisible(false)}
+                        currentProfileId={profileData?.id || profileData?.supabaseId}
+                        onProfileSwitch={async (profile) => {
+                            console.log('[ExChat] Profile switched to:', profile.exName);
+                            setDrawerVisible(false);
+
+                            // Explicitly show loading state
+                            setIsLoadingProfile(true);
+                            setProfileData(null);
+                            setMessages([]);
+
+                            // Small delay to ensure state clears then reload
+                            setTimeout(async () => {
+                                await loadProfile();
+                                // Ensure loading is turned off if it stuck
+                                setTimeout(() => setIsLoadingProfile(false), 500);
+                            }, 150);
+                        }}
+                        onProfileDeleted={() => {
+                            console.log('[ExChat] Profile deleted, resetting state...');
+                            setProfileData(null);
+                            setMessages([]);
+                            setMemoryFacts([]);
+                            setEmotionalSession(null);
+                            setConversationMemory('');
+                            setUserName('');
+                            setPastSummaries('');
+                            // Do not reload profile immediately, stick to empty state
+                        }}
+                    />
+                )}
+            </View>
         </View>
     );
 }
@@ -1154,16 +1350,16 @@ export default function ExSimulatorChat() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#000000',
+        backgroundColor: '#ffffff',
     },
     loadingContainer: {
         flex: 1,
-        backgroundColor: '#000',
+        backgroundColor: '#ffffff',
         justifyContent: 'center',
         alignItems: 'center',
     },
     loadingText: {
-        color: '#9ca3af',
+        color: '#6b7280',
         marginTop: 12,
     },
     messagesContainer: {
@@ -1205,12 +1401,14 @@ const styles = StyleSheet.create({
         borderRadius: 20,
     },
     userBubble: {
-        backgroundColor: '#2A2A2A',
+        backgroundColor: '#2563eb', // Blue for user, visible in both modes
         borderBottomRightRadius: 4,
     },
     assistantBubble: {
-        backgroundColor: '#1A1A1A',
+        backgroundColor: '#f3f4f6',
         borderBottomLeftRadius: 4,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
     },
     messageText: {
         color: '#fff',
@@ -1220,14 +1418,16 @@ const styles = StyleSheet.create({
     messageTime: {
         marginTop: 4,
         fontSize: 10,
-        color: 'rgba(255,255,255,0.5)',
+        color: 'rgba(255,255,255,0.7)',
         alignSelf: 'flex-end',
     },
     typingBubble: {
-        backgroundColor: '#1A1A1A',
+        backgroundColor: '#f3f4f6',
         padding: 12,
         borderRadius: 20,
         borderBottomLeftRadius: 4,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
     },
     typingText: {
         color: '#9ca3af',
@@ -1237,7 +1437,7 @@ const styles = StyleSheet.create({
     // Empty State
     headerSafe: {
         zIndex: 10,
-        backgroundColor: '#000',
+        backgroundColor: 'transparent', // Let parent control bg
     },
     header: {
         flexDirection: 'row',
@@ -1265,13 +1465,13 @@ const styles = StyleSheet.create({
     emptyStateTitle: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#fff',
+        color: '#111',
         marginBottom: 8,
         textAlign: 'center',
     },
     emptyStateText: {
         fontSize: 16,
-        color: '#9ca3af',
+        color: '#6b7280',
         textAlign: 'center',
         marginBottom: 40,
         lineHeight: 24,
@@ -1283,11 +1483,15 @@ const styles = StyleSheet.create({
     actionCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#1A1A1A',
+        backgroundColor: '#ffffff',
         padding: 16,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: '#e5e7eb',
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
     },
     cardIcon: {
         width: 48,
@@ -1303,12 +1507,12 @@ const styles = StyleSheet.create({
     cardTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#fff',
+        color: '#111', // Default to dark for light mode
         marginBottom: 4,
     },
     cardDesc: {
         fontSize: 13,
-        color: '#9ca3af',
+        color: '#6b7280',
     },
     inputContainer: {
         paddingHorizontal: 16,
@@ -1317,16 +1521,16 @@ const styles = StyleSheet.create({
     inputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#2A2A2A',
+        backgroundColor: '#f3f4f6',
         borderRadius: 24,
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: '#e5e7eb',
     },
     input: {
         flex: 1,
-        color: '#fff',
+        color: '#111',
         fontSize: 16,
         paddingHorizontal: 16,
         paddingVertical: 12,
@@ -1355,13 +1559,13 @@ const styles = StyleSheet.create({
         padding: 24,
     },
     modalContent: {
-        backgroundColor: '#111',
+        backgroundColor: '#ffffff',
         borderRadius: 24,
         padding: 24,
         width: '100%',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: '#e5e7eb',
     },
     modalIcon: {
         marginBottom: 16,
@@ -1373,7 +1577,7 @@ const styles = StyleSheet.create({
     modalTitle: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#fff',
+        color: '#111',
         marginBottom: 8,
         textAlign: 'center',
     },
@@ -1404,7 +1608,6 @@ const styles = StyleSheet.create({
         color: '#6b7280',
         fontSize: 15,
     },
-    // Gemini Preview
     // Gemini Preview
     previewBubble: {
         alignSelf: 'flex-end',

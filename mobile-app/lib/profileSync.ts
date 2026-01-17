@@ -196,9 +196,12 @@ async function saveProfileToSupabase(profile: ExProfile, userId: string): Promis
             .from('ex_profiles')
             .update({
                 ex_name: profile.exName,
-                profile_data: profile.profile,
+                profile_data: {
+                    ...profile.profile,
+                    masterPrompt: profile.masterPrompt, // Store in profile_data instead
+                    tokenCount: profile.tokenCount
+                },
                 message_count: profile.messageCount,
-                master_prompt: profile.masterPrompt,
                 updated_at: new Date().toISOString()
             })
             .eq('id', profile.supabaseId)
@@ -206,7 +209,13 @@ async function saveProfileToSupabase(profile: ExProfile, userId: string): Promis
             .maybeSingle(); // Use maybeSingle to avoid errors if not found
 
         if (error) {
-            console.error('[ProfileSync] Update error:', error);
+            console.error('[ProfileSync] ❌ UPDATE ERROR DETAILS:', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code,
+                profileId: profile.supabaseId
+            });
             return null;
         }
 
@@ -215,24 +224,42 @@ async function saveProfileToSupabase(profile: ExProfile, userId: string): Promis
     }
 
     // Insert new profile
+    console.log('[ProfileSync] 📝 Inserting new profile:', {
+        user_id: userId,
+        ex_name: profile.exName,
+        message_count: profile.messageCount,
+        has_profile_data: !!profile.profile,
+        has_master_prompt: !!profile.masterPrompt
+    });
+
     const { data, error } = await supabase
         .from('ex_profiles')
         .insert({
             user_id: userId,
             ex_name: profile.exName,
-            profile_data: profile.profile,
-            message_count: profile.messageCount,
-            master_prompt: profile.masterPrompt
+            profile_data: {
+                ...profile.profile,
+                masterPrompt: profile.masterPrompt, // Store in profile_data instead of separate column
+                tokenCount: profile.tokenCount
+            },
+            message_count: profile.messageCount
         })
         .select()
         .single();
 
     if (error) {
-        console.error('[ProfileSync] Insert error:', error);
+        console.error('[ProfileSync] ❌ INSERT ERROR DETAILS:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
+            user_id: userId,
+            ex_name: profile.exName
+        });
         return null;
     }
 
-    console.log('[ProfileSync] Created new profile in Supabase:', data.id);
+    console.log('[ProfileSync] ✅ Created new profile in Supabase:', data.id);
     return data as SupabaseExProfile;
 }
 

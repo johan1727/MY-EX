@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { ChevronDown, ChevronRight, MessageSquare, BookOpen, Sparkles, ArrowLeft, Share2 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme } from '../lib/ThemeContext';
 
 interface ExportGuideProps {
     onClose?: () => void;
@@ -9,7 +10,15 @@ interface ExportGuideProps {
 }
 
 export default function ExportGuide({ onClose, onBack }: ExportGuideProps) {
-    const whatsappSteps = [
+    const { isDark } = useTheme();
+    const whatsappSteps = Platform.OS === 'web' ? [
+        { title: 'Desde WhatsApp', desc: 'Usa WhatsApp Web o tu celular para exportar.' },
+        { title: 'Exportar chat', desc: 'Entra al chat > Menú (⋮) > Más > Exportar chat.' },
+        { title: 'Sin archivos', desc: 'Selecciona "Sin archivos multimedia" (importante).', highlight: true },
+        { title: 'Envíalo a tu PC', desc: 'Mándate el archivo .txt por correo, Drive o Telegram.' },
+        { title: 'Descárgalo', desc: 'Guarda el archivo .txt en tu computadora.' },
+        { title: 'Súbelo aquí', desc: 'Haz clic en "Subir archivo .txt" y selecciónalo.', isHint: true },
+    ] : [
         { title: 'Abre el chat', desc: 'Ve a la conversación en WhatsApp que quieres analizar.' },
         { title: 'Menú de opciones', desc: 'Toca los 3 puntos (⋮) en la esquina superior derecha.' },
         { title: 'Exportar chat', desc: 'Selecciona "Más" → "Exportar chat".' },
@@ -19,20 +28,20 @@ export default function ExportGuide({ onClose, onBack }: ExportGuideProps) {
     ];
 
     return (
-        <ScrollView style={styles.container}>
-            <LinearGradient colors={['#1a1a2e', '#050505']} style={styles.gradientBg}>
+        <ScrollView style={[styles.container, { backgroundColor: isDark ? '#000' : '#f5f5f5' }]}>
+            <LinearGradient colors={isDark ? ['#1a1a2e', '#050505'] : ['#fafafa', '#fff']} style={styles.gradientBg}>
                 {/* Header */}
                 <View style={styles.header}>
                     {onBack && (
-                        <TouchableOpacity onPress={onBack} style={styles.backButton}>
-                            <ArrowLeft size={20} color="white" />
+                        <TouchableOpacity onPress={onBack} style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}>
+                            <ArrowLeft size={20} color={isDark ? "white" : "black"} />
                         </TouchableOpacity>
                     )}
-                    <View style={styles.headerIconContainer}>
+                    <View style={[styles.headerIconContainer, { backgroundColor: isDark ? 'rgba(34,197,94,0.1)' : 'rgba(34,197,94,0.15)', borderColor: isDark ? 'rgba(34,197,94,0.2)' : 'rgba(34,197,94,0.3)' }]}>
                         <MessageSquare size={24} color="#22c55e" />
                     </View>
                     <View>
-                        <Text style={styles.headerTitle}>WhatsApp</Text>
+                        <Text style={[styles.headerTitle, { color: isDark ? '#fff' : '#000' }]}>WhatsApp</Text>
                         <Text style={styles.headerSubtitle}>Paso a paso</Text>
                     </View>
                 </View>
@@ -42,11 +51,12 @@ export default function ExportGuide({ onClose, onBack }: ExportGuideProps) {
                     {whatsappSteps.map((step, idx) => (
                         <View key={idx} style={styles.stepRow}>
                             {/* Vertical Line Connector */}
-                            {idx !== whatsappSteps.length - 1 && <View style={styles.stepLine} />}
+                            {idx !== whatsappSteps.length - 1 && <View style={[styles.stepLine, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' }]} />}
 
                             {/* Step Number Bubble */}
                             <View style={[
                                 styles.stepNumber,
+                                { backgroundColor: isDark ? '#050505' : '#fff' },
                                 step.highlight ? styles.stepNumberRed :
                                     step.isHint ? styles.stepNumberYellow : styles.stepNumberGreen
                             ]}>
@@ -61,31 +71,32 @@ export default function ExportGuide({ onClose, onBack }: ExportGuideProps) {
                             <View style={styles.stepContent}>
                                 <Text style={[
                                     styles.stepTitle,
-                                    step.highlight ? { color: '#fff' } :
-                                        step.isHint ? { color: '#fbbf24' } : { color: '#fff' }
+                                    { color: isDark ? '#fff' : '#000' },
+                                    step.highlight ? { color: isDark ? '#fff' : '#ef4444' } :
+                                        step.isHint ? { color: '#fbbf24' } : {}
                                 ]}>{step.title}</Text>
-                                <Text style={styles.stepDesc}>{step.desc}</Text>
+                                <Text style={[styles.stepDesc, { color: isDark ? '#9ca3af' : '#666' }]}>{step.desc}</Text>
                             </View>
                         </View>
                     ))}
                 </View>
 
                 {/* Footer Note */}
-                <View style={styles.footerNote}>
-                    <Text style={styles.footerTitle}>¿REMI no aparece en la lista?</Text>
+                <View style={[styles.footerNote, { backgroundColor: isDark ? '#0f172a' : '#e0f2fe', borderColor: isDark ? '#1e293b' : '#bae6fd' }]}>
+                    <Text style={[styles.footerTitle, { color: isDark ? '#60a5fa' : '#0369a1' }]}>¿REMI no aparece en la lista?</Text>
                     <View style={styles.bulletRow}>
-                        <View style={styles.bulletDot} />
-                        <Text style={styles.footerText}>Si REMI no aparece, guarda el archivo .txt en tu dispositivo.</Text>
+                        <View style={[styles.bulletDot, { backgroundColor: isDark ? '#60a5fa' : '#0369a1' }]} />
+                        <Text style={[styles.footerText, { color: isDark ? '#93c5fd' : '#0c4a6e' }]}>Si REMI no aparece, guarda el archivo .txt en tu dispositivo.</Text>
                     </View>
                     <View style={styles.bulletRow}>
-                        <View style={styles.bulletDot} />
-                        <Text style={styles.footerText}>Luego abre REMI y sube el archivo desde aquí.</Text>
+                        <View style={[styles.bulletDot, { backgroundColor: isDark ? '#60a5fa' : '#0369a1' }]} />
+                        <Text style={[styles.footerText, { color: isDark ? '#93c5fd' : '#0c4a6e' }]}>Luego abre REMI y sube el archivo desde aquí.</Text>
                     </View>
                 </View>
 
                 {onClose && (
-                    <TouchableOpacity onPress={onClose} style={styles.startButton}>
-                        <Text style={styles.startButtonText}>Entendido, Empezar</Text>
+                    <TouchableOpacity onPress={onClose} style={[styles.startButton, { backgroundColor: isDark ? '#fff' : '#000' }]}>
+                        <Text style={[styles.startButtonText, { color: isDark ? '#000' : '#fff' }]}>Entendido, Empezar</Text>
                     </TouchableOpacity>
                 )}
                 <View style={{ height: 40 }} />

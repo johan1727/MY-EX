@@ -5,6 +5,7 @@ import { View, AppState, Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { SubscriptionProvider } from '../lib/SubscriptionContext';
 import { AnalysisProvider } from '../lib/AnalysisContext';
+import { ThemeProvider } from '../lib/ThemeContext';
 import { shouldLockApp, markAppLocked } from '../lib/security';
 import AppLockScreen from '../components/AppLockScreen';
 import CookieConsent from '../components/CookieConsent';
@@ -213,13 +214,19 @@ export default function RootLayout() {
     };
 
     // Show animated splash screen on first load
-    if (loading || showSplash) {
-        return (
-            <>
-                <AnimatedSplash onFinish={() => setShowSplash(false)} />
-                <StatusBar style="light" />
-            </>
-        );
+    // DISABLED PER USER REQUEST (Too slow)
+    // if (loading || showSplash) {
+    //     return (
+    //         <>
+    //             <AnimatedSplash onFinish={() => setShowSplash(false)} />
+    //             <StatusBar style="light" />
+    //         </>
+    //     );
+    // }
+
+    if (loading) {
+        // Minimal loader just while session restores
+        return null;
     }
 
     if (isLocked) {
@@ -227,38 +234,40 @@ export default function RootLayout() {
     }
 
     return (
-        <AnalysisProvider>
-            <SubscriptionProvider>
-                <View style={{ flex: 1 }}>
-                    <Stack screenOptions={{ headerShown: false }}>
-                        <Stack.Screen name="welcome" />
-                        <Stack.Screen name="auth" />
-                        <Stack.Screen name="auth/callback" />
-                        <Stack.Screen name="(tabs)" />
-                        <Stack.Screen name="tools/decoder" />
-                        <Stack.Screen name="tools/panic" />
-                        {/* Main Simulator is now /(tabs)/chat, keeping import as tool */}
-                        <Stack.Screen name="tools/ex-simulator/import" />
-                        <Stack.Screen name="tools/ex-simulator/analysis" />
-                        <Stack.Screen name="tools/journal" />
-                        <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
-                        <Stack.Screen name="subscribe" options={{ presentation: 'modal', headerShown: false }} />
-                    </Stack>
-                    <ShareIntentModal
-                        visible={showShareModal}
-                        onAnalyze={handleShareAnalyze}
-                        onCancel={handleShareCancel}
-                        type={shareModalType}
-                    />
-                    <CookieConsent />
-                    <WebAnalytics />
-                    <HotjarTracking />
-                    {/* Show progress indicator for any active background analysis - REMOVED PER USER REQUEST */}
-                    {/* <AnalysisProgressIndicator /> */}
-                    <StatusBar style="light" />
-                </View>
-            </SubscriptionProvider>
-        </AnalysisProvider>
+        <ThemeProvider>
+            <AnalysisProvider>
+                <SubscriptionProvider>
+                    <View style={{ flex: 1 }}>
+                        <Stack screenOptions={{ headerShown: false }}>
+                            <Stack.Screen name="welcome" />
+                            <Stack.Screen name="auth" />
+                            <Stack.Screen name="auth/callback" />
+                            <Stack.Screen name="(tabs)" />
+                            <Stack.Screen name="tools/decoder" />
+                            <Stack.Screen name="tools/panic" />
+                            {/* Main Simulator is now /(tabs)/chat, keeping import as tool */}
+                            <Stack.Screen name="tools/ex-simulator/import" />
+                            <Stack.Screen name="tools/ex-simulator/analysis" />
+                            <Stack.Screen name="tools/journal" />
+                            <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
+                            <Stack.Screen name="subscribe" options={{ presentation: 'modal', headerShown: false }} />
+                        </Stack>
+                        <ShareIntentModal
+                            visible={showShareModal}
+                            onAnalyze={handleShareAnalyze}
+                            onCancel={handleShareCancel}
+                            type={shareModalType}
+                        />
+                        <CookieConsent />
+                        <WebAnalytics />
+                        <HotjarTracking />
+                        {/* Show progress indicator for any active background analysis - REMOVED PER USER REQUEST */}
+                        {/* <AnalysisProgressIndicator /> */}
+                        <StatusBar style="light" />
+                    </View>
+                </SubscriptionProvider>
+            </AnalysisProvider>
+        </ThemeProvider>
     );
 }
 

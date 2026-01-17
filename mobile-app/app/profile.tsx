@@ -8,19 +8,41 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const SettingItem = ({ label, icon: Icon, onPress, danger = false, highlight = false, badge }: any) => (
-    <TouchableOpacity onPress={onPress} style={styles.settingItem}>
-        <View style={[styles.settingItemIcon, danger && styles.settingItemIconDanger, highlight && styles.settingItemIconHighlight]}>
-            <Icon size={20} color={danger ? '#ef4444' : highlight ? '#22c55e' : '#fff'} />
+import { useTheme } from '../lib/ThemeContext';
+
+const SettingItem = ({ label, icon: Icon, onPress, danger = false, highlight = false, badge, isDark }: any) => (
+    <TouchableOpacity
+        onPress={onPress}
+        style={[
+            styles.settingItem,
+            !isDark && { borderBottomColor: '#e5e7eb' }
+        ]}
+    >
+        <View style={[
+            styles.settingItemIcon,
+            danger && styles.settingItemIconDanger,
+            highlight && styles.settingItemIconHighlight,
+            !isDark && { backgroundColor: '#f3f4f6' },
+            !isDark && danger && { backgroundColor: '#fee2e2' },
+            !isDark && highlight && { backgroundColor: '#dcfce7' }
+        ]}>
+            <Icon size={20} color={danger ? '#ef4444' : highlight ? '#22c55e' : (isDark ? '#fff' : '#4b5563')} />
         </View>
-        <Text style={[styles.settingItemLabel, danger && styles.settingItemLabelDanger, highlight && styles.settingItemLabelHighlight]}>{label}</Text>
+        <Text style={[
+            styles.settingItemLabel,
+            danger && styles.settingItemLabelDanger,
+            highlight && styles.settingItemLabelHighlight,
+            !isDark && { color: '#1f2937' },
+            !isDark && danger && { color: '#ef4444' }
+        ]}>{label}</Text>
         {badge && <View style={styles.settingBadge}><Text style={styles.settingBadgeText}>{badge}</Text></View>}
-        <ChevronRight size={18} color="#525252" />
+        <ChevronRight size={18} color={isDark ? "#525252" : "#d1d5db"} />
     </TouchableOpacity>
 );
 
 export default function ProfileScreen() {
     const router = useRouter();
+    const { isDark } = useTheme(); // Use Theme
     const [email, setEmail] = useState('');
     const [joined, setJoined] = useState('');
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -171,8 +193,8 @@ export default function ProfileScreen() {
     };
 
     return (
-        <View style={styles.container}>
-            <StatusBar style="light" backgroundColor="#000000" />
+        <View style={[styles.container, !isDark && { backgroundColor: '#ffffff' }]}>
+            <StatusBar style={isDark ? "light" : "dark"} backgroundColor={isDark ? "#000000" : "#ffffff"} />
             <SafeAreaView style={styles.safeArea}>
                 {/* Header */}
                 <View style={styles.header}>
@@ -186,11 +208,11 @@ export default function ProfileScreen() {
                         }}
                         style={styles.iconButton}
                     >
-                        <ArrowLeft size={24} color="#fff" />
+                        <ArrowLeft size={24} color={isDark ? "#fff" : "#111"} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Perfil</Text>
+                    <Text style={[styles.headerTitle, !isDark && { color: '#111' }]}>Perfil</Text>
                     <TouchableOpacity onPress={() => router.push('/preferences')} style={styles.iconButton}>
-                        <Settings size={24} color="#fff" />
+                        <Settings size={24} color={isDark ? "#fff" : "#111"} />
                     </TouchableOpacity>
                 </View>
 
@@ -215,11 +237,11 @@ export default function ProfileScreen() {
                                 <Text style={styles.percentageText}>100%</Text>
                             </View>
                         </View>
-                        <Text style={styles.userName}>{isGuest ? 'Invitado' : email.split('@')[0]}</Text>
+                        <Text style={[styles.userName, !isDark && { color: '#000' }]}>{isGuest ? 'Invitado' : email.split('@')[0]}</Text>
 
-                        <TouchableOpacity style={styles.chatStatusButton} disabled>
+                        <TouchableOpacity style={[styles.chatStatusButton, !isDark && { backgroundColor: '#f3f4f6' }]} disabled>
                             <View style={[styles.chatStatusDot, { backgroundColor: isPremium ? '#22c55e' : '#9ca3af' }]} />
-                            <Text style={styles.chatStatusText}>{isPremium ? `Prem: ${tier}` : 'Gratuito'}</Text>
+                            <Text style={[styles.chatStatusText, !isDark && { color: '#374151' }]}>{isPremium ? `Prem: ${tier}` : 'Gratuito'}</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -369,7 +391,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#000',
+        backgroundColor: '#0a0a0c',
     },
     safeArea: {
         flex: 1,
@@ -414,11 +436,11 @@ const styles = StyleSheet.create({
         width: '100%',
         height: '100%',
         borderRadius: 60,
-        backgroundColor: '#000',
+        backgroundColor: '#0a0a0c',
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 4,
-        borderColor: '#000',
+        borderColor: '#0a0a0c',
         overflow: 'hidden',
     },
     avatarImage: {
@@ -450,11 +472,13 @@ const styles = StyleSheet.create({
     chatStatusButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#1a1a1a',
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 20,
         gap: 6,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
     },
     chatStatusDot: {
         width: 8,
@@ -470,15 +494,17 @@ const styles = StyleSheet.create({
     premiumSection: {
         marginHorizontal: 16,
         marginBottom: 24,
-        shadowColor: '#a855f7',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.4,
-        shadowRadius: 16,
-        elevation: 10,
+        // Removed external shadow/border effect that looked ugly
     },
     premiumCard: {
         borderRadius: 24,
         padding: 24,
+        // Self-contained shadow
+        shadowColor: '#a855f7',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 8,
     },
     premiumContent: {
         width: '100%',
@@ -521,7 +547,12 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     menuContainer: {
-        paddingHorizontal: 24,
+        marginHorizontal: 16,
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        borderRadius: 16,
+        padding: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.06)',
     },
     menuSpacer: {
         height: 24,
@@ -529,15 +560,17 @@ const styles = StyleSheet.create({
     settingItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#262626',
+        paddingVertical: 14,
+        paddingHorizontal: 12,
+        marginVertical: 2,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255, 255, 255, 0.02)',
     },
     settingItemIcon: {
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: '#1a1a1a',
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 16,

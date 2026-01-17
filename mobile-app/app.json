@@ -93,7 +93,8 @@
           "organization": "remi-3n",
           "project": "soy-remi-mobile"
         }
-      ]
+      ],
+      "@siteed/expo-audio-studio"
     ],
     "scheme": "my-ex-coach",
     "extra": {

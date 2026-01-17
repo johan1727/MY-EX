@@ -3,9 +3,9 @@ import { supabase } from './supabase';
 export type PlanTier = 'free' | 'warrior' | 'phoenix';
 
 export const VOICE_LIMITS_MINUTES: Record<PlanTier, number> = {
-    free: 0,       // Demo disabled by default effectively, or super short if we change mind
-    warrior: 15,   // Reduced to 15m due to High Quality Model costs
-    phoenix: 60    // $123 MXN cost
+    free: 0,       // Demo disabled by default effectively
+    warrior: 10,   // 10 minutes/month
+    phoenix: 60    // 60 minutes/month
 };
 
 export interface UsageStatus {

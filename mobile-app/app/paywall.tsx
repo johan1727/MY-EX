@@ -70,7 +70,7 @@ export default function PremiumScreen() {
             color: '#3b82f6',
             features: [
                 'Límites más amplios de uso',
-                'Crea múltiples perfiles de ex',
+                'Crea múltiples perfiles',
                 'Análisis profundo de patrones',
                 'REMI recuerda tu historia completa',
             ],
