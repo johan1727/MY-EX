@@ -7,6 +7,7 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     Platform,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -28,7 +29,7 @@ import { PLANS } from '../lib/constants';
 export default function SubscribePage() {
     const router = useRouter();
     const [showSuccessModal, setShowSuccessModal] = useState(false);
-    const { tier } = useSubscription();
+    const { tier, packages, purchasePackage } = useSubscription();
     const isPremium = tier !== 'survivor';
 
     // Confetti Logic
@@ -52,16 +53,55 @@ export default function SubscribePage() {
     // Determines current plan index for UI logic
     const currentPlanIndex = PLANS.findIndex(p => p.id === tier);
 
-    const handleSubscribe = async (plan: typeof PLANS[0]) => {
-        if (Platform.OS !== 'web') {
-            alert('Los pagos web solo funcionan en navegador. Por favor usa la app móvil para suscribirte.');
-            return;
-        }
 
+    // ...
+
+
+    const handleSubscribe = async (plan: typeof PLANS[0]) => {
         setLoading(plan.id);
 
         try {
-            // Get current user
+            // === NATIVE MOBILE PAYMENTS (RevenueCat) ===
+            if (Platform.OS !== 'web') {
+                if (!packages || packages.length === 0) {
+                    Alert.alert('Error', 'No se pudieron cargar los paquetes de suscripción. Intenta más tarde.');
+                    return;
+                }
+
+                // Find matching package
+                // Strategy: Look for package identifier containing plan ID (e.g. 'warrior') and period ('monthly'/'annual')
+                const targetIdentifierSnippet = `${plan.id}_${billingPeriod}`; // e.g. "warrior_monthly"
+
+                // Flexible matching:
+                // 1. Exact match on package identifier? (Usually configured as such)
+                // 2. Or match on product identifier
+                const packageToBuy = packages.find(pkg =>
+                    pkg.identifier.toLowerCase().includes(plan.id.toLowerCase()) &&
+                    (billingPeriod === 'monthly' ? pkg.packageType === 'MONTHLY' : pkg.packageType === 'ANNUAL')
+                );
+
+                if (!packageToBuy) {
+                    console.log('Available packages:', packages.map(p => p.identifier));
+                    Alert.alert('No disponible', `El plan ${plan.name} (${billingPeriod}) no está configurado en la tienda aún.`);
+                    return;
+                }
+
+                try {
+                    await purchasePackage(packageToBuy);
+                    // Success is handled by the Context/Listener usually, but we can show confetti here
+                    setShowConfetti(true);
+                    setShowSuccessModal(true);
+                } catch (e: any) {
+                    if (!e.userCancelled) {
+                        Alert.alert('Error', e.message);
+                    }
+                } finally {
+                    setLoading(null);
+                }
+                return;
+            }
+
+            // === WEB PAYMENTS (Stripe) ===
             const { data: { user } } = await supabase.auth.getUser();
 
             if (!user) {
@@ -69,10 +109,7 @@ export default function SubscribePage() {
                 return;
             }
 
-            // Determine correct Price ID based on selection
             const selectedPriceId = billingPeriod === 'monthly' ? plan.priceId : plan.annualPriceId;
-
-            // Call Supabase Edge Function instead of local API route
             const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
             const response = await fetch(`${supabaseUrl}/functions/v1/create-stripe-checkout`, {
                 method: 'POST',
@@ -92,10 +129,8 @@ export default function SubscribePage() {
                 throw new Error(data.error || 'Error al crear sesión de pago');
             }
 
-            // Redirect to Stripe Checkout
-            if (Platform.OS === 'web') {
-                window.location.href = data.sessionUrl;
-            }
+            window.location.href = data.sessionUrl;
+
         } catch (error: any) {
             console.error('Error subscribing:', error);
             alert(error.message || 'Error al procesar el pago');

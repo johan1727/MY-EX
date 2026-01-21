@@ -72,6 +72,7 @@ export default function ProfileDrawer({
     const [hoveredProfile, setHoveredProfile] = useState<string | null>(null);
     const [hoveredCoach, setHoveredCoach] = useState(false);
     const [hoveredMenuItem, setHoveredMenuItem] = useState<string | null>(null);
+    const [coachPreview, setCoachPreview] = useState<string | null>(null);
 
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const { tier } = useSubscription();
@@ -129,6 +130,16 @@ export default function ProfileDrawer({
 
     const loadProfiles = async () => {
         try {
+            // Load Coach Preview
+            const coachMsgs = await storage.getItem('coach_messages');
+            if (coachMsgs) {
+                const parsed = JSON.parse(coachMsgs);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    const lastMsg = parsed[parsed.length - 1];
+                    setCoachPreview(lastMsg.content);
+                }
+            }
+
             // Check auth status
             const { data: { user } } = await supabase.auth.getUser();
             setUserId(user?.id || null); // Set userId
@@ -432,7 +443,9 @@ export default function ProfileDrawer({
                                     >
                                         {profile.exName}
                                     </Text>
-                                    <Text style={[styles.profileChatHint, variant === 'sidebar' && { fontSize: 10 }]}>Chatear →</Text>
+                                    <Text style={[styles.profileChatHint, variant === 'sidebar' && { fontSize: 10 }]} numberOfLines={1}>
+                                        {profile.lastMessage ? profile.lastMessage : 'Pulsa para chatear →'}
+                                    </Text>
                                 </Pressable>
 
                                 <View style={styles.profileActions}>
@@ -464,7 +477,12 @@ export default function ProfileDrawer({
                     onHoverOut={() => setHoveredCoach(false)}
                 >
                     <Sparkles size={18} color="#a855f7" style={{ marginRight: 8 }} />
-                    <Text style={styles.coachText}>Coach IA</Text>
+                    <View>
+                        <Text style={styles.coachText}>Coach IA</Text>
+                        <Text style={[styles.profileChatHint, { marginTop: 2 }]} numberOfLines={1}>
+                            {coachPreview ? coachPreview : 'Tu espacio seguro →'}
+                        </Text>
+                    </View>
                 </Pressable>
             </ScrollView>
 

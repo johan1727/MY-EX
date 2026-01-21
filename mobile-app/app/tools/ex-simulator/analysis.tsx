@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { generateUUID } from '../../../lib/uuid';
 import {
     View,
     Text,
@@ -160,7 +161,11 @@ export default function AnalysisScreen() {
                     await AsyncStorage.removeItem('chat_import_metadata'); // Cleanup
 
                     // Generate a new ID if not updating
-                    const idToUse = update_profile_id || crypto.randomUUID();
+
+
+                    // ...
+
+                    const idToUse = update_profile_id || generateUUID();
 
                     // START BACKGROUND MANAGER
                     // (This handles the heavy lifting)

@@ -19,6 +19,7 @@ import { useAnalysis } from '../../../lib/AnalysisContext';
 import { BackgroundAnalysisManager } from '../../../lib/BackgroundAnalysisManager';
 import { detectRelationshipType } from '../../../lib/relationshipDetector';
 import { useTheme } from '../../../lib/ThemeContext';
+import { generateUUID } from '../../../lib/uuid';
 
 // Helper to extract text from ZIP file (WhatsApp exports as ZIP with media)
 async function extractTextFromZip(zipData: string): Promise<string | null> {
@@ -944,7 +945,7 @@ export default function ImportChat() {
             console.log('[handleAnalyze] Chunks saved. Starting background analysis...');
 
             // Generate valid UUID for profile ID
-            const profileId = crypto.randomUUID();
+            const profileId = generateUUID();
 
             // Start background analysis (will auto-create profile and master prompt)
             await BackgroundAnalysisManager.startAnalysis(
@@ -986,7 +987,7 @@ export default function ImportChat() {
         }
 
         // Generate profile ID (or use updateId for updates)
-        const profileId = updateId || crypto.randomUUID();
+        const profileId = updateId || generateUUID();
 
         // Start background analysis
         await BackgroundAnalysisManager.startAnalysis(
@@ -1370,46 +1371,47 @@ export default function ImportChat() {
             </LinearGradient>
 
             <ScrollView style={styles.scrollView}>
+                {/* Dead code removed
                 {step === 'upload' && (
                     <>
-                        <Text style={styles.sectionLabel}>SELECCIONA FUENTE DE DATOS</Text>
+                 */}
+                <Text style={styles.sectionLabel}>SELECCIONA FUENTE DE DATOS</Text>
 
-                        <View style={styles.sourceRow}>
-                            <TouchableOpacity
-                                onPress={() => setImportType('whatsapp')}
-                                style={[styles.sourceCard, styles.sourceCardFull, importType === 'whatsapp' && styles.sourceCardActive]}
-                            >
-                                <View style={[styles.sourceIcon, importType === 'whatsapp' && styles.sourceIconWhatsApp]}>
-                                    <MessageSquare size={24} color={importType === 'whatsapp' ? '#22c55e' : 'white'} />
-                                </View>
-                                <Text style={styles.sourceTitle}>WhatsApp</Text>
-                                <Text style={styles.sourceSubtitle}>Archivo .txt exportado</Text>
-                            </TouchableOpacity>
+                <View style={styles.sourceRow}>
+                    <TouchableOpacity
+                        onPress={() => setImportType('whatsapp')}
+                        style={[styles.sourceCard, styles.sourceCardFull, importType === 'whatsapp' && styles.sourceCardActive]}
+                    >
+                        <View style={[styles.sourceIcon, importType === 'whatsapp' && styles.sourceIconWhatsApp]}>
+                            <MessageSquare size={24} color={importType === 'whatsapp' ? '#22c55e' : 'white'} />
                         </View>
+                        <Text style={styles.sourceTitle}>WhatsApp</Text>
+                        <Text style={styles.sourceSubtitle}>Archivo .txt exportado</Text>
+                    </TouchableOpacity>
+                </View>
 
-                        {/* Old Paste Option Removed as requested */}
+                {/* Old Paste Option Removed as requested */}
 
-                        <TouchableOpacity
-                            onPress={handleFileUpload}
-                            style={[
-                                styles.uploadArea,
-                                !isDark && {
-                                    backgroundColor: '#ffffff',
-                                    borderColor: '#e5e7eb',
-                                    borderStyle: 'dashed'
-                                }
-                            ]}
-                        >
-                            <View style={[styles.uploadIcon, !isDark && { backgroundColor: '#f3f4f6' }]}>
-                                <Upload size={24} color={isDark ? "white" : "#4b5563"} />
-                            </View>
-                            <Text style={[styles.uploadTitle, !isDark && { color: '#111827' }]}>Subir Archivo .txt</Text>
-                            <Text style={[styles.uploadSubtitle, !isDark && { color: '#6b7280' }]}>
-                                Soporta historiales completos (10k - 200k+ msgs). Analizamos todo automáticamente.
-                            </Text>
-                        </TouchableOpacity>
-                    </>
-                )}
+                <TouchableOpacity
+                    onPress={handleFileUpload}
+                    style={[
+                        styles.uploadArea,
+                        !isDark && {
+                            backgroundColor: '#ffffff',
+                            borderColor: '#e5e7eb',
+                            borderStyle: 'dashed'
+                        }
+                    ]}
+                >
+                    <View style={[styles.uploadIcon, !isDark && { backgroundColor: '#f3f4f6' }]}>
+                        <Upload size={24} color={isDark ? "white" : "#4b5563"} />
+                    </View>
+                    <Text style={[styles.uploadTitle, !isDark && { color: '#111827' }]}>Subir Archivo .txt</Text>
+                    <Text style={[styles.uploadSubtitle, !isDark && { color: '#6b7280' }]}>
+                        Soporta historiales completos (10k - 200k+ msgs). Analizamos todo automáticamente.
+                    </Text>
+                </TouchableOpacity>
+
 
                 {step === 'preview' && (
                     <View>

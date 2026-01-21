@@ -24,7 +24,7 @@
     },
     "android": {
       "package": "com.soyremi.remi",
-      "versionCode": 40,
+      "versionCode": 42,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a1025"
@@ -87,13 +87,6 @@
       "expo-share-intent",
       "expo-share-intent",
       "@react-native-community/datetimepicker",
-      [
-        "@sentry/react-native/expo",
-        {
-          "organization": "remi-3n",
-          "project": "soy-remi-mobile"
-        }
-      ],
       "@siteed/expo-audio-studio"
     ],
     "scheme": "my-ex-coach",

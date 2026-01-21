@@ -8,7 +8,7 @@ import { loadMasterPrompt } from '../../lib/masterPromptSupabase';
 import { storage } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { checkProhibitedContent } from '../../lib/contentModeration';
-import { Send, Sparkles, ImageIcon, Brain, Menu, Flag, MoreVertical, Zap, Headphones, AudioLines, Sun, Moon } from 'lucide-react-native';
+import { Send, Sparkles, ImageIcon, Brain, Menu, Flag, MoreVertical, Zap, Headphones, AudioLines, Sun, Moon, Crown } from 'lucide-react-native';
 import { useSubscription } from '../../lib/SubscriptionContext';
 import { useTheme } from '../../lib/ThemeContext';
 import { reportAIContent } from '../../lib/aiContentModeration';
@@ -112,7 +112,7 @@ export default function ExSimulatorChat() {
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [showVoiceUpgradeModal, setShowVoiceUpgradeModal] = useState(false);
     const [hasShownLoginPrompt, setHasShownLoginPrompt] = useState(false);
-    const [usageData, setUsageData] = useState<{ allowed: boolean, reason?: 'daily' | 'burst', waitTime?: number } | null>(null);
+    const [usageData, setUsageData] = useState<{ allowed: boolean, reason?: 'daily' | 'burst', waitTime?: number, dailyCount?: number } | null>(null);
     // Theme state
     const [chatTheme, setChatTheme] = useState<ChatTheme>('default');
 
@@ -742,13 +742,54 @@ export default function ExSimulatorChat() {
                     style={{ flex: 1 }}
                     keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
                 >
-                    {/* Messages */}
                     <ScrollView
                         ref={scrollViewRef}
                         style={styles.messagesContainer}
                         contentContainerStyle={styles.messagesContent}
                         showsVerticalScrollIndicator={false}
                     >
+                        {/* Limit Warning Banner - Preview Mode for Free Users */}
+                        {!isPremium && usageData && (
+                            <View style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                                paddingVertical: 10,
+                                paddingHorizontal: 16,
+                                marginBottom: 16,
+                                marginHorizontal: 0,
+                                borderRadius: 12,
+                                borderWidth: 1,
+                                borderColor: 'rgba(245, 158, 11, 0.2)',
+                            }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                    <Crown size={16} color="#fbbf24" />
+                                    <View>
+                                        <Text style={{ color: '#fbbf24', fontSize: 13, fontWeight: '600' }}>
+                                            Vista Previa Gratuita
+                                        </Text>
+                                        <Text style={{ color: '#d97706', fontSize: 11 }}>
+                                            {usageData.dailyCount >= 30
+                                                ? 'Has alcanzado el límite diario (30/30)'
+                                                : `Mensajes restantes hoy: ${Math.max(0, 30 - usageData.dailyCount)}`}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <TouchableOpacity
+                                    style={{
+                                        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                                        paddingVertical: 6,
+                                        paddingHorizontal: 10,
+                                        borderRadius: 8,
+                                    }}
+                                    onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
+                                >
+                                    <Text style={{ color: '#fbbf24', fontSize: 11, fontWeight: 'bold' }}>Mejorar</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+
                         {messages.length === 0 && (
                             <View style={styles.emptyStateContainer}>
                                 <View style={[styles.emptyStateIcon, isDark && { backgroundColor: '#1f2937', borderColor: '#374151' }]}>

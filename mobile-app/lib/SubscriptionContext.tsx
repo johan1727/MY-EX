@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import { supabase } from './supabase';
 import type { CustomerInfo, PurchasesPackage } from 'react-native-purchases';
 
@@ -235,35 +235,70 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     };
 
     const updateTierFromInfo = (info: CustomerInfo) => {
-        // If we already have a tier from Supabase (e.g. set in initRevenueCat), 
-        // we might want to keep it unless RevenueCat has a newer/better one.
-        // For now, we'll let RevenueCat override ONLY if it detects a paid tier.
+        // FIXED: Only UPGRADE tier from RevenueCat, never DOWNGRADE.
+        // Supabase is the source of truth after webhook updates it.
+        // RevenueCat entitlements may be delayed or not synced in sandbox/emulator.
 
         if (info.entitlements.active['phoenix']) {
+            console.log('[Subscription] ✅ RevenueCat has phoenix entitlement');
             setTier('phoenix');
         } else if (info.entitlements.active['warrior']) {
+            console.log('[Subscription] ✅ RevenueCat has warrior entitlement');
             setTier('warrior');
         } else if (info.entitlements.active['explorer']) {
+            console.log('[Subscription] ✅ RevenueCat has explorer entitlement');
             setTier('explorer');
         } else {
-            // Only revert to survivor if we are NOT on web (where we rely on Supabase)
-            // or if we want to enforce RevenueCat's source of truth.
-            // For this specific case, we'll leave it as is, but the initRevenueCat logic 
-            // handles the initial load from Supabase.
-            if (Platform.OS !== 'web') {
-                setTier('survivor');
-            }
+            // CRITICAL FIX: Do NOT revert to survivor here!
+            // Supabase has already set the tier from DB (which is updated by webhook).
+            // RevenueCat may not have synced yet, especially in sandbox/test mode.
+            console.log('[Subscription] ⚠️ No RevenueCat entitlements found, keeping Supabase tier');
+            // DO NOT CALL setTier('survivor') - trust Supabase!
         }
     };
+
 
     const purchasePackage = async (pkg: PurchasesPackage) => {
         try {
             const { customerInfo } = await Purchases.purchasePackage(pkg);
             setCustomerInfo(customerInfo);
             updateTierFromInfo(customerInfo);
+
+            // CRITICAL: Robust refresh mechanism
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                console.log('[Subscription] 🔄 Refreshing tier from Supabase after purchase...');
+
+                // Show immediate success to user while we sync in background
+                Alert.alert(
+                    '✅ Compra exitosa',
+                    'Tu suscripción se ha activado. Actualizando perfil...',
+                    [{ text: 'OK' }]
+                );
+
+                // Polling mechanism: Check every 2s for 10s
+                let attempts = 0;
+                const maxAttempts = 5;
+                const pollInterval = 2000;
+
+                const checkTier = async () => {
+                    attempts++;
+                    console.log(`[Subscription] Polling tier attempt ${attempts}/${maxAttempts}`);
+                    await fetchTierFromSupabase(user.id);
+
+                    // If we haven't reached max attempts, schedule next check
+                    if (attempts < maxAttempts) {
+                        setTimeout(checkTier, pollInterval);
+                    }
+                };
+
+                // Start polling
+                checkTier();
+            }
         } catch (e: any) {
             if (!e.userCancelled) {
                 console.error('Purchase error:', e);
+                // Alert handled by revenuecat usually, but good to log
                 throw e;
             }
         }

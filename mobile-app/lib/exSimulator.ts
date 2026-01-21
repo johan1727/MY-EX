@@ -833,14 +833,26 @@ export async function analyzePersonality(
 
     const exMessages = sampledMessages.filter(m => m.sender === exSenderName);
 
-    // Prepare styles sample for prompt
-    const firstMessages = exMessages.slice(0, Math.min(200, Math.floor(exMessages.length * 0.1)));
-    const lastMessages = exMessages.slice(-Math.min(300, Math.floor(exMessages.length * 0.15)));
-    const middleStart = Math.floor(exMessages.length * 0.3);
-    const middleMessages = exMessages.slice(middleStart, Math.floor(exMessages.length * 0.7));
-    const randomMiddle = middleMessages.sort(() => Math.random() - 0.5).slice(0, Math.min(200, middleMessages.length));
+    // Prepare styles sample for prompt (PERCENTAGE-BASED, NO HARD LIMITS)
+    // Take 15% from START, 15% from MIDDLE, and 70% from END (most recent messages)
+    const startPercent = 0.15;
+    const middlePercent = 0.15;
+    const endPercent = 0.70;
+
+    const firstMessages = exMessages.slice(0, Math.floor(exMessages.length * startPercent));
+    const lastMessages = exMessages.slice(-Math.floor(exMessages.length * endPercent));
+
+    // Middle: sample from 35% to 65% of chat, randomly pick 15% of total from that range
+    const middleStartIdx = Math.floor(exMessages.length * 0.35);
+    const middleEndIdx = Math.floor(exMessages.length * 0.65);
+    const middleRange = exMessages.slice(middleStartIdx, middleEndIdx);
+    const middleSampleSize = Math.floor(exMessages.length * middlePercent);
+    const randomMiddle = middleRange.sort(() => Math.random() - 0.5).slice(0, middleSampleSize);
+
     const promptSample = [...firstMessages, ...randomMiddle, ...lastMessages];
     const styleSample = promptSample.map(m => m.content).join('\n');
+
+    console.log(`[analyzePersonality] 📊 Sampling: ${firstMessages.length} start (15%) + ${randomMiddle.length} middle (15%) + ${lastMessages.length} end (70%) = ${promptSample.length} total messages`);
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
@@ -852,8 +864,31 @@ export async function analyzePersonality(
     // Get sample of the full conversation with context
     const contextSample = sampledMessages.slice(0, 50).map(m => `${m.sender}: ${m.content.substring(0, 200)}`).join('\n');
 
-    // Extract context for enhanced analysis
-    const context = extractConversationContext(sampledMessages, exName);
+    // Extract context for enhanced analysis (WITH ERROR HANDLING)
+    let context;
+    try {
+        context = extractConversationContext(sampledMessages, exName);
+    } catch (contextErr) {
+        console.error('[analyzePersonality] extractConversationContext failed:', contextErr);
+        // Provide safe fallback
+        context = {
+            participants: { target: exSenderName, user: userSenderName },
+            fingerprint: { topEmojis: [], signatureWords: [], laughStyle: ['jajaja'] }
+        };
+    }
+
+    // Ensure context has required fields with safe defaults
+    const safeContext = {
+        participants: {
+            target: context?.participants?.target || exSenderName,
+            user: context?.participants?.user || userSenderName
+        },
+        fingerprint: {
+            topEmojis: context?.fingerprint?.topEmojis || [],
+            signatureWords: context?.fingerprint?.signatureWords || [],
+            laughStyle: context?.fingerprint?.laughStyle || ['jajaja']
+        }
+    };
 
     const request1Prompt = `Analiza profundamente a "${exName}" basándote EXCLUSIVAMENTE en estos mensajes REALES.
 
@@ -864,13 +899,13 @@ export async function analyzePersonality(
 4. PROHIBIDO usar valores genéricos o especular
 
 CONTEXTO CRÍTICO:
-- Persona a simular: ${context.participants.target}
-- Usuario real: ${context.participants.user}
+- Persona a simular: ${safeContext.participants.target}
+- Usuario real: ${safeContext.participants.user}
 
 HUELLA LINGÜÍSTICA DETECTADA:
-- Emojis favoritos: ${context.fingerprint.topEmojis.join(' ') || 'ninguno'}
-- Palabras signature: ${context.fingerprint.signatureWords.join(', ') || 'ninguna'}
-- Estilo de risa: ${context.fingerprint.laughStyle.join(', ') || 'jajaja'}
+- Emojis favoritos: ${safeContext.fingerprint.topEmojis.slice(0, 5).join(' ') || 'ninguno'}
+- Palabras signature: ${safeContext.fingerprint.signatureWords.slice(0, 5).join(', ') || 'ninguna'}
+- Estilo de risa: ${safeContext.fingerprint.laughStyle.join(', ') || 'jajaja'}
     
     CONTEXTO IMPORTANTE:
     - La persona a analizar es: ${exSenderName}
@@ -882,7 +917,7 @@ HUELLA LINGÜÍSTICA DETECTADA:
     ${contextSample}
     
     MENSAJES:
-    ${styleSample.slice(0, 30000)} // Limit to fit context
+    ${styleSample.slice(0, 1000000)}
 
     INSTRUCCIONES DE ANÁLISIS:
 

@@ -99,7 +99,7 @@ export default function VoiceConfigScreen() {
             }
 
             const { data } = await supabase
-                .from('ex_profiles')
+                .from('profiles')
                 .select('voice_id')
                 .eq('id', profileId)
                 .single();
@@ -124,7 +124,7 @@ export default function VoiceConfigScreen() {
     // --- Actions ---
 
     const pickAudio = async () => {
-        if (audioFiles.length >= 3) return;
+        if (audioFiles.length >= 5) return;
 
         try {
             const result = await DocumentPicker.getDocumentAsync({
@@ -141,7 +141,7 @@ export default function VoiceConfigScreen() {
                     }
                     return true;
                 });
-                setAudioFiles(current => [...current, ...validFiles].slice(0, 3));
+                setAudioFiles(current => [...current, ...validFiles].slice(0, 5));
             }
         } catch (err) {
             console.error(err);
@@ -177,7 +177,7 @@ export default function VoiceConfigScreen() {
 
             // Save to DB
             await supabase
-                .from('ex_profiles')
+                .from('profiles')
                 .update({ voice_id: result.voiceId })
                 .eq('id', profileId);
 
@@ -291,7 +291,7 @@ export default function VoiceConfigScreen() {
                         <View style={styles.sectionContainer}>
                             <View style={styles.sectionHeader}>
                                 <Text style={styles.sectionTitle}>MUESTRAS DE AUDIO</Text>
-                                <Text style={styles.sectionCounter}>{audioFiles.length}/3</Text>
+                                <Text style={styles.sectionCounter}>{audioFiles.length}/5</Text>
                             </View>
 
                             {/* Guidelines Card */}
@@ -322,7 +322,7 @@ export default function VoiceConfigScreen() {
                             ))}
 
                             {/* Add Button */}
-                            {audioFiles.length < 3 && (
+                            {audioFiles.length < 5 && (
                                 <TouchableOpacity
                                     style={[styles.addCard, { borderColor: borderColor, backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : '#f9fafb' }]}
                                     onPress={pickAudio}
@@ -338,12 +338,25 @@ export default function VoiceConfigScreen() {
             </ScrollView>
 
             {/* Bottom Action Footer */}
-            {/* VOICE CLONING DISABLED - Using pre-selected voices only
             {!existingVoiceId && (
                 <View style={[styles.footer, { backgroundColor: bgMain, borderTopColor: borderColor }, isCloning && { opacity: 0.5 }]}>
                     <TouchableOpacity
                         style={[styles.mainButton, { backgroundColor: isDark ? '#fff' : '#000' }, audioFiles.length === 0 && styles.disabledButton]}
-                        onPress={startCloning}
+                        onPress={() => {
+                            if (audioFiles.length === 1) {
+                                // Warning for single audio sample
+                                Alert.alert(
+                                    '⚠️ Advertencia de Calidad',
+                                    'Con una sola muestra de audio, la voz clonada puede sonar menos natural. Se recomienda usar 3-5 muestras para mejor calidad.\n\n¿Deseas continuar de todos modos?',
+                                    [
+                                        { text: 'Cancelar', style: 'cancel' },
+                                        { text: 'Continuar', onPress: startCloning }
+                                    ]
+                                );
+                            } else {
+                                startCloning();
+                            }
+                        }}
                         disabled={audioFiles.length === 0 || isCloning}
                     >
                         {isCloning ? (
@@ -358,7 +371,6 @@ export default function VoiceConfigScreen() {
                     <Text style={[styles.disclaimer, { color: textSub }]}>Powered by ElevenLabs™ Neural Engine</Text>
                 </View>
             )}
-            */}
         </View>
     );
 }

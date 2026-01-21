@@ -85,9 +85,14 @@ export default function ActiveCallScreen() {
     const [sound, setSound] = useState<Audio.Sound | null>(null);
     const [currentVolume, setCurrentVolume] = useState(-160); // Metering dB
 
-    // Context/Memory (Last 2 exchanges for context)
-    const conversationHistory = useRef<string[]>([]);
-    const [systemPrompt, setSystemPrompt] = useState('');
+    // Hands-Free Mode State
+    const [isHandsFree, setIsHandsFree] = useState(false);
+    const silenceTimer = useRef<NodeJS.Timeout | null>(null);
+    const lastVoiceTime = useRef<number>(Date.now());
+
+    // Context/Memory (Persistent Chat Session)
+    const chatSession = useRef<any>(null); // GoogleGenerativeAI ChatSession
+    // We still keep a small history for debug/display if needed, but Gemini handles context now.
 
     // Usage Tracking State
     const sessionSeconds = useRef(0);
@@ -116,6 +121,7 @@ export default function ActiveCallScreen() {
         return () => {
             if (sound) sound.unloadAsync();
             if (usageTimer.current) clearInterval(usageTimer.current);
+            if (silenceTimer.current) clearTimeout(silenceTimer.current);
 
             // Log remaining unlogged time on exit (Best Effort)
             const pending = sessionSeconds.current - lastLoggedSeconds.current;
@@ -154,7 +160,7 @@ export default function ActiveCallScreen() {
         }
     };
 
-    // Load Profile Data
+    // Load Profile Data & Init Chat Session
     const loadProfileData = async () => {
         try {
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileId);
@@ -169,12 +175,8 @@ export default function ActiveCallScreen() {
                 data = profileData;
             }
 
-            if (!data) {
-                setSystemPrompt(`Actúa como mi Ex pareja. Tu nombre es ${name || 'Ex'}.`);
-                return;
-            }
-
-            const relType = data.relationship_type || 'ex';
+            // Defaults
+            const relType = data?.relationship_type || 'ex';
             const baseMap: Record<string, string> = {
                 'ex': 'Actúa como mi Ex pareja.',
                 'partner': 'Actúa como mi Pareja actual.',
@@ -185,26 +187,45 @@ export default function ActiveCallScreen() {
             };
 
             const coreInstruction = baseMap[relType] || baseMap['ex'];
-            const personality = data.master_prompt
-                ? `PERSONALIDAD: ${data.master_prompt.substring(0, 500)}...`
-                : 'Personalidad: Sarcástica y directa.';
+            // FIX: Remove truncation to allow full personality
+            const personality = data?.master_prompt
+                ? `PERSONALIDAD COMPLETA: ${data.master_prompt}`
+                : 'Personalidad: Sarcástica, directa y con memoria de nuestra relación.';
 
-            setSystemPrompt(`
+            const systemInstruction = `
                 ${coreInstruction}
-                Tu nombre es ${data.name || name}.
+                Tu nombre es ${data?.name || name || 'Ex'}.
                 ${personality}
                 
-                CONTEXTO: Conversación TELEFÓNICA REAL TIEMPO REAL.
+                CONTEXTO: Conversación TELEFÓNICA DE VOZ EN TIEMPO REAL.
                 
                 INSTRUCCIONES CRÍTICAS DE FORMATO:
                 1. SOLO TEXTO HABLADO. NUNCA escribas acciones entre paréntesis ni corchetes.
-                   - MAL: "(suspiro) Hola..." o "[tono molesto] ¿Qué quieres?" o "*Cuelga*"
+                   - MAL: "(suspiro) Hola..." o "*Cuelga*"
                    - BIEN: "¿Qué quieres?"
-                2. RESPUESTAS CORTAS (1-2 frases máximo). Es un chat de voz fluido.
-                3. Tono: ${data.master_prompt ? 'Usa la personalidad definida.' : 'Sarcástica y directa.'}
+                2. RESPUESTAS CORTAS Y NATURALES (1-2 frases máximo). Es un chat de voz fluido.
+                3. IMPRESCINDIBLE: Recuerda lo que el usuario te dice. Mantén el hilo de la conversación.
                 
-                IMPORTANTE: Si el usuario no dice nada o hay ruido, di "¿Hola?" o "¿Sigues ahí?". NO inventes una conversación.
-            `);
+                IMPORTANTE: Si el usuario no dice nada o hay solo ruido, pregunta "¿Hola?" o di algo relacionado con tu personalidad.
+            `;
+
+            // Initialize Gemini Chat Session
+            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+            chatSession.current = model.startChat({
+                history: [
+                    {
+                        role: "user",
+                        parts: [{ text: "Hola, contestame el teléfono." }],
+                    },
+                    {
+                        role: "model",
+                        parts: [{ text: "¿Aló? ¿Quién es?" }],
+                    },
+                ],
+                systemInstruction: { role: 'system', parts: [{ text: systemInstruction }] }
+            });
+
+            console.log('[REMI Live] Chat Session Initialized with Full Prompt');
 
         } catch (e) {
             console.error('Error constructing prompt', e);
@@ -227,84 +248,124 @@ export default function ActiveCallScreen() {
                     { text: 'Entendido', onPress: () => disconnect() }
                 ]);
             } else {
-                // For web, use Alert.alert which will show a better modal
                 Alert.alert(
                     'Límite Alcanzado',
-                    'Tu plan no tiene minutos disponibles o se han agotado. Por favor actualiza tu plan.',
+                    'Tu plan no tiene minutos disponibles o se han agotado.',
                     [{ text: 'Entendido', onPress: () => disconnect() }]
                 );
             }
         }
     };
 
+    // --- AUDIO RECORDING & VAD LOGIC ---
+
     const startRecording = async () => {
         try {
+            // Cancel any pending silence checks
+            if (silenceTimer.current) clearTimeout(silenceTimer.current);
+
             await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
             const { recording } = await Audio.Recording.createAsync(
                 Audio.RecordingOptionsPresets.HIGH_QUALITY,
                 (status) => {
-                    if (status.metering) setCurrentVolume(status.metering);
+                    // METERING / VAD
+                    if (status.metering) {
+                        setCurrentVolume(status.metering);
+                        handleVAD(status.metering);
+                    }
                 },
-                100
+                100 // Update every 100ms
             );
             setRecording(recording);
             setCallState('listening');
-            setStatusText('Escuchando...');
+            setStatusText(isHandsFree ? 'Escuchando (Auto)...' : 'Escuchando...');
         } catch (err) {
             console.error('Failed to start recording', err);
         }
     };
 
+    const handleVAD = (volume: number) => {
+        if (!isHandsFree) return;
+
+        // VAD CONSTANTS
+        const SPEECH_THRESHOLD = -45; // dB - adjust based on rigorous testing
+        const SILENCE_DURATION = 1500; // ms to wait before sending
+
+        if (volume > SPEECH_THRESHOLD) {
+            // Speech detected - reset timer
+            lastVoiceTime.current = Date.now();
+            if (silenceTimer.current) {
+                clearTimeout(silenceTimer.current);
+                silenceTimer.current = null;
+            }
+        } else {
+            // Silence... check usage
+            const timeSinceVoice = Date.now() - lastVoiceTime.current;
+
+            // Only start timer if we heard something successfully before (avoid instant trigger on start)
+            // For simplicity, we just check if timer is NOT running
+            if (!silenceTimer.current) {
+                silenceTimer.current = setTimeout(() => {
+                    // Trigger Send!
+                    console.log('[VAD] Silence detected, sending audio...');
+                    stopRecording();
+                }, SILENCE_DURATION);
+            }
+        }
+    };
+
     const stopRecording = async () => {
         if (!recording) return;
+
+        // Clear timer
+        if (silenceTimer.current) {
+            clearTimeout(silenceTimer.current);
+            silenceTimer.current = null;
+        }
+
         setCallState('thinking');
         setStatusText('Pensando...');
 
-        await recording.stopAndUnloadAsync();
-        const uri = recording.getURI();
-        setRecording(null);
+        try {
+            await recording.stopAndUnloadAsync();
+            const uri = recording.getURI();
+            setRecording(null);
 
-        if (uri) {
-            await processAudioResponse(uri);
+            if (uri) {
+                await processAudioResponse(uri);
+            }
+        } catch (e) {
+            console.error('Stop Recording Error', e);
+            setCallState('idle');
+            setStatusText(isHandsFree ? 'Escuchando (Auto)...' : 'Mantén presionado');
+            if (isHandsFree) startRecording(); // Retry listen if error
         }
     };
 
     const processAudioResponse = async (audioUri: string) => {
         try {
-            let base64Audio = '';
-            if (Platform.OS === 'web') {
-                const res = await fetch(audioUri);
-                const blob = await res.blob();
-                base64Audio = await new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(blob);
-                });
-            } else {
-                base64Audio = await FileSystem.readAsStringAsync(audioUri, { encoding: FileSystem.EncodingType.Base64 });
+            if (!chatSession.current) {
+                await loadProfileData(); // Retry init
+                if (!chatSession.current) throw new Error("Chat session failed to init");
             }
 
-            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
-            const finalPrompt = `
-                ${systemPrompt || 'Actúa como mi Ex.'}
-                HISTORIAL RECIENTE: ${conversationHistory.current.join(' | ')}
-                
-                Instrucción: El usuario te acaba de enviar un audio. Responde de forma hablada y natural.
-            `;
+            let base64Audio = '';
+            // Convert audio to Base64
+            base64Audio = await FileSystem.readAsStringAsync(audioUri, { encoding: FileSystem.EncodingType.Base64 });
 
-            const result = await model.generateContent([
-                finalPrompt,
+            // Send to Gemini Chat Session (Persistent History)
+            const result = await chatSession.current.sendMessage([
                 { inlineData: { data: base64Audio, mimeType: 'audio/m4a' } }
             ]);
 
-            const cleanReply = result.response.text()
+            const responseText = result.response.text();
+
+            const cleanReply = responseText
                 .replace(/[\(\[\{].*?[\)\]\}]/g, '') // Remove (text), [text], {text}
                 .replace(/\*.*?\*/g, '')             // Remove *text*
                 .trim();
 
-            conversationHistory.current.push(`Ex: ${cleanReply}`);
-            if (conversationHistory.current.length > 4) conversationHistory.current.shift();
+            console.log(`[REMI Live] AI Reply: ${cleanReply.substring(0, 50)}...`);
 
             // Start TTS with CLEAN text
             const audioPath = await elevenLabsService.streamTextToSpeech(cleanReply, voiceId);
@@ -314,26 +375,32 @@ export default function ActiveCallScreen() {
             console.error('Process Error:', error);
             setStatusText('Error de conexión');
             setCallState('idle');
+            // If Hands Free, retry listening after error delay?
+            if (isHandsFree) {
+                setTimeout(() => startRecording(), 3000);
+            }
         }
     };
 
     const playResponse = async (uri: string, text: string) => {
         try {
             setCallState('speaking');
-            setStatusText(text); // Pass full text, UI will type it out
+            setStatusText(text);
 
             await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
             const { sound: playbackSound, status } = await Audio.Sound.createAsync({ uri });
             setSound(playbackSound);
-
-            // @ts-ignore
-            const durationSec = status.durationMillis ? (status.durationMillis / 1000) : 0;
             await playbackSound.playAsync();
 
             playbackSound.setOnPlaybackStatusUpdate(async (status) => {
                 if (status.isLoaded && status.didJustFinish) {
                     setCallState('idle');
-                    setStatusText('Tu turno...');
+                    setStatusText(isHandsFree ? 'Escuchando (Auto)...' : 'Tu turno...');
+
+                    // AUTO-RESUME for Hands-Free
+                    if (isHandsFree) {
+                        startRecording();
+                    }
                 }
             });
 
@@ -345,11 +412,34 @@ export default function ActiveCallScreen() {
 
     const disconnect = () => {
         if (sound) sound.unloadAsync();
+        if (recording) recording.stopAndUnloadAsync();
         if (router.canGoBack()) {
             router.back();
         } else {
-            if (Platform.OS === 'web') window.history.back();
-            else router.replace('/');
+            router.replace('/');
+        }
+    };
+
+    const toggleHandsFree = () => {
+        const nextState = !isHandsFree;
+        setIsHandsFree(nextState);
+
+        // If enabling hands-free and currently idle, start listening
+        if (nextState && callState === 'idle') {
+            startRecording();
+        }
+        // If disabling hands-free and currently listening, stop (but don't send) or just let it finish?
+        // Better to just let user manually stop or cancel.
+        if (!nextState && callState === 'listening') {
+            // Should we stop? Let's just update text.
+            setStatusText('Mantén presionado para hablar');
+            // We might want to stop the auto-listening loop
+            if (recording) {
+                recording.stopAndUnloadAsync().then(() => {
+                    setRecording(null);
+                    setCallState('idle');
+                });
+            }
         }
     };
 
@@ -384,38 +474,66 @@ export default function ActiveCallScreen() {
                         />
                     ) : (
                         <Text style={[styles.mainStatus, { opacity: 0.6, fontSize: 16 }]}>
-                            {statusText === 'Thinking...' ? 'Pensando...' : statusText}
+                            {statusText}
                         </Text>
                     )}
                 </View>
+
+                {/* Hands Free Toggle */}
+                <TouchableOpacity onPress={toggleHandsFree} style={styles.handsFreeToggle}>
+                    <Ionicons
+                        name={isHandsFree ? "mic-circle" : "mic-off-circle-outline"}
+                        size={24}
+                        color={isHandsFree ? "#10b981" : "#71717a"}
+                    />
+                    <Text style={{ color: isHandsFree ? "#10b981" : "#71717a", marginLeft: 6, fontWeight: '600' }}>
+                        {isHandsFree ? "Manos Libres ACTIVADO" : "Modo Manual"}
+                    </Text>
+                </TouchableOpacity>
+
             </View>
 
             {/* Footer */}
-            <View style={styles.bottomBar}>
-                <View style={{ width: 60 }} />
+            {!isHandsFree && (
+                <View style={styles.bottomBar}>
+                    <View style={{ width: 60 }} />
 
-                {/* Talk Button (Hold) */}
-                <TouchableOpacity
-                    style={[
-                        styles.talkButton,
-                        callState === 'listening' ? styles.talkButtonActive : null
-                    ]}
-                    onPressIn={() => callState === 'idle' && startRecording()}
-                    onPressOut={() => callState === 'listening' && stopRecording()}
-                    disabled={callState === 'thinking' || callState === 'speaking'}
-                    activeOpacity={0.8}
-                >
-                    <Ionicons
-                        name={callState === 'thinking' ? "ellipsis-horizontal" : "mic"}
-                        size={32}
-                        color="white"
-                    />
-                </TouchableOpacity>
+                    {/* Talk Button (Hold) */}
+                    <TouchableOpacity
+                        style={[
+                            styles.talkButton,
+                            callState === 'listening' ? styles.talkButtonActive : null
+                        ]}
+                        onPressIn={() => callState === 'idle' && startRecording()}
+                        onPressOut={() => callState === 'listening' && stopRecording()}
+                        disabled={callState === 'thinking' || callState === 'speaking'}
+                        activeOpacity={0.8}
+                    >
+                        <Ionicons
+                            name={callState === 'thinking' ? "ellipsis-horizontal" : "mic"}
+                            size={32}
+                            color="white"
+                        />
+                    </TouchableOpacity>
 
-                <TouchableOpacity onPress={disconnect} style={styles.hangupButton}>
-                    <Ionicons name="close" size={28} color="white" />
-                </TouchableOpacity>
-            </View>
+                    <TouchableOpacity onPress={disconnect} style={styles.hangupButton}>
+                        <Ionicons name="close" size={28} color="white" />
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {/* Hands Free Footer (Simpler) */}
+            {isHandsFree && (
+                <View style={styles.bottomBar}>
+                    <TouchableOpacity onPress={toggleHandsFree} style={[styles.talkButton, { borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+                        <Ionicons name="stop" size={28} color="#10b981" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={disconnect} style={styles.hangupButton}>
+                        <Ionicons name="close" size={28} color="white" />
+                    </TouchableOpacity>
+                </View>
+            )}
         </View>
     );
 }

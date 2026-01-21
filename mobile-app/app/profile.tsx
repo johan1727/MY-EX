@@ -5,6 +5,7 @@ import { useSubscription } from '../lib/SubscriptionContext';
 import { SUBSCRIPTION_CONFIG, SubscriptionTier } from '../lib/subscriptions';
 import { User, LogOut, LogIn, Mail, Calendar, Settings, Shield, ChevronRight, Edit2, Share2, Star, ArrowLeft, Sparkles, Trash2, Download, HelpCircle, X, Zap, Crown, Heart } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
+import Purchases from 'react-native-purchases';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -104,10 +105,37 @@ export default function ProfileScreen() {
     const handleSignOut = async () => {
         const executeSignOut = async () => {
             try {
+                // 1. RevenueCat Logout
+                if (Platform.OS !== 'web') {
+                    try {
+                        await Purchases.logOut();
+                    } catch (e) {
+                        console.log('[Profile] RC logout error:', e);
+                    }
+                }
+
+                // 2. Google Sign Out (Native)
+                if (Platform.OS !== 'web') {
+                    try {
+                        const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+                        await GoogleSignin.signOut();
+                    } catch (e) {
+                        // Ignore if Google Sign In is not configured or fails
+                    }
+                }
+
+                // 3. Supabase Sign Out
                 await supabase.auth.signOut();
+
+                // 4. Force navigation logic
+                if (router.canGoBack()) {
+                    router.dismissAll();
+                }
                 router.replace('/auth');
             } catch (error) {
                 console.error('[Profile] Logout error:', error);
+                // Fallback exit
+                router.replace('/auth');
             }
         };
 

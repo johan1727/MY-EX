@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
+import { generateUUID } from './uuid';
 import { ParsedMessage } from './exSimulator';
 import { analyzePersonality, ExProfile } from './exSimulator';
 import { clearAnalysisCache } from './chatValidation';
@@ -132,7 +133,12 @@ export const AnalysisProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
             // 4. Construct Profile Data
             const profileData: any = {
-                id: updateProfileId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`),
+
+
+                // ...
+
+                id: updateProfileId || generateUUID(),
+
                 exName,
                 userName: detectedUserName,
                 profile,

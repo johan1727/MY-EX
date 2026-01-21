@@ -101,13 +101,12 @@ export class ElevenLabsService {
     async streamTextToSpeech(text: string, voiceId: string): Promise<string> {
         if (!ELEVENLABS_API_KEY) throw new Error('Missing ElevenLabs API Key');
 
-        // Use Multilingual v2 for higher quality (slower than Turbo but better cloning)
-        const modelId = 'eleven_multilingual_v2';
-        // Reduce latency setting slightly (3 -> 0) because v2 doesn't support aggressive optimization as well as Turbo
-        // But we want quality.
-        const url = `${BASE_URL}/text-to-speech/${voiceId}/stream?optimize_streaming_latency=1&output_format=mp3_44100_128`;
+        // Use Turbo v2.5 for best quality + low latency (conversational AI)
+        const modelId = 'eleven_turbo_v2_5';
+        // Optimize for streaming with minimal latency for real-time conversation
+        const url = `${BASE_URL}/text-to-speech/${voiceId}/stream?optimize_streaming_latency=2&output_format=mp3_44100_128`;
 
-        console.log(`[ElevenLabs] Streaming TTS (${text.length} chars) for voice ${voiceId}...`);
+        console.log(`[ElevenLabs] Streaming TTS (${text.length} chars) for voice ${voiceId} using ${modelId}...`);
 
         try {
             // Using FileSystem.downloadAsync to stream directly to file is cleaner for caching
@@ -130,10 +129,10 @@ export class ElevenLabsService {
                     text: text,
                     model_id: modelId,
                     voice_settings: {
-                        stability: 0.5,        // Balanced
-                        similarity_boost: 0.8, // Higher similarity for cloned voices
-                        style: 0.0,            // Default
-                        use_speaker_boost: true
+                        stability: 0.6,        // Slightly higher stability for conversational consistency
+                        similarity_boost: 0.85, // Very high similarity for accurate voice cloning
+                        style: 0.3,            // Add some expressiveness for natural conversation
+                        use_speaker_boost: true // Boost speaker clarity
                     }
                 })
             });
