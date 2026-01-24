@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { getOfferings, purchasePackage } from '../lib/revenuecat';
 import { PurchasesPackage } from 'react-native-purchases';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from '../lib/i18n';
 
 interface Plan {
     id: string;
@@ -32,6 +33,7 @@ interface Plan {
 
 export default function PremiumScreen() {
     const router = useRouter();
+    const { t } = useLanguage();
     const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
@@ -69,10 +71,10 @@ export default function PremiumScreen() {
             icon: Star,
             color: '#3b82f6',
             features: [
-                'Límites más amplios de uso',
-                'Crea múltiples perfiles',
-                'Análisis profundo de patrones',
-                'REMI recuerda tu historia completa',
+                t('plan_explorer_1'),
+                t('plan_explorer_2'),
+                t('plan_explorer_3'),
+                t('plan_explorer_4'),
             ],
         },
         {
@@ -81,10 +83,10 @@ export default function PremiumScreen() {
             icon: Flame,
             color: '#f59e0b',
             features: [
-                'Uso extendido sin interrupciones',
-                'Respuestas más largas y detalladas',
-                'Decodificador de mensajes incluido',
-                'Respuestas prioritarias',
+                t('plan_warrior_1'),
+                t('plan_warrior_2'),
+                t('plan_warrior_3'),
+                t('plan_warrior_4'),
             ],
             popular: true,
         },
@@ -94,10 +96,10 @@ export default function PremiumScreen() {
             icon: Sparkles,
             color: '#ec4899',
             features: [
-                '✨ Los límites más altos',
-                'Coaching personalizado con IA avanzada',
-                'Soporte VIP prioritario 24/7',
-                'Acceso exclusivo a funciones beta',
+                t('plan_phoenix_1'),
+                t('plan_phoenix_2'),
+                t('plan_phoenix_3'),
+                t('plan_phoenix_4'),
             ],
             best: true,
         },
@@ -138,7 +140,7 @@ export default function PremiumScreen() {
             }
         } catch (error) {
             console.error('Error loading offerings:', error);
-            showAlert('Error', 'No se pudieron cargar los planes. Intenta de nuevo.', [{ text: 'OK' }], 'error');
+            showAlert(t('alert_purchase_error_title'), t('alert_error_generic'), [{ text: 'OK' }], 'error');
         } finally {
             setLoading(false);
         }
@@ -211,12 +213,12 @@ export default function PremiumScreen() {
 
         if (!user || user.is_anonymous) {
             showAlert(
-                '🔐 Cuenta requerida',
-                'Para suscribirte a un plan premium, necesitas tener una cuenta. Tu suscripción se guardará en tu cuenta para que puedas acceder desde cualquier dispositivo.',
+                `🔐 ${t('alert_account_required_title')}`,
+                t('alert_account_required_msg'),
                 [
-                    { text: 'Cancelar', style: 'cancel' },
+                    { text: t('alert_cancel'), style: 'cancel' },
                     {
-                        text: 'Iniciar sesión',
+                        text: t('alert_signin'),
                         onPress: () => { closeAlert(); router.push('/auth'); }
                     }
                 ],
@@ -229,8 +231,8 @@ export default function PremiumScreen() {
 
         if (!pkg) {
             showAlert(
-                'Plan no disponible',
-                'Este plan no está disponible actualmente. Por favor intenta con otro plan.',
+                t('alert_plan_unavailable_title'),
+                t('alert_plan_unavailable_msg'),
                 [{ text: 'OK' }],
                 'warning'
             );
@@ -245,22 +247,22 @@ export default function PremiumScreen() {
 
             if (result.success) {
                 showAlert(
-                    '🎉 ¡Compra exitosa!',
-                    'Tu suscripción ha sido activada. ¡Disfruta de todas las funciones premium!',
+                    `🎉 ${t('alert_purchase_success_title')}`,
+                    t('alert_purchase_success_msg'),
                     [{ text: 'OK', onPress: () => { closeAlert(); router.back(); } }],
                     'success'
                 );
             } else if (result.error !== 'cancelled') {
                 showAlert(
-                    'Error en la compra',
-                    result.error || 'Hubo un problema con la compra. Intenta de nuevo.',
+                    t('alert_purchase_error_title'),
+                    result.error || t('alert_error_generic'),
                     [{ text: 'OK' }],
                     'error'
                 );
             }
         } catch (error) {
             console.error('Purchase error:', error);
-            showAlert('Error', 'Hubo un problema con la compra. Intenta de nuevo.', [{ text: 'OK' }], 'error');
+            showAlert(t('alert_purchase_error_title'), t('alert_error_generic'), [{ text: 'OK' }], 'error');
         } finally {
             setPurchasing(false);
         }
@@ -270,7 +272,7 @@ export default function PremiumScreen() {
         return (
             <View style={[styles.container, styles.loadingContainer]}>
                 <ActivityIndicator size="large" color="#f59e0b" />
-                <Text style={styles.loadingText}>Cargando planes...</Text>
+                <Text style={styles.loadingText}>{t('alert_loading_plans')}</Text>
             </View>
         );
     }
@@ -284,7 +286,7 @@ export default function PremiumScreen() {
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                         <ArrowLeft size={24} color="#fff" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Planes Premium</Text>
+                    <Text style={styles.headerTitle}>{t('paywall_title')}</Text>
                     <View style={styles.headerSpacer} />
                 </View>
             </SafeAreaView>
@@ -296,8 +298,8 @@ export default function PremiumScreen() {
                     style={styles.hero}
                 >
                     <Crown size={48} color="#fff" />
-                    <Text style={styles.heroTitle}>Elige tu Plan</Text>
-                    <Text style={styles.heroSubtitle}>Desbloquea todo el poder de REMI</Text>
+                    <Text style={styles.heroTitle}>{t('paywall_hero_title')}</Text>
+                    <Text style={styles.heroSubtitle}>{t('paywall_hero_subtitle')}</Text>
                 </LinearGradient>
 
                 {/* Billing Toggle */}
@@ -307,7 +309,7 @@ export default function PremiumScreen() {
                         onPress={() => setBillingPeriod('monthly')}
                     >
                         <Text style={[styles.toggleText, billingPeriod === 'monthly' && styles.toggleTextActive]}>
-                            Mensual
+                            {t('paywall_monthly')}
                         </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -315,7 +317,7 @@ export default function PremiumScreen() {
                         onPress={() => setBillingPeriod('yearly')}
                     >
                         <Text style={[styles.toggleText, billingPeriod === 'yearly' && styles.toggleTextActive]}>
-                            Anual
+                            {t('paywall_yearly')}
                         </Text>
                         <View style={styles.discountBadge}>
                             <Text style={styles.discountText}>-50%</Text>
@@ -344,12 +346,12 @@ export default function PremiumScreen() {
                             >
                                 {plan.popular && (
                                     <View style={styles.popularBadge}>
-                                        <Text style={styles.popularBadgeText}>MÁS POPULAR</Text>
+                                        <Text style={styles.popularBadgeText}>{t('paywall_popular')}</Text>
                                     </View>
                                 )}
                                 {plan.best && (
                                     <View style={[styles.popularBadge, { backgroundColor: '#ec4899' }]}>
-                                        <Text style={styles.popularBadgeText}>🔥 MEJOR VALOR</Text>
+                                        <Text style={styles.popularBadgeText}>🔥 {t('paywall_best_value')}</Text>
                                     </View>
                                 )}
 
@@ -364,7 +366,7 @@ export default function PremiumScreen() {
                                     {hasFreeTrial(plan.id, billingPeriod) && (
                                         <View style={styles.freeTrialBadge}>
                                             <Text style={styles.freeTrialText}>
-                                                🎁 {getTrialDuration(plan.id, billingPeriod).toUpperCase()} GRATIS
+                                                🎁 {getTrialDuration(plan.id, billingPeriod).toUpperCase()} {t('paywall_free_trial')}
                                             </Text>
                                         </View>
                                     )}
@@ -374,7 +376,7 @@ export default function PremiumScreen() {
                                                 {price}
                                             </Text>
                                             <Text style={styles.planPeriod}>
-                                                después del trial
+                                                {t('paywall_after_trial')}
                                             </Text>
                                         </View>
                                     ) : (
@@ -383,7 +385,7 @@ export default function PremiumScreen() {
                                                 {price}
                                             </Text>
                                             <Text style={styles.planPeriod}>
-                                                /{billingPeriod === 'yearly' ? 'año' : 'mes'}
+                                                /{billingPeriod === 'yearly' ? t('paywall_year') : t('paywall_month')}
                                             </Text>
                                         </View>
                                     )}
@@ -403,10 +405,10 @@ export default function PremiumScreen() {
                                         <ActivityIndicator size="small" color="#fff" />
                                     ) : (
                                         <Text style={styles.selectBtnText}>
-                                            {!hasPackage ? 'No disponible' :
+                                            {!hasPackage ? t('paywall_unavailable') :
                                                 hasFreeTrial(plan.id, billingPeriod) ?
-                                                    `Comenzar Prueba Gratis ${getTrialDuration(plan.id, billingPeriod)}` :
-                                                    `Elegir ${plan.name}`}
+                                                    `${t('paywall_start_trial')} ${getTrialDuration(plan.id, billingPeriod)}` :
+                                                    `${t('paywall_choose')} ${plan.name}`}
                                         </Text>
                                     )}
                                 </View>
@@ -416,7 +418,7 @@ export default function PremiumScreen() {
                 </View>
 
                 <Text style={styles.disclaimer}>
-                    Se renovará automáticamente. Cancela cuando quieras desde Google Play.
+                    {t('paywall_disclaimer')}
                 </Text>
             </ScrollView>
 

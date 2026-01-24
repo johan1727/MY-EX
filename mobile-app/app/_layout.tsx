@@ -16,6 +16,7 @@ import { BackgroundAnalysisManager } from '../lib/BackgroundAnalysisManager';
 import { AnalysisProgressIndicator } from '../components/AnalysisProgressIndicator';
 import WebAnalytics from '../components/WebAnalytics';
 import HotjarTracking from '../components/HotjarTracking';
+import { NotificationManager } from '../lib/notifications';
 import * as Sentry from '@sentry/react-native';
 
 // Initialize Sentry for error monitoring
@@ -158,6 +159,18 @@ export default function RootLayout() {
     useEffect(() => {
         checkLockStatus();
         const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+        // 🔔 Initialize Notifications
+        // Request permissions and schedule daily check-in (8:00 PM)
+        const initNotifications = async () => {
+            const hasPermission = await NotificationManager.requestPermissions();
+            if (hasPermission) {
+                await NotificationManager.scheduleDailyCheckIn();
+                console.log('[Notifications] Initialized and scheduled daily check-in');
+            }
+        };
+        initNotifications();
+
         return () => subscription.remove();
     }, []);
 

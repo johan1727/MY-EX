@@ -101,10 +101,11 @@ export class ElevenLabsService {
     async streamTextToSpeech(text: string, voiceId: string): Promise<string> {
         if (!ELEVENLABS_API_KEY) throw new Error('Missing ElevenLabs API Key');
 
-        // Use Turbo v2.5 for best quality + low latency (conversational AI)
-        const modelId = 'eleven_turbo_v2_5';
-        // Optimize for streaming with minimal latency for real-time conversation
-        const url = `${BASE_URL}/text-to-speech/${voiceId}/stream?optimize_streaming_latency=2&output_format=mp3_44100_128`;
+        // Use Multilingual v2 for BEST QUALITY + Natural Expression
+        // (Turbo v2.5 is faster but can sound robotic)
+        const modelId = 'eleven_multilingual_v2';
+        // Optimize for quality over latency for more natural conversation
+        const url = `${BASE_URL}/text-to-speech/${voiceId}/stream?optimize_streaming_latency=3&output_format=mp3_44100_128`;
 
         console.log(`[ElevenLabs] Streaming TTS (${text.length} chars) for voice ${voiceId} using ${modelId}...`);
 
@@ -129,9 +130,9 @@ export class ElevenLabsService {
                     text: text,
                     model_id: modelId,
                     voice_settings: {
-                        stability: 0.6,        // Slightly higher stability for conversational consistency
-                        similarity_boost: 0.85, // Very high similarity for accurate voice cloning
-                        style: 0.3,            // Add some expressiveness for natural conversation
+                        stability: 0.5,        // Lower stability for more dynamic/expressive voice
+                        similarity_boost: 0.9, // Very high similarity for accurate voice cloning
+                        style: 0.75,           // Higher style for natural expressiveness (less robotic!)
                         use_speaker_boost: true // Boost speaker clarity
                     }
                 })

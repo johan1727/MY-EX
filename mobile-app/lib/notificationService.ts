@@ -20,6 +20,8 @@ export async function registerForPushNotifications(): Promise<string | null> {
                 importance: Notifications.AndroidImportance.MAX,
                 vibrationPattern: [0, 250, 250, 250],
                 lightColor: '#a855f7',
+                sound: 'default',
+                showBadge: true,
             });
         }
 

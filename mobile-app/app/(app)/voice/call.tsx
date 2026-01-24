@@ -9,9 +9,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { elevenLabsService } from '../../../lib/ElevenLabsService';
 import { callLimitService } from '../../../lib/CallLimitService';
 import { supabase } from '../../../lib/supabase';
+import { useLanguage } from '../../../lib/i18n';
 import OrganicOrb from '../../../components/OrganicOrb'; // Re-using the nice Orb
 import Animated, { FadeIn, useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // --- HELPER: Pulse Rings for Visual Depth ---
 const PulseRings = () => {
@@ -85,10 +87,14 @@ export default function ActiveCallScreen() {
     const [sound, setSound] = useState<Audio.Sound | null>(null);
     const [currentVolume, setCurrentVolume] = useState(-160); // Metering dB
 
-    // Hands-Free Mode State
-    const [isHandsFree, setIsHandsFree] = useState(false);
+    // Hands-Free Mode State (DEFAULT: TRUE for better UX)
+    const [isHandsFree, setIsHandsFree] = useState(true);
+    const [isVADListening, setIsVADListening] = useState(false); // Track VAD activity
     const silenceTimer = useRef<NodeJS.Timeout | null>(null);
     const lastVoiceTime = useRef<number>(Date.now());
+
+    // Animation for mode transitions
+    const modeOpacity = useSharedValue(1);
 
     // Context/Memory (Persistent Chat Session)
     const chatSession = useRef<any>(null); // GoogleGenerativeAI ChatSession
@@ -109,6 +115,7 @@ export default function ActiveCallScreen() {
             });
             await loadProfileData();
             await checkLimits(); // Initial check
+            await showFirstTimeHint(); // Show hint only on first use
         };
         setup();
 
@@ -160,6 +167,31 @@ export default function ActiveCallScreen() {
         }
     };
 
+    // Show First-Time Hint for Hands-Free Mode (i18n supported)
+    const { t, language } = useLanguage();
+    const showFirstTimeHint = async () => {
+        try {
+            const hasSeenHint = await AsyncStorage.getItem('remi_handsfree_hint_seen');
+            if (!hasSeenHint) {
+                setTimeout(() => {
+                    Alert.alert(
+                        t('remi_handsfree_hint_title'),
+                        t('remi_handsfree_hint_body'),
+                        [
+                            {
+                                text: language === 'en' ? 'Got it' : 'Entendido',
+                                onPress: () => AsyncStorage.setItem('remi_handsfree_hint_seen', 'true')
+                            }
+                        ]
+                    );
+                }, 1500); // Delay to avoid overwhelming on load
+            }
+        } catch (error) {
+            console.log('[REMI] Error showing first-time hint:', error);
+        }
+    };
+
+
     // Load Profile Data & Init Chat Session
     const loadProfileData = async () => {
         try {
@@ -187,7 +219,6 @@ export default function ActiveCallScreen() {
             };
 
             const coreInstruction = baseMap[relType] || baseMap['ex'];
-            // FIX: Remove truncation to allow full personality
             const personality = data?.master_prompt
                 ? `PERSONALIDAD COMPLETA: ${data.master_prompt}`
                 : 'Personalidad: Sarcástica, directa y con memoria de nuestra relación.';
@@ -199,33 +230,92 @@ export default function ActiveCallScreen() {
                 
                 CONTEXTO: Conversación TELEFÓNICA DE VOZ EN TIEMPO REAL.
                 
-                INSTRUCCIONES CRÍTICAS DE FORMATO:
-                1. SOLO TEXTO HABLADO. NUNCA escribas acciones entre paréntesis ni corchetes.
-                   - MAL: "(suspiro) Hola..." o "*Cuelga*"
-                   - BIEN: "¿Qué quieres?"
-                2. RESPUESTAS CORTAS Y NATURALES (1-2 frases máximo). Es un chat de voz fluido.
-                3. IMPRESCINDIBLE: Recuerda lo que el usuario te dice. Mantén el hilo de la conversación.
+                ⚠️ REGLAS ABSOLUTAS DE RESPUESTA:
+                1. MÁXIMO 1 FRASE (15 palabras o menos). NUNCA más de 2 frases.
+                2. SOLO TEXTO HABLADO. NUNCA uses:
+                   ❌ Acciones: (suspiro), *ríe*, [pausa]
+                   ❌ Narración: "dice con tristeza", "mientras piensa"
+                   ✅ BIEN: "¿Qué quieres?" o "No tengo tiempo para esto."
+                3. Sé DIRECTA/O. Responde como en WhatsApp, no como escritora.
+                4. Recuerda TODO lo que te digo en ESTA llamada.
                 
-                IMPORTANTE: Si el usuario no dice nada o hay solo ruido, pregunta "¿Hola?" o di algo relacionado con tu personalidad.
+                EJEMPLOS DE RESPUESTAS CORRECTAS:
+                Usuario: "¿Cómo estás?"
+                Tú: "Bien... ¿Y tú?"
+                
+                Usuario: "Te extraño"
+                Tú: "Eso ya lo sé."
+                
+                Si no entiendes audio o hay silencio: "¿Hola?" o "¿Me escuchas?"
             `;
 
-            // Initialize Gemini Chat Session
+            // === LOAD RECENT CHAT HISTORY (Share context!) ===
+            let chatHistory: any[] = [
+                {
+                    role: "user",
+                    parts: [{ text: "Hola, contestame el teléfono." }],
+                },
+                {
+                    role: "model",
+                    parts: [{ text: "¿Aló? ¿Quién es?" }],
+                }
+            ];
+
+            try {
+                const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+                const conversationKey = `conversation_${profileId}`;
+                const savedConversation = await AsyncStorage.getItem(conversationKey);
+
+                if (savedConversation) {
+                    const messages = JSON.parse(savedConversation);
+
+                    // 🛡️ CRASH PREVENTION: Validate messages array
+                    if (!Array.isArray(messages) || messages.length === 0) {
+                        console.log('[REMI Live] Invalid messages format - skipping text history');
+                    } else {
+                        console.log(`[REMI Live] Found ${messages.length} previous text messages`);
+
+                        // Take last 10 messages (5 exchanges) to keep context but not overwhelm
+                        const recentMessages = messages.slice(-10);
+
+                        // 🛡️ CRASH PREVENTION: Filter out malformed messages
+                        // Convert to Gemini format
+                        const textHistory = recentMessages
+                            .filter((msg: any) => msg && msg.text && msg.sender) // Filter out incomplete messages
+                            .map((msg: any) => ({
+                                role: msg.sender === 'user' ? 'user' : 'model',
+                                parts: [{ text: String(msg.text) }] // Ensure text is string
+                            }));
+
+                        // Prepend text history BEFORE the phone call greeting
+                        if (textHistory.length > 0) {
+                            chatHistory = [
+                                ...textHistory,
+                                {
+                                    role: "user",
+                                    parts: [{ text: "[Ahora te estoy llamando por teléfono]" }],
+                                },
+                                {
+                                    role: "model",
+                                    parts: [{ text: "¿Aló?" }],
+                                }
+                            ];
+                            console.log('[REMI Live] ✅ Loaded text chat context into voice call');
+                        }
+                    }
+                }
+            } catch (storageErr) {
+                console.log('[REMI Live] No previous chat found or error:', storageErr);
+            }
+
+            // Initialize Gemini Chat Session with SHARED HISTORY
             const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
             chatSession.current = model.startChat({
-                history: [
-                    {
-                        role: "user",
-                        parts: [{ text: "Hola, contestame el teléfono." }],
-                    },
-                    {
-                        role: "model",
-                        parts: [{ text: "¿Aló? ¿Quién es?" }],
-                    },
-                ],
+                history: chatHistory,
                 systemInstruction: { role: 'system', parts: [{ text: systemInstruction }] }
             });
 
-            console.log('[REMI Live] Chat Session Initialized with Full Prompt');
+            console.log('[REMI Live] Chat Session Initialized with', chatHistory.length, 'history items');
 
         } catch (e) {
             console.error('Error constructing prompt', e);
@@ -278,7 +368,8 @@ export default function ActiveCallScreen() {
             );
             setRecording(recording);
             setCallState('listening');
-            setStatusText(isHandsFree ? 'Escuchando (Auto)...' : 'Escuchando...');
+            setIsVADListening(isHandsFree); // Show VAD indicator in hands-free mode
+            setStatusText(isHandsFree ? '🎤 Escuchando... (habla normalmente)' : '🔴 Grabando...');
         } catch (err) {
             console.error('Failed to start recording', err);
         }
@@ -317,14 +408,15 @@ export default function ActiveCallScreen() {
     const stopRecording = async () => {
         if (!recording) return;
 
-        // Clear timer
+        // Clear timer and VAD indicator
         if (silenceTimer.current) {
             clearTimeout(silenceTimer.current);
             silenceTimer.current = null;
         }
+        setIsVADListening(false); // Hide VAD indicator
 
         setCallState('thinking');
-        setStatusText('Pensando...');
+        setStatusText('💭 Pensando...');
 
         try {
             await recording.stopAndUnloadAsync();
@@ -422,17 +514,23 @@ export default function ActiveCallScreen() {
 
     const toggleHandsFree = () => {
         const nextState = !isHandsFree;
+
+        // ✨ Smooth fade animation for mode transition
+        modeOpacity.value = withTiming(0, { duration: 150 }, () => {
+            modeOpacity.value = withTiming(1, { duration: 150 });
+        });
+
         setIsHandsFree(nextState);
+        setIsVADListening(false); // Reset VAD indicator
 
         // If enabling hands-free and currently idle, start listening
         if (nextState && callState === 'idle') {
-            startRecording();
-        }
-        // If disabling hands-free and currently listening, stop (but don't send) or just let it finish?
-        // Better to just let user manually stop or cancel.
-        if (!nextState && callState === 'listening') {
-            // Should we stop? Let's just update text.
-            setStatusText('Mantén presionado para hablar');
+            setStatusText('🎤 Activando manos libres...');
+            setTimeout(() => startRecording(), 200); // Small delay for smooth UX
+        } else if (!nextState && callState === 'listening') {
+            // Switching to manual mode while listening
+            setStatusText('👆 Mantén presionado para hablar');
+            // Stop auto-listening
             // We might want to stop the auto-listening loop
             if (recording) {
                 recording.stopAndUnloadAsync().then(() => {
@@ -463,6 +561,27 @@ export default function ActiveCallScreen() {
             <View style={styles.centerContent}>
                 {callState === 'speaking' && <PulseRings />}
                 <OrganicOrb state={callState} volume={currentVolume} />
+
+                {/* 🎯 VAD Activity Indicator */}
+                {isVADListening && (
+                    <Animated.View
+                        entering={FadeIn.duration(300)}
+                        style={{
+                            position: 'absolute',
+                            top: '40%',
+                            backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                            paddingHorizontal: 16,
+                            paddingVertical: 8,
+                            borderRadius: 20,
+                            borderWidth: 1,
+                            borderColor: 'rgba(16, 185, 129, 0.3)',
+                        }}
+                    >
+                        <Text style={{ color: '#10b981', fontSize: 12, fontWeight: '600' }}>
+                            ● Detectando silencio...
+                        </Text>
+                    </Animated.View>
+                )}
 
                 {/* Floating Glass Card for Text */}
                 <View style={styles.textCard}>
@@ -594,6 +713,18 @@ const styles = StyleSheet.create({
         lineHeight: 28,
         //Clean Sans-Serif system font
         fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+    },
+
+    handsFreeToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 20,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)'
     },
 
     bottomBar: {

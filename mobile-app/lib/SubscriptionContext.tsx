@@ -78,7 +78,10 @@ const TIER_LIMITS = {
 };
 
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
-    const [tier, setTier] = useState<SubscriptionTier>('survivor');
+    // ⚠️ TESTING MODE: Set to false before production!
+    const TESTING_MODE = false; // PRODUCTION: Real subscriptions enabled
+
+    const [tier, setTier] = useState<SubscriptionTier>(TESTING_MODE ? 'phoenix' : 'survivor');
     const [isLoading, setIsLoading] = useState(true);
     const [packages, setPackages] = useState<PurchasesPackage[]>([]);
     const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
@@ -110,7 +113,13 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         };
     }, []);
 
-    const fetchTierFromSupabase = async (userId: string) => {
+    const fetchTierFromSupabase = async (userId: string, localCustomerInfo?: CustomerInfo) => {
+        // Skip tier fetching in testing mode
+        if (TESTING_MODE) {
+            console.log('[Subscription] TESTING_MODE active - skipping tier fetch');
+            return;
+        }
+
         try {
             console.log('[Subscription] Fetching tier for user:', userId);
 
@@ -133,51 +142,81 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
             if (error) {
                 console.error('[Subscription] ❌ Error fetching tier from Supabase:', error);
-                // Fallback to survivor on error
+
+                // If DB fails but we have local purchase info, trust it!
+                if (localCustomerInfo) {
+                    console.log('[Subscription] Using local entitlements due to DB error');
+                    updateTierFromInfo(localCustomerInfo);
+                    return;
+                }
+
                 setTier('survivor');
                 return;
             }
 
             console.log('[Subscription] Profile data from Supabase:', profile);
 
+            let serverTier: SubscriptionTier = 'survivor';
+
             if (profile && profile.subscription_tier) {
                 // Ensure we handle case-insensitivity
-                let newTier = (profile.subscription_tier as string).toLowerCase() as SubscriptionTier;
+                serverTier = (profile.subscription_tier as string).toLowerCase() as SubscriptionTier;
 
                 // CHECK IF SUBSCRIPTION EXPIRED
                 const expiresAt = profile.subscription_expires_at || profile.subscription_current_period_end;
-                if (expiresAt && newTier !== 'survivor') {
+                if (expiresAt && serverTier !== 'survivor') {
                     const expireDate = new Date(expiresAt);
                     const now = new Date();
 
                     if (now > expireDate) {
                         console.log('[Subscription] ⚠️ Subscription expired locally:', {
-                            tier: newTier,
+                            tier: serverTier,
                             expiresAt: expiresAt,
                             now: now.toISOString(),
                         });
-
-                        // CRITICAL FIX: Do NOT auto-downgrade locally yet. 
-                        // Trust the DB value until backend updates it.
-                        // newTier = 'survivor'; 
+                        // Allow local info to override expiration if purchase just happened
+                        serverTier = 'survivor';
                     } else {
                         console.log('[Subscription] ✅ Subscription active until:', expireDate.toISOString());
                     }
                 }
-                console.log('[Subscription] ✅ Setting tier from Supabase:', newTier);
-                setTier(newTier);
-
-                // Force a re-render by setting the tier again after a short delay
-                setTimeout(() => {
-                    setTier(newTier);
-                }, 100);
             } else {
-                console.log('[Subscription] ⚠️ No subscription_tier found in profile, defaulting to survivor');
-                setTier('survivor');
+                console.log('[Subscription] ⚠️ No subscription_tier found in profile');
             }
+
+            // === MERGE LOGIC: Resolve highest tier ===
+            let finalTier = serverTier;
+
+            if (localCustomerInfo) {
+                // Check if local is higher than server
+                const tiers: SubscriptionTier[] = ['survivor', 'explorer', 'warrior', 'phoenix'];
+                let localTier: SubscriptionTier = 'survivor';
+
+                if (localCustomerInfo.entitlements.active['phoenix']) localTier = 'phoenix';
+                else if (localCustomerInfo.entitlements.active['warrior']) localTier = 'warrior';
+                else if (localCustomerInfo.entitlements.active['explorer']) localTier = 'explorer';
+
+                const serverIndex = tiers.indexOf(serverTier);
+                const localIndex = tiers.indexOf(localTier);
+
+                if (localIndex > serverIndex) {
+                    console.log(`[Subscription] 🛡️ Using LOCAL tier (${localTier}) over SERVER (${serverTier}) due to higher value (likely webhook delay)`);
+                    finalTier = localTier;
+                } else {
+                    console.log(`[Subscription] ✅ Using SERVER tier (${serverTier}) (Equal or higher than local ${localTier})`);
+                }
+            }
+
+            console.log('[Subscription] ✅ Setting FINAL tier:', finalTier);
+            setTier(finalTier);
+
+            // Force a re-render
+            setTimeout(() => {
+                setTier(finalTier);
+            }, 100);
+
         } catch (err) {
             console.error('[Subscription] ❌ Exception fetching tier from Supabase:', err);
-            console.error('[Subscription] Exception details:', JSON.stringify(err, null, 2));
         }
     };
 
@@ -260,33 +299,56 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
     const purchasePackage = async (pkg: PurchasesPackage) => {
         try {
+            console.log('[Subscription] Initiating purchase for:', pkg.product.identifier);
             const { customerInfo } = await Purchases.purchasePackage(pkg);
+
+            console.log('[Subscription] Purchase completed locally. Entitlements:', customerInfo.entitlements.active);
             setCustomerInfo(customerInfo);
+
+            // 1. Update UI IMMEDIATELY based on local receipt (Client-side trust)
             updateTierFromInfo(customerInfo);
 
-            // CRITICAL: Robust refresh mechanism
+            // 2. Sync with server in background
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
-                console.log('[Subscription] 🔄 Refreshing tier from Supabase after purchase...');
+                console.log('[Subscription] 🔄 Syncing with Supabase...');
 
-                // Show immediate success to user while we sync in background
+                // FALLBACK: Update Supabase directly from client if purchase succeeded locally.
+                // We use 'customerInfo.entitlements.active' to determine the tier, ensuring consistency with the UI.
+                let fallbackTier = 'survivor';
+                const activeEntitlements = customerInfo.entitlements.active;
+
+                if (activeEntitlements['phoenix']) fallbackTier = 'phoenix';
+                else if (activeEntitlements['warrior']) fallbackTier = 'warrior';
+                else if (activeEntitlements['explorer']) fallbackTier = 'explorer';
+
+                console.log(`[Subscription] 🛡️ Fallback Tier detected from Entitlements: ${fallbackTier}`);
+
+                if (fallbackTier !== 'survivor') {
+                    console.log(`[Subscription] 🛡️ Client-side fallback update: Setting tier to ${fallbackTier}`);
+                    await supabase.from('profiles').update({
+                        subscription_tier: fallbackTier,
+                        subscription_status: 'active',
+                        updated_at: new Date().toISOString()
+                    }).eq('id', user.id);
+                }
+
                 Alert.alert(
                     '✅ Compra exitosa',
-                    'Tu suscripción se ha activado. Actualizando perfil...',
+                    'Tu suscripción está activa. Disfruta de My Ex Coach.',
                     [{ text: 'OK' }]
                 );
 
-                // Polling mechanism: Check every 2s for 10s
+                // Polling mechanism: Extended to 20s (Webhooks can be slow)
                 let attempts = 0;
-                const maxAttempts = 5;
+                const maxAttempts = 10; // 10 * 2s = 20s
                 const pollInterval = 2000;
 
                 const checkTier = async () => {
                     attempts++;
-                    console.log(`[Subscription] Polling tier attempt ${attempts}/${maxAttempts}`);
-                    await fetchTierFromSupabase(user.id);
+                    // Pass the fresh customerInfo to merge logic
+                    await fetchTierFromSupabase(user.id, customerInfo);
 
-                    // If we haven't reached max attempts, schedule next check
                     if (attempts < maxAttempts) {
                         setTimeout(checkTier, pollInterval);
                     }
@@ -294,6 +356,15 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
                 // Start polling
                 checkTier();
+
+                // Force a hard refresh of entitlements just in case
+                setTimeout(async () => {
+                    try {
+                        const updatedInfo = await Purchases.getCustomerInfo();
+                        setCustomerInfo(updatedInfo);
+                        updateTierFromInfo(updatedInfo);
+                    } catch (e) { console.warn('Refresh info error', e); }
+                }, 3000);
             }
         } catch (e: any) {
             if (!e.userCancelled) {

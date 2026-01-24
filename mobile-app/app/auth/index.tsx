@@ -19,6 +19,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { useTheme } from '../../lib/ThemeContext';
+import { useLanguage, syncLanguageToProfile } from '../../lib/i18n';
 
 // Try to import native Google Sign-In
 let GoogleSignin: any = null;
@@ -47,6 +48,7 @@ const { width } = Dimensions.get('window');
 
 export default function AuthScreen() {
     const router = useRouter();
+    const { t } = useLanguage();
     const [loading, setLoading] = useState(false);
     const [oauthLoading, setOauthLoading] = useState<'google' | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -59,6 +61,7 @@ export default function AuthScreen() {
             const { data: { session: existingSession } } = await supabase.auth.getSession();
             if (existingSession && !hasNavigated) {
                 setHasNavigated(true);
+                syncLanguageToProfile(existingSession.user.id);
                 router.replace('/welcome-confirmation');
                 return;
             }
@@ -90,6 +93,7 @@ export default function AuthScreen() {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_IN' && session && !hasNavigated) {
                 setHasNavigated(true);
+                syncLanguageToProfile(session.user.id);
                 setTimeout(() => router.replace('/welcome-confirmation'), 100);
             }
         });
@@ -222,17 +226,17 @@ export default function AuthScreen() {
                     </View>
                     <View style={[styles.floatingTag, styles.tagLeft, { backgroundColor: tagBg, borderColor: tagBorder }]}>
                         <Text style={styles.tagEmoji}>💜</Text>
-                        <Text style={[styles.tagText, { color: tagText }]}>Sanación</Text>
+                        <Text style={[styles.tagText, { color: tagText }]}>{t('auth_sanacion')}</Text>
                     </View>
                     <View style={[styles.floatingTag, styles.tagRight, { backgroundColor: tagBg, borderColor: tagBorder }]}>
                         <Text style={styles.tagEmoji}>🤖</Text>
-                        <Text style={[styles.tagText, { color: tagText }]}>IA Coach</Text>
+                        <Text style={[styles.tagText, { color: tagText }]}>{t('auth_ia_coach')}</Text>
                     </View>
                 </View>
             </View>
 
             <View style={styles.bottomSection}>
-                <Text style={[styles.title, { color: textColor }]}>Tu coach de IA para{'\n'}superar el pasado</Text>
+                <Text style={[styles.title, { color: textColor }]}>{t('auth_welcome_title')}</Text>
 
                 {errorMsg && (
                     <View style={styles.errorBox}>
@@ -250,7 +254,7 @@ export default function AuthScreen() {
                         {oauthLoading === 'google' ? <ActivityIndicator color={googleBtnText} size="small" /> : (
                             <>
                                 <Text style={[styles.googleIcon, { color: googleIconColor }]}>G</Text>
-                                <Text style={[styles.googleButtonText, { color: googleBtnText }]}>Continuar con Google</Text>
+                                <Text style={[styles.googleButtonText, { color: googleBtnText }]}>{t('auth_continue_google')}</Text>
                             </>
                         )}
                     </TouchableOpacity>

@@ -98,24 +98,51 @@ export default function VoiceConfigScreen() {
                 return;
             }
 
-            const { data } = await supabase
+            let voiceId: string | null = null;
+
+            // Try Supabase first
+            const { data, error } = await supabase
                 .from('profiles')
                 .select('voice_id')
                 .eq('id', profileId)
                 .single();
 
             if (data?.voice_id) {
+                voiceId = data.voice_id;
+                console.log('[Voice Configure] ✅ Found voice_id in Supabase:', voiceId);
+            } else if (error) {
+                console.log('[Voice Configure] ⚠️ Supabase query failed:', error.message);
+            }
+
+            // FALLBACK: Check AsyncStorage if not found in DB
+            if (!voiceId) {
+                try {
+                    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+                    voiceId = await AsyncStorage.getItem(`voice_${profileId}`);
+                    if (voiceId) {
+                        console.log('[Voice Configure] ✅ Found voice_id in AsyncStorage:', voiceId);
+                    }
+                } catch (storageErr) {
+                    console.log('[Voice Configure] AsyncStorage check failed:', storageErr);
+                }
+            }
+
+            if (voiceId) {
                 if (force === 'true') {
                     // Recalibration requested, stay here
                     setExistingVoiceId(null);
+                    console.log('[Voice Configure] Force recalibration - ignoring saved voice');
                 } else {
-                    setExistingVoiceId(data.voice_id);
+                    setExistingVoiceId(voiceId);
                     // AUTO REDIRECT
-                    router.replace({ pathname: '/(app)/voice/call', params: { profileId, name, voiceId: data.voice_id } });
+                    console.log('[Voice Configure] Auto-redirecting to call with voice:', voiceId);
+                    router.replace({ pathname: '/(app)/voice/call', params: { profileId, name, voiceId } });
                 }
+            } else {
+                console.log('[Voice Configure] No existing voice found - ready for cloning');
             }
         } catch (e) {
-            console.error('Error checking voice:', e);
+            console.error('[Voice Configure] Error checking voice:', e);
         } finally {
             setLoadingVoice(false);
         }
@@ -159,7 +186,7 @@ export default function VoiceConfigScreen() {
         }
 
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) {
+        if (!session?.user && !__DEV__) {
             Alert.alert('Sesión expirada', 'Inicia sesión de nuevo.');
             return;
         }
@@ -175,11 +202,31 @@ export default function VoiceConfigScreen() {
             const fileUris = audioFiles.map(f => f.uri);
             const result = await elevenLabsService.cloneVoice(name || 'Ex', fileUris);
 
-            // Save to DB
-            await supabase
-                .from('profiles')
-                .update({ voice_id: result.voiceId })
-                .eq('id', profileId);
+            console.log('[Voice Configure] Voice cloned successfully:', result.voiceId);
+
+            // Save to DB (with fallback to AsyncStorage for testing)
+            try {
+                const { error: saveError } = await supabase
+                    .from('profiles')
+                    .update({ voice_id: result.voiceId })
+                    .eq('id', profileId);
+
+                if (saveError) {
+                    console.error('[Voice Configure] ⚠️ DB Save failed:', saveError);
+                    // FALLBACK: Save to AsyncStorage for testing/offline mode
+                    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+                    await AsyncStorage.setItem(`voice_${profileId}`, result.voiceId);
+                    console.log('[Voice Configure] ✅ Saved to AsyncStorage as fallback');
+                } else {
+                    console.log('[Voice Configure] ✅ Saved voice_id to Supabase');
+                }
+            } catch (dbErr) {
+                console.error('[Voice Configure] DB Error:', dbErr);
+                // Even if DB fails, continue with AsyncStorage fallback
+                const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+                await AsyncStorage.setItem(`voice_${profileId}`, result.voiceId);
+                console.log('[Voice Configure] ✅ Fallback: Saved to AsyncStorage');
+            }
 
             setExistingVoiceId(result.voiceId);
             setStatusText('Voz clonada exitosamente');
@@ -192,6 +239,7 @@ export default function VoiceConfigScreen() {
 
         } catch (error: any) {
             setIsCloning(false);
+            console.error('[Voice Configure] Cloning failed:', error);
             Alert.alert('Error', error.message || 'No se pudo clonar la voz.');
         }
     };

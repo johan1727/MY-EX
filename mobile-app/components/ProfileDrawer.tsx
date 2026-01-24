@@ -38,6 +38,7 @@ import { Linking, Pressable } from 'react-native'; // Added Pressable for hover
 import { useSubscription } from '@/lib/SubscriptionContext';
 import { useTheme } from '@/lib/ThemeContext'; // Import Theme Context
 import { SUBSCRIPTION_CONFIG, SubscriptionTier } from '../lib/subscriptions';
+import { useLanguage } from '../lib/i18n';
 
 interface Profile {
     id: string;
@@ -67,6 +68,7 @@ export default function ProfileDrawer({
 }: ProfileDrawerProps) {
     const router = useRouter();
     const { isDark, toggleTheme } = useTheme(); // Use Global Theme
+    const { t } = useLanguage();
 
     // Hover States for Web
     const [hoveredProfile, setHoveredProfile] = useState<string | null>(null);
@@ -403,15 +405,15 @@ export default function ProfileDrawer({
                     onPress={handleNewSimulation}
                 >
                     <Plus size={20} color={!isDark ? '#111' : '#fff'} />
-                    <Text style={[styles.newSimText, !isDark && { color: '#111' }]}>Nueva simulación</Text>
+                    <Text style={[styles.newSimText, !isDark && { color: '#111' }]}>{t('drawer_new_simulation')}</Text>
                 </TouchableOpacity>
 
                 {/* Profiles List */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Tus perfiles</Text>
+                    <Text style={styles.sectionTitle}>{t('drawer_your_profiles')}</Text>
                     {profiles.length === 0 ? (
                         <Text style={styles.emptyText}>
-                            No hay perfiles aún. Crea uno nuevo arriba.
+                            {t('drawer_no_profiles')}
                         </Text>
                     ) : (
                         profiles.map(profile => (
@@ -444,7 +446,7 @@ export default function ProfileDrawer({
                                         {profile.exName}
                                     </Text>
                                     <Text style={[styles.profileChatHint, variant === 'sidebar' && { fontSize: 10 }]} numberOfLines={1}>
-                                        {profile.lastMessage ? profile.lastMessage : 'Pulsa para chatear →'}
+                                        {profile.lastMessage ? profile.lastMessage : t('drawer_tap_to_chat')}
                                     </Text>
                                 </Pressable>
 
@@ -454,7 +456,7 @@ export default function ProfileDrawer({
                                         onPress={() => handleDeleteProfile(profile)}
                                     >
                                         <Trash2 size={14} color="#ef4444" />
-                                        <Text style={styles.deleteBtnText}>Eliminar</Text>
+                                        <Text style={styles.deleteBtnText}>{t('drawer_delete')}</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -480,7 +482,7 @@ export default function ProfileDrawer({
                     <View>
                         <Text style={styles.coachText}>Coach IA</Text>
                         <Text style={[styles.profileChatHint, { marginTop: 2 }]} numberOfLines={1}>
-                            {coachPreview ? coachPreview : 'Tu espacio seguro →'}
+                            {coachPreview ? coachPreview : t('drawer_coach_subtitle')}
                         </Text>
                     </View>
                 </Pressable>
@@ -508,7 +510,7 @@ export default function ProfileDrawer({
                                 onHoverOut={() => setHoveredMenuItem(null)}
                             >
                                 <User size={16} color="#9ca3af" />
-                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>Mi Perfil</Text>
+                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>{t('drawer_my_profile')}</Text>
                             </Pressable>
 
                             <Pressable
@@ -524,7 +526,7 @@ export default function ProfileDrawer({
                                 onHoverOut={() => setHoveredMenuItem(null)}
                             >
                                 <Settings size={16} color="#9ca3af" />
-                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>Preferencias</Text>
+                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>{t('drawer_preferences')}</Text>
                             </Pressable>
 
                             {/* Theme Toggle in Menu */}
@@ -544,7 +546,7 @@ export default function ProfileDrawer({
                             >
                                 {isDark ? <Sun size={16} color="#9ca3af" /> : <Moon size={16} color="#9ca3af" />}
                                 <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>
-                                    {isDark ? 'Modo Claro' : 'Modo Oscuro'}
+                                    {isDark ? t('drawer_theme_light') : t('drawer_theme_dark')}
                                 </Text>
                             </Pressable>
 
@@ -562,7 +564,7 @@ export default function ProfileDrawer({
                                     onHoverOut={() => setHoveredMenuItem(null)}
                                 >
                                     <LogIn size={16} color="#9ca3af" />
-                                    <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>Cambiar cuenta</Text>
+                                    <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>{t('drawer_switch_account')}</Text>
                                 </Pressable>
                             )}
 
@@ -579,7 +581,7 @@ export default function ProfileDrawer({
                                 onHoverOut={() => setHoveredMenuItem(null)}
                             >
                                 <Lock size={16} color="#9ca3af" />
-                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>Privacidad</Text>
+                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>{t('drawer_privacy')}</Text>
                             </Pressable>
 
                             {!isPremium && (
@@ -591,7 +593,7 @@ export default function ProfileDrawer({
                                     }}
                                 >
                                     <Crown size={16} color="#f59e0b" />
-                                    <Text style={styles.upgradeMenuText}>Ver Planes Premium</Text>
+                                    <Text style={styles.upgradeMenuText}>{t('drawer_premium_plans')}</Text>
                                 </TouchableOpacity>
                             )}
                             <View style={[styles.userMenuDivider, !isDark && { backgroundColor: '#e5e7eb' }]} />
@@ -609,7 +611,7 @@ export default function ProfileDrawer({
                                     onHoverOut={() => setHoveredMenuItem(null)}
                                 >
                                     <LogIn size={16} color="#22c55e" />
-                                    <Text style={[styles.userMenuText, { color: '#22c55e' }]}>Iniciar sesión</Text>
+                                    <Text style={[styles.userMenuText, { color: '#22c55e' }]}>{t('drawer_sign_in')}</Text>
                                 </Pressable>
                             ) : (
                                 <Pressable
@@ -625,7 +627,7 @@ export default function ProfileDrawer({
                                     onHoverOut={() => setHoveredMenuItem(null)}
                                 >
                                     <LogOut size={16} color="#ef4444" />
-                                    <Text style={[styles.userMenuText, { color: '#ef4444' }]}>Cerrar sesión</Text>
+                                    <Text style={[styles.userMenuText, { color: '#ef4444' }]}>{t('drawer_sign_out')}</Text>
                                 </Pressable>
                             )}
                         </ScrollView>
@@ -641,10 +643,10 @@ export default function ProfileDrawer({
                     </View>
                     <View style={styles.userInfo}>
                         <Text style={[styles.userName, !isDark && { color: '#111' }]} numberOfLines={1}>
-                            {isGuest ? 'Invitado' : (userEmail || 'Mi cuenta')}
+                            {isGuest ? t('drawer_guest') : (userEmail || 'Mi cuenta')}
                         </Text>
                         <Text style={isGuest ? styles.userPlanFree : (isPremium ? styles.userPlan : styles.userPlanFree)}>
-                            {isGuest ? 'Plan Gratuito' : (isPremium ? 'Premium' : 'Plan Gratuito')}
+                            {isGuest ? t('drawer_free_plan') : (isPremium ? 'Premium' : t('drawer_free_plan'))}
                         </Text>
                     </View>
                     {showUserMenu ? <ChevronUp size={16} color="#9ca3af" /> : <ChevronDown size={16} color="#9ca3af" />}

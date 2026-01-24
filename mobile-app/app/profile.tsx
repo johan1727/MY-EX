@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Alert, Platform, Share, Linking, StyleSheet, Modal, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Alert, Platform, Share, Linking, StyleSheet, Modal, Image, StatusBar as RNStatusBar } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useSubscription } from '../lib/SubscriptionContext';
 import { SUBSCRIPTION_CONFIG, SubscriptionTier } from '../lib/subscriptions';
@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useTheme } from '../lib/ThemeContext';
+import { useLanguage } from '../lib/i18n';
 
 const SettingItem = ({ label, icon: Icon, onPress, danger = false, highlight = false, badge, isDark }: any) => (
     <TouchableOpacity
@@ -44,6 +45,7 @@ const SettingItem = ({ label, icon: Icon, onPress, danger = false, highlight = f
 export default function ProfileScreen() {
     const router = useRouter();
     const { isDark } = useTheme(); // Use Theme
+    const { t } = useLanguage();
     const [email, setEmail] = useState('');
     const [joined, setJoined] = useState('');
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -238,7 +240,7 @@ export default function ProfileScreen() {
                     >
                         <ArrowLeft size={24} color={isDark ? "#fff" : "#111"} />
                     </TouchableOpacity>
-                    <Text style={[styles.headerTitle, !isDark && { color: '#111' }]}>Perfil</Text>
+                    <Text style={[styles.headerTitle, !isDark && { color: '#111' }]}>{t('profile_title')}</Text>
                     <TouchableOpacity onPress={() => router.push('/preferences')} style={styles.iconButton}>
                         <Settings size={24} color={isDark ? "#fff" : "#111"} />
                     </TouchableOpacity>
@@ -265,7 +267,7 @@ export default function ProfileScreen() {
                                 <Text style={styles.percentageText}>100%</Text>
                             </View>
                         </View>
-                        <Text style={[styles.userName, !isDark && { color: '#000' }]}>{isGuest ? 'Invitado' : email.split('@')[0]}</Text>
+                        <Text style={[styles.userName, !isDark && { color: '#000' }]}>{isGuest ? t('profile_guest') : email.split('@')[0]}</Text>
 
                         <TouchableOpacity style={[styles.chatStatusButton, !isDark && { backgroundColor: '#f3f4f6' }]} disabled>
                             <View style={[styles.chatStatusDot, { backgroundColor: isPremium ? '#22c55e' : '#9ca3af' }]} />
@@ -304,7 +306,7 @@ export default function ProfileScreen() {
                                         style={styles.upgradeButton}
                                         onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
                                     >
-                                        <Text style={styles.upgradeButtonText}>Mejorar Plan</Text>
+                                        <Text style={styles.upgradeButtonText}>{t('btn_improve_plan')}</Text>
                                     </TouchableOpacity>
                                 )}
                             </View>
@@ -313,19 +315,19 @@ export default function ProfileScreen() {
 
                     {/* Menu Options */}
                     <View style={styles.menuContainer}>
-                        <SettingItem label="Preferencias" icon={Settings} onPress={() => router.push('/preferences')} />
-                        <SettingItem label="Ayuda y Soporte" icon={HelpCircle} onPress={() => Linking.openURL('mailto:support@soyremi.app')} />
-                        <SettingItem label="Insignias" icon={Star} badge="Nuevo" onPress={() => setBadgeModalVisible(true)} />
+                        <SettingItem label={t('profile_preferences')} icon={Settings} onPress={() => router.push('/preferences')} />
+                        <SettingItem label={t('profile_help_support')} icon={HelpCircle} onPress={() => Linking.openURL('mailto:support@soyremi.app')} />
+                        <SettingItem label={t('profile_badges')} icon={Star} badge="Nuevo" onPress={() => setBadgeModalVisible(true)} />
 
                         <View style={styles.menuSpacer} />
 
                         {isGuest ? (
-                            <SettingItem label="Iniciar Sesión" icon={LogIn} highlight onPress={() => router.push('/auth')} />
+                            <SettingItem label={t('profile_sign_in')} icon={LogIn} highlight onPress={() => router.push('/auth')} />
                         ) : (
                             <>
-                                <SettingItem label="Exportar Datos" icon={Download} onPress={handleExportData} />
-                                <SettingItem label="Cerrar Sesión" icon={LogOut} danger onPress={handleSignOut} />
-                                <SettingItem label="Eliminar Cuenta" icon={Trash2} danger onPress={handleDeleteAccount} />
+                                <SettingItem label={t('profile_export_data')} icon={Download} onPress={handleExportData} />
+                                <SettingItem label={t('profile_sign_out')} icon={LogOut} danger onPress={handleSignOut} />
+                                <SettingItem label={t('profile_delete_account')} icon={Trash2} danger onPress={handleDeleteAccount} />
                             </>
                         )}
                     </View>
@@ -429,7 +431,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingTop: 12,
+        paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 0) + 12 : 12, // Fix for Android notch
         paddingBottom: 12,
     },
     headerTitle: {

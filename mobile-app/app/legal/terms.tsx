@@ -4,10 +4,12 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, FileText, AlertTriangle } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../lib/ThemeContext';
+import { useLanguage } from '../../lib/i18n';
 
 export default function TermsOfService() {
     const router = useRouter();
     const { isDark } = useTheme();
+    const { t } = useLanguage();
 
     const bgColor = isDark ? '#000' : '#f9fafb';
     const textColor = isDark ? '#fff' : '#111';
@@ -27,7 +29,7 @@ export default function TermsOfService() {
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                     <ArrowLeft size={24} color={isDark ? "white" : "#000"} />
                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: textColor }]}>Términos de Servicio</Text>
+                <Text style={[styles.headerTitle, { color: textColor }]}>{t('terms_title')}</Text>
             </SafeAreaView>
 
             <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
@@ -42,48 +44,48 @@ export default function TermsOfService() {
                 <View style={[styles.warningBox, !isDark && { backgroundColor: '#fee2e2', borderColor: '#fecaca' }]}>
                     <AlertTriangle size={20} color="#ef4444" />
                     <Text style={styles.warningText}>
-                        Si estás en crisis: Llama al 911 (MX) o 988 (US)
+                        {t('terms_crisis_warning')}
                     </Text>
                 </View>
 
                 {/* Main Card */}
                 <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }, !isDark && { shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 }]}>
                     <Text style={styles.updateText}>
-                        Última actualización: 23 de diciembre de 2025
+                        {t('terms_last_updated')}
                     </Text>
 
                     <TouchableOpacity onPress={openExternalTerms} style={styles.externalButton}>
-                        <Text style={styles.externalButtonText}>🌐 Ver Términos Oficiales (Online)</Text>
+                        <Text style={styles.externalButtonText}>{t('terms_external_link')}</Text>
                     </TouchableOpacity>
 
-                    <Text style={[styles.sectionTitle, { color: textColor }]}>1. Descargo de Responsabilidad</Text>
+                    <Text style={[styles.sectionTitle, { color: textColor }]}>{t('terms_section_1_title')}</Text>
                     <Text style={[styles.paragraph, { color: subTextColor }]}>
-                        SOYREMI <Text style={styles.redText}>NO ES</Text> un servicio médico ni psicológico. Es una herramienta de apoyo emocional y coaching de relaciones. No reemplaza la terapia profesional.
+                        {t('terms_section_1_text')}
                     </Text>
 
-                    <Text style={[styles.sectionTitle, { color: textColor }]}>2. Contenido Generado por IA</Text>
+                    <Text style={[styles.sectionTitle, { color: textColor }]}>{t('terms_section_2_title')}</Text>
                     <Text style={[styles.paragraph, { color: subTextColor }]}>
-                        Esta app usa Google Gemini AI. La IA puede cometer errores o generar información inexacta. NO es un terapeuta humano y no puede diagnosticar condiciones de salud mental.
+                        {t('terms_section_2_text')}
                     </Text>
 
-                    <Text style={[styles.sectionTitle, { color: textColor }]}>3. Suscripciones y Pagos</Text>
-                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>• Los pagos se procesan via Google Play Store</Text>
-                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>• Reembolsos solo en las primeras 48 horas</Text>
-                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>• SOYREMI no gestiona reembolsos directamente</Text>
+                    <Text style={[styles.sectionTitle, { color: textColor }]}>{t('terms_section_3_title')}</Text>
+                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>{t('terms_section_3_point_1')}</Text>
+                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>{t('terms_section_3_point_2')}</Text>
+                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>{t('terms_section_3_point_3')}</Text>
 
-                    <Text style={[styles.sectionTitle, { color: textColor }]}>4. Limitación de Responsabilidad</Text>
+                    <Text style={[styles.sectionTitle, { color: textColor }]}>{t('terms_section_4_title')}</Text>
                     <Text style={[styles.paragraph, { color: subTextColor }]}>
-                        NO somos responsables por decisiones tomadas basándose en el contenido de la app, ni por daños emocionales, psicológicos o financieros derivados del uso.
+                        {t('terms_section_4_text')}
                     </Text>
 
-                    <Text style={[styles.sectionTitle, { color: textColor }]}>5. Uso Aceptable</Text>
-                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>• No usar para acosar o dañar a otros</Text>
-                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>• No compartir contenido ilegal</Text>
-                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>• Ser mayor de 18 años</Text>
+                    <Text style={[styles.sectionTitle, { color: textColor }]}>{t('terms_section_5_title')}</Text>
+                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>{t('terms_section_5_point_1')}</Text>
+                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>{t('terms_section_5_point_2')}</Text>
+                    <Text style={[styles.bulletPoint, { color: subTextColor }]}>{t('terms_section_5_point_3')}</Text>
                 </View>
 
                 <Text style={[styles.footer, { color: subTextColor }]}>
-                    Al usar SOYREMI, aceptas estos Términos de Servicio.
+                    {t('terms_footer')}
                 </Text>
             </ScrollView>
         </View>

@@ -20,6 +20,7 @@ import AIReportModal from '../../components/AIReportModal';
 import * as ImagePicker from 'expo-image-picker';
 import EnergyRechargeModal from '../../components/EnergyRechargeModal';
 import InsightTeaserModal from '../../components/InsightTeaserModal'; // New Modal
+import { useLanguage } from '../../lib/i18n';
 
 import {
     loadConversationFromCloud,
@@ -83,6 +84,7 @@ export default function ExSimulatorChat() {
 
     // Use Global Theme Context
     const { isDark, toggleTheme } = useTheme();
+    const { t } = useLanguage();
 
     const handleReport = (msg: any, index: number) => {
         setReportData({ id: `sim_msg_${index}`, content: msg.content });
@@ -606,7 +608,7 @@ export default function ExSimulatorChat() {
                                         onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
                                     >
                                         <Sparkles size={14} color="#a855f7" />
-                                        <Text style={{ color: isDark ? '#fff' : '#111', fontWeight: '600', fontSize: 13 }}>Mejorar</Text>
+                                        <Text style={{ color: isDark ? '#fff' : '#111', fontWeight: '600', fontSize: 13 }}>{t('btn_upgrade')}</Text>
                                     </TouchableOpacity>
                                 )}
                             </View>
@@ -628,7 +630,7 @@ export default function ExSimulatorChat() {
                             <Brain size={40} color={isDark ? '#fff' : '#111'} />
                         </View>
 
-                        <Text style={{ fontSize: 24, fontWeight: 'bold', color: isDark ? '#fff' : '#111', marginBottom: 16 }}>Análisis de Patrones</Text>
+                        <Text style={{ fontSize: 24, fontWeight: 'bold', color: isDark ? '#fff' : '#111', marginBottom: 16 }}>{t('home_title')}</Text>
 
                         <Text style={{
                             fontSize: 16,
@@ -637,7 +639,7 @@ export default function ExSimulatorChat() {
                             marginBottom: 40,
                             lineHeight: 24
                         }}>
-                            Analiza la dinámica de tu relación pasada para identificar patrones y sanar.
+                            {t('home_analysis_subtitle')}
                         </Text>
 
                         <TouchableOpacity
@@ -655,14 +657,14 @@ export default function ExSimulatorChat() {
                             onPress={() => router.push('/tools/ex-simulator/import')}
                         >
                             <Send size={20} color="#fff" />
-                            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Importar Chat</Text>
+                            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{t('home_import_chat')}</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
                             style={{ marginTop: 24 }}
                             onPress={() => setDrawerVisible(true)}
                         >
-                            <Text style={{ color: '#6b7280', fontSize: 14 }}>Ver análisis anteriores</Text>
+                            <Text style={{ color: '#6b7280', fontSize: 14 }}>{t('home_view_past_analysis')}</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -767,12 +769,12 @@ export default function ExSimulatorChat() {
                                     <Crown size={16} color="#fbbf24" />
                                     <View>
                                         <Text style={{ color: '#fbbf24', fontSize: 13, fontWeight: '600' }}>
-                                            Vista Previa Gratuita
+                                            {t('free_preview_title')}
                                         </Text>
                                         <Text style={{ color: '#d97706', fontSize: 11 }}>
                                             {usageData.dailyCount >= 30
-                                                ? 'Has alcanzado el límite diario (30/30)'
-                                                : `Mensajes restantes hoy: ${Math.max(0, 30 - usageData.dailyCount)}`}
+                                                ? t('free_preview_limit_reached')
+                                                : t('free_preview_limit_msg')}
                                         </Text>
                                     </View>
                                 </View>
@@ -785,7 +787,7 @@ export default function ExSimulatorChat() {
                                     }}
                                     onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
                                 >
-                                    <Text style={{ color: '#fbbf24', fontSize: 11, fontWeight: 'bold' }}>Mejorar</Text>
+                                    <Text style={{ color: '#fbbf24', fontSize: 11, fontWeight: 'bold' }}>{t('btn_upgrade')}</Text>
                                 </TouchableOpacity>
                             </View>
                         )}
@@ -795,22 +797,22 @@ export default function ExSimulatorChat() {
                                 <View style={[styles.emptyStateIcon, isDark && { backgroundColor: '#1f2937', borderColor: '#374151' }]}>
                                     <Sparkles size={40} color="#a855f7" />
                                 </View>
-                                <Text style={[styles.emptyStateTitle, isDark && { color: '#fff' }]}>¿Cómo te sientes hoy?</Text>
+                                <Text style={[styles.emptyStateTitle, isDark && { color: '#fff' }]}>{t('home_greeting')}</Text>
                                 <Text style={styles.emptyStateText}>
-                                    Estoy aquí para escucharte y analizar tu situación.
+                                    {t('home_greeting_subtitle')}
                                 </Text>
 
                                 <View style={{ width: '100%', paddingHorizontal: 20, marginTop: 24 }}>
                                     <Text style={{ color: '#6b7280', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
-                                        Sugerencias para iniciar:
+                                        {t('home_suggestions_label')}
                                     </Text>
                                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
                                         {[
-                                            "Hola",
-                                            "Te extraño",
-                                            "¿Podemos hablar?",
-                                            "No dejo de pensar en ti",
-                                            "¿Cómo has estado?"
+                                            t('home_chip1'),
+                                            t('home_chip2'),
+                                            t('home_chip3'),
+                                            t('home_chip4'),
+                                            t('home_chip5')
                                         ].map((text, index) => (
                                             <TouchableOpacity
                                                 key={index}
