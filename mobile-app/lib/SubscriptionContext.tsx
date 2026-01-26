@@ -103,7 +103,11 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                 setTier('survivor');
                 setCustomerInfo(null);
                 if (Platform.OS !== 'web') {
-                    await Purchases.logOut();
+                    try {
+                        await Purchases.logOut();
+                    } catch (e) {
+                        console.warn('Error logging out of RevenueCat:', e);
+                    }
                 }
             }
         });
@@ -305,56 +309,67 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             console.log('[Subscription] Purchase completed locally. Entitlements:', customerInfo.entitlements.active);
             setCustomerInfo(customerInfo);
 
-            // 1. Update UI IMMEDIATELY based on local receipt (Client-side trust)
+            // 1. Update UI IMMEDIATELY based on local receipt
             updateTierFromInfo(customerInfo);
+
+            // FALLBACK: If RevenueCat didn't return entitlements immediately (common in sandbox),
+            // deduce tier from the product ID we just bought.
+            const productId = pkg.product.identifier.toLowerCase();
+            let fallbackTier: SubscriptionTier = 'survivor';
+
+            if (productId.includes('phoenix')) fallbackTier = 'phoenix';
+            else if (productId.includes('warrior')) fallbackTier = 'warrior';
+            else if (productId.includes('explorer')) fallbackTier = 'explorer';
+
+            // Check if our current tier (from updateTierFromInfo) is lower than what we just bought
+            const hasEntitlement =
+                customerInfo.entitlements.active['phoenix'] ||
+                customerInfo.entitlements.active['warrior'] ||
+                customerInfo.entitlements.active['explorer'];
+
+            if (!hasEntitlement && fallbackTier !== 'survivor') {
+                console.log(`[Subscription] 🛡️ RevenueCat delay detected. Forcing UI to ${fallbackTier} based on product ID.`);
+                setTier(fallbackTier);
+            }
 
             // 2. Sync with server in background
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 console.log('[Subscription] 🔄 Syncing with Supabase...');
 
-                // FALLBACK: Update Supabase directly from client if purchase succeeded locally.
-                // We use 'customerInfo.entitlements.active' to determine the tier, ensuring consistency with the UI.
-                let fallbackTier = 'survivor';
-                const activeEntitlements = customerInfo.entitlements.active;
+                // Use the determined Tier (either from Entitlements or Fallback)
+                let finalTier = fallbackTier; // Default to fallback
 
-                if (activeEntitlements['phoenix']) fallbackTier = 'phoenix';
-                else if (activeEntitlements['warrior']) fallbackTier = 'warrior';
-                else if (activeEntitlements['explorer']) fallbackTier = 'explorer';
+                // If entitlements exist, prefer them
+                if (customerInfo.entitlements.active['phoenix']) finalTier = 'phoenix';
+                else if (customerInfo.entitlements.active['warrior']) finalTier = 'warrior';
+                else if (customerInfo.entitlements.active['explorer']) finalTier = 'explorer';
 
-                console.log(`[Subscription] 🛡️ Fallback Tier detected from Entitlements: ${fallbackTier}`);
+                console.log(`[Subscription] 🛡️ Updating Supabase with tier: ${finalTier}`);
 
-                if (fallbackTier !== 'survivor') {
-                    console.log(`[Subscription] 🛡️ Client-side fallback update: Setting tier to ${fallbackTier}`);
+                if (finalTier !== 'survivor') {
                     await supabase.from('profiles').update({
-                        subscription_tier: fallbackTier,
+                        subscription_tier: finalTier,
                         subscription_status: 'active',
                         updated_at: new Date().toISOString()
                     }).eq('id', user.id);
                 }
 
-                Alert.alert(
-                    '✅ Compra exitosa',
-                    'Tu suscripción está activa. Disfruta de My Ex Coach.',
-                    [{ text: 'OK' }]
-                );
+                console.log('[Subscription] ✅ Purchase success alert handled by UI component');
 
-                // Polling mechanism: Extended to 20s (Webhooks can be slow)
+                // Polling mechanism
                 let attempts = 0;
-                const maxAttempts = 10; // 10 * 2s = 20s
+                const maxAttempts = 10;
                 const pollInterval = 2000;
 
                 const checkTier = async () => {
                     attempts++;
-                    // Pass the fresh customerInfo to merge logic
+                    // Pass the fresh customerInfo
                     await fetchTierFromSupabase(user.id, customerInfo);
-
                     if (attempts < maxAttempts) {
                         setTimeout(checkTier, pollInterval);
                     }
                 };
-
-                // Start polling
                 checkTier();
 
                 // Force a hard refresh of entitlements just in case

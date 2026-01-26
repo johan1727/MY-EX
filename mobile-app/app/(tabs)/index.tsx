@@ -585,7 +585,14 @@ export default function ExSimulatorChat() {
                 <SafeAreaView style={{ flex: 1 }}>
                     <View style={styles.headerSafe}>
                         <View style={styles.header}>
-                            <TouchableOpacity onPress={() => setDrawerVisible(true)} style={{ padding: 8 }}>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    console.log('[Index] Hamburger pressed. Width:', width);
+                                    setDrawerVisible(true);
+                                }}
+                                style={{ padding: 12, marginLeft: -4 }}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            >
                                 <Menu size={24} color={isDark ? "#fff" : "#111"} />
                             </TouchableOpacity>
 
@@ -1350,8 +1357,8 @@ export default function ExSimulatorChat() {
                     </View>
                 </Modal>
 
-                {/* ProfileDrawer */}
-                {!isDesktop && (
+                {/* ProfileDrawer - Force render for debugging */}
+                {true && (
                     <ProfileDrawer
                         visible={drawerVisible}
                         onClose={() => setDrawerVisible(false)}
@@ -1667,6 +1674,7 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 8,
         borderBottomRightRadius: 2,
+        zIndex: 50,
     },
     previewText: {
         color: '#fff',

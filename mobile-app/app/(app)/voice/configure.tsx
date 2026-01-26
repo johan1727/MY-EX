@@ -11,6 +11,7 @@ import { supabase } from '../../../lib/supabase';
 import { AudioLines, Sparkles, CloudUpload, Info, CheckCircle2, ChevronLeft, Mic, Play, MoreVertical, X } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../../../lib/ThemeContext';
+import { useLanguage } from '../../../lib/i18n';
 
 const { width } = Dimensions.get('window');
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB Limit
@@ -69,10 +70,15 @@ const WaveformVisualizer = ({ isActive }: { isActive: boolean }) => {
 export default function VoiceConfigScreen() {
     const router = useRouter();
     const { isDark } = useTheme();
+    const { t } = useLanguage();
     const { profileId, name, force } = useLocalSearchParams<{ profileId: string, name: string, force?: string }>();
     const [audioFiles, setAudioFiles] = useState<any[]>([]);
     const [isCloning, setIsCloning] = useState(false);
-    const [statusText, setStatusText] = useState('Esperando muestras de audio...');
+    const [statusText, setStatusText] = useState('');
+
+    useEffect(() => {
+        setStatusText(t('voice_lab_status_waiting'));
+    }, [t]);
     const [existingVoiceId, setExistingVoiceId] = useState<string | null>(null);
     const [loadingVoice, setLoadingVoice] = useState(true);
 
@@ -193,11 +199,11 @@ export default function VoiceConfigScreen() {
 
         try {
             setIsCloning(true);
-            setStatusText('Analizando espectrograma...');
+            setStatusText(t('voice_lab_analyzing'));
 
             // Simulate "Analyzing" phases for user feedback
-            setTimeout(() => setStatusText('Entrenando red neuronal...'), 2000);
-            setTimeout(() => setStatusText('Sintetizando voz...'), 4500);
+            setTimeout(() => setStatusText(t('voice_lab_training')), 2000);
+            setTimeout(() => setStatusText(t('voice_lab_synthesizing')), 4500);
 
             const fileUris = audioFiles.map(f => f.uri);
             const result = await elevenLabsService.cloneVoice(name || 'Ex', fileUris);
@@ -229,7 +235,7 @@ export default function VoiceConfigScreen() {
             }
 
             setExistingVoiceId(result.voiceId);
-            setStatusText('Voz clonada exitosamente');
+            setStatusText(t('voice_lab_success'));
 
             // Navigate after short delay
             setTimeout(() => {
@@ -285,8 +291,8 @@ export default function VoiceConfigScreen() {
                 <ChevronLeft size={24} color={textMain} />
             </TouchableOpacity>
             <View>
-                <Text style={[styles.headerTitle, { color: textMain }]}>VOICE LAB</Text>
-                <Text style={styles.headerSubtitle}>Neural Synthesis Engine</Text>
+                <Text style={[styles.headerTitle, { color: textMain }]}>{t('voice_lab_title')}</Text>
+                <Text style={styles.headerSubtitle}>{t('voice_lab_subtitle')}</Text>
             </View>
             {existingVoiceId ? (
                 <TouchableOpacity onPress={handleMenuPress} style={[styles.iconButton, { backgroundColor: 'transparent' }]}>
@@ -338,7 +344,7 @@ export default function VoiceConfigScreen() {
                         {/* Audio Upload Cards */}
                         <View style={styles.sectionContainer}>
                             <View style={styles.sectionHeader}>
-                                <Text style={styles.sectionTitle}>MUESTRAS DE AUDIO</Text>
+                                <Text style={styles.sectionTitle}>{t('voice_lab_samples_title')}</Text>
                                 <Text style={styles.sectionCounter}>{audioFiles.length}/5</Text>
                             </View>
 
@@ -347,8 +353,7 @@ export default function VoiceConfigScreen() {
                                 <Info size={16} color="#9333ea" style={{ marginTop: 2 }} />
                                 <View style={{ flex: 1 }}>
                                     <Text style={[styles.guidelineText, { color: textSub }]}>
-                                        Sube audios de <Text style={{ color: textMain, fontWeight: 'bold' }}>WhatsApp</Text> donde hable solo esa persona.
-                                        Evita ruidos de fondo.
+                                        {t('voice_lab_instruction')}
                                     </Text>
                                 </View>
                             </View>
@@ -377,7 +382,7 @@ export default function VoiceConfigScreen() {
                                     activeOpacity={0.7}
                                 >
                                     <CloudUpload size={24} color={textSub} />
-                                    <Text style={[styles.addCardText, { color: textSub }]}>Subir Audio o Video</Text>
+                                    <Text style={[styles.addCardText, { color: textSub }]}>{t('voice_lab_upload_btn')}</Text>
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -394,11 +399,11 @@ export default function VoiceConfigScreen() {
                             if (audioFiles.length === 1) {
                                 // Warning for single audio sample
                                 Alert.alert(
-                                    '⚠️ Advertencia de Calidad',
-                                    'Con una sola muestra de audio, la voz clonada puede sonar menos natural. Se recomienda usar 3-5 muestras para mejor calidad.\n\n¿Deseas continuar de todos modos?',
+                                    t('voice_lab_warning_title'),
+                                    t('voice_lab_warning_msg'),
                                     [
-                                        { text: 'Cancelar', style: 'cancel' },
-                                        { text: 'Continuar', onPress: startCloning }
+                                        { text: t('alert_cancel'), style: 'cancel' },
+                                        { text: t('welcome_conf_button'), onPress: startCloning }
                                     ]
                                 );
                             } else {
@@ -411,12 +416,11 @@ export default function VoiceConfigScreen() {
                             <ActivityIndicator color={isDark ? "#000" : "#fff"} />
                         ) : (
                             <>
-                                <Text style={[styles.mainButtonText, { color: isDark ? '#000' : '#fff' }]}>CLONAR VOZ</Text>
+                                <Text style={[styles.mainButtonText, { color: isDark ? '#000' : '#fff' }]}>{t('voice_lab_clone_btn')}</Text>
                                 <Sparkles size={18} color={isDark ? "#000" : "#fff"} style={{ marginLeft: 8 }} />
                             </>
                         )}
                     </TouchableOpacity>
-                    <Text style={[styles.disclaimer, { color: textSub }]}>Powered by ElevenLabs™ Neural Engine</Text>
                 </View>
             )}
         </View>

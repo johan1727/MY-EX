@@ -165,6 +165,7 @@ export const translations = {
     drawer_theme_light: { en: 'Light Mode', es: 'Modo Claro' },
     drawer_theme_dark: { en: 'Dark Mode', es: 'Modo Oscuro' },
     drawer_switch_account: { en: 'Switch account', es: 'Cambiar cuenta' },
+    drawer_add_account: { en: 'Add a new account', es: 'Agregar otra cuenta' },
     drawer_privacy: { en: 'Privacy', es: 'Privacidad' },
     drawer_premium_plans: { en: 'View Premium Plans', es: 'Ver Planes Premium' },
     drawer_sign_in: { en: 'Sign in', es: 'Iniciar sesión' },
@@ -246,6 +247,27 @@ export const translations = {
     remi_handsfree_hint_body: {
         en: 'Just speak normally. REMI listens and responds automatically when you finish talking.\n\nYou can switch to manual mode by tapping the microphone button.',
         es: 'Solo habla normalmente. REMI te escucha y responde automáticamente cuando terminas de hablar.\n\nPuedes cambiar a modo manual tocando el botón de micrófono.'
+    },
+
+    // Voice Lab
+    voice_lab_title: { en: 'VOICE LAB', es: 'LAB DE VOZ' },
+    voice_lab_subtitle: { en: 'Neural Synthesis Engine', es: 'Motor de Síntesis Neuronal' },
+    voice_lab_status_waiting: { en: 'Waiting for audio samples...', es: 'Esperando muestras de audio...' },
+    voice_lab_samples_title: { en: 'AUDIO SAMPLES', es: 'MUESTRAS DE AUDIO' },
+    voice_lab_instruction: {
+        en: 'Upload clear audio or video samples where only that person speaks. Avoid background noise. (WhatsApp audios work great!)',
+        es: 'Sube audios o videos claros donde hable solo esa persona. Evita ruidos de fondo. (¡Audios de WhatsApp funcionan muy bien!)'
+    },
+    voice_lab_upload_btn: { en: 'Upload Audio or Video', es: 'Subir Audio o Video' },
+    voice_lab_clone_btn: { en: 'CLONE VOICE', es: 'CLONAR VOZ' },
+    voice_lab_analyzing: { en: 'Analyzing spectrogram...', es: 'Analizando espectrograma...' },
+    voice_lab_training: { en: 'Training neural network...', es: 'Entrenando red neuronal...' },
+    voice_lab_synthesizing: { en: 'Synthesizing voice...', es: 'Sintetizando voz...' },
+    voice_lab_success: { en: 'Voice cloned successfully', es: 'Voz clonada exitosamente' },
+    voice_lab_warning_title: { en: '⚠️ Quality Warning', es: '⚠️ Advertencia de Calidad' },
+    voice_lab_warning_msg: {
+        en: 'With only one sample, the voice might sound less natural. 3-5 samples are recommended for best results.\n\nContinue anyway?',
+        es: 'Con una sola muestra, la voz puede sonar menos natural. Se recomiendan 3-5 muestras para mejor resultado.\n\n¿Continuar de todos modos?'
     },
 
     // General Buttons
@@ -467,6 +489,10 @@ const detectInitialLanguage = (): Language => {
         // Check if language code starts with 'es' (e.g. 'es-MX', 'es-ES')
         if (languageCode?.startsWith('es')) {
             return 'es';
+        }
+        // Check if language code starts with 'en'
+        if (languageCode?.startsWith('en')) {
+            return 'en';
         }
     }
 

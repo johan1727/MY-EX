@@ -14,10 +14,19 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Crown, Check, Sparkles, Star, Flame, HelpCircle, X, LogOut } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getOfferings, purchasePackage } from '../lib/revenuecat';
+import { getOfferings } from '../lib/revenuecat';
 import { PurchasesPackage } from 'react-native-purchases';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../lib/i18n';
+import { useSubscription, SubscriptionTier } from '../lib/SubscriptionContext';
+
+// Helper to rank tiers
+const TIER_RANKS: Record<SubscriptionTier, number> = {
+    'survivor': 0,
+    'explorer': 1,
+    'warrior': 2,
+    'phoenix': 3
+};
 
 interface Plan {
     id: string;
@@ -34,6 +43,9 @@ interface Plan {
 export default function PremiumScreen() {
     const router = useRouter();
     const { t } = useLanguage();
+    // Get subscription context
+    const { purchasePackage, tier } = useSubscription();
+
     const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
@@ -227,6 +239,26 @@ export default function PremiumScreen() {
             return;
         }
 
+        // CHECK IF USER ALREADY HAS THIS PLAN OR BETTER
+        let targetTier: SubscriptionTier = 'survivor';
+        if (planId.includes('phoenix')) targetTier = 'phoenix';
+        else if (planId.includes('warrior')) targetTier = 'warrior';
+        else if (planId.includes('explorer')) targetTier = 'explorer';
+
+        const currentRank = TIER_RANKS[tier];
+        const targetRank = TIER_RANKS[targetTier];
+
+        // Ensure we don't block upgrading from a lower tier, but block SAME or LOWER tier
+        if (targetRank <= currentRank) {
+            showAlert(
+                'Plan Activo',
+                `Ya tienes el plan ${targetTier.charAt(0).toUpperCase() + targetTier.slice(1)} (o uno superior) activo.`,
+                [{ text: 'OK' }],
+                'info'
+            );
+            return;
+        }
+
         const pkg = getPackageForPlan(planId, billingPeriod);
 
         if (!pkg) {
@@ -243,26 +275,21 @@ export default function PremiumScreen() {
             setPurchasing(true);
             console.log('🛒 Purchasing:', pkg.identifier, 'for user:', user.id);
 
-            const result = await purchasePackage(pkg);
+            // Use context purchasePackage instead of direct import
+            await purchasePackage(pkg);
 
-            if (result.success) {
-                showAlert(
-                    `🎉 ${t('alert_purchase_success_title')}`,
-                    t('alert_purchase_success_msg'),
-                    [{ text: 'OK', onPress: () => { closeAlert(); router.back(); } }],
-                    'success'
-                );
-            } else if (result.error !== 'cancelled') {
-                showAlert(
-                    t('alert_purchase_error_title'),
-                    result.error || t('alert_error_generic'),
-                    [{ text: 'OK' }],
-                    'error'
-                );
-            }
-        } catch (error) {
+            // If we get here, no error was thrown
+            showAlert(
+                `🎉 ${t('alert_purchase_success_title')}`,
+                t('alert_purchase_success_msg'),
+                [{ text: 'OK', onPress: () => { closeAlert(); router.back(); } }],
+                'success'
+            );
+        } catch (error: any) {
             console.error('Purchase error:', error);
-            showAlert(t('alert_purchase_error_title'), t('alert_error_generic'), [{ text: 'OK' }], 'error');
+            if (!error.userCancelled) {
+                showAlert(t('alert_purchase_error_title'), error.message || t('alert_error_generic'), [{ text: 'OK' }], 'error');
+            }
         } finally {
             setPurchasing(false);
         }

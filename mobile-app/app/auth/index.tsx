@@ -12,7 +12,7 @@ import {
     ScrollView,
     Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { Eye, EyeOff, Brain } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -48,6 +48,7 @@ const { width } = Dimensions.get('window');
 
 export default function AuthScreen() {
     const router = useRouter();
+    const params = useLocalSearchParams();
     const { t } = useLanguage();
     const [loading, setLoading] = useState(false);
     const [oauthLoading, setOauthLoading] = useState<'google' | null>(null);
@@ -58,8 +59,11 @@ export default function AuthScreen() {
         const handleOAuthCallback = async () => {
             if (hasNavigated) return;
 
+            // If switching accounts, ignore existing session to allow login
+            const isSwitching = params.action === 'switch';
+
             const { data: { session: existingSession } } = await supabase.auth.getSession();
-            if (existingSession && !hasNavigated) {
+            if (existingSession && !hasNavigated && !isSwitching) {
                 setHasNavigated(true);
                 syncLanguageToProfile(existingSession.user.id);
                 router.replace('/welcome-confirmation');
@@ -125,7 +129,7 @@ export default function AuthScreen() {
                             redirectTo: targetUrl,
                             queryParams: {
                                 access_type: 'offline',
-                                prompt: 'consent'
+                                prompt: 'select_account'
                             }
                         }
                     });
@@ -142,7 +146,7 @@ export default function AuthScreen() {
                         skipBrowserRedirect: true,
                         queryParams: {
                             access_type: 'offline',
-                            prompt: 'consent'
+                            prompt: 'select_account'
                         }
                     }
                 });
@@ -179,6 +183,12 @@ export default function AuthScreen() {
                 }
             } else {
                 await GoogleSignin.hasPlayServices();
+                try {
+                    // Force sign out to ensure account picker appears for "Add Account" flow
+                    await GoogleSignin.signOut();
+                } catch (e) {
+                    // Ignore if not signed in
+                }
                 const userInfo = await GoogleSignin.signIn();
                 const tokens = await GoogleSignin.getTokens();
                 if (!tokens.idToken) throw new Error('No se pudo obtener el token de Google');
