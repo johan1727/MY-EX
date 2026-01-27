@@ -352,6 +352,11 @@ export default function ProfileDrawer({
         router.replace('/auth');
     };
 
+    useEffect(() => {
+        return () => { isMounted.current = false; };
+    }, []);
+    const isMounted = React.useRef(true); // SAFETY
+
     const performDelete = async (profile: Profile) => {
         try {
             console.log('[Delete] Executing deletion for:', profile.id, profile.exName);
@@ -395,6 +400,8 @@ export default function ProfileDrawer({
                 } catch (e) { }
             }
 
+            if (!isMounted.current) return;
+
             // Reload profiles to update UI
             await loadProfiles();
 
@@ -403,14 +410,18 @@ export default function ProfileDrawer({
                 onProfileDeleted();
             }
 
-            setShowSuccessModal(true);
-            setTimeout(() => {
-                setShowSuccessModal(false);
-            }, 2500);
+            if (isMounted.current) {
+                setShowSuccessModal(true);
+                setTimeout(() => {
+                    if (isMounted.current) setShowSuccessModal(false);
+                }, 2500);
+            }
 
         } catch (error) {
             console.error('Error deleting profile:', error);
-            showAlert('Error', 'No se pudo eliminar el perfil completamente. Intenta de nuevo.', [{ text: 'OK' }], 'error');
+            if (isMounted.current) {
+                showAlert('Error', 'No se pudo eliminar el perfil completamente. Intenta de nuevo.', [{ text: 'OK' }], 'error');
+            }
         }
     };
 

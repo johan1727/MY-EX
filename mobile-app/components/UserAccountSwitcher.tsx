@@ -10,9 +10,10 @@ import { useLanguage } from '../lib/i18n';
 interface UserAccountSwitcherProps {
     onClose: () => void;
     onAddAccount: () => void;
+    variant?: 'inline' | 'modal';
 }
 
-export default function UserAccountSwitcher({ onClose, onAddAccount }: UserAccountSwitcherProps) {
+export default function UserAccountSwitcher({ onClose, onAddAccount, variant = 'modal' }: UserAccountSwitcherProps) {
     const { t } = useLanguage();
     const { isDark } = useTheme();
     const router = useRouter();

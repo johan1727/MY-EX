@@ -104,7 +104,21 @@ export const SessionManager = {
                 refresh_token: target.refresh_token,
             });
 
-            if (error) throw error;
+            if (error) {
+                console.warn('[SessionManager] Session Token Invalid:', error.message);
+                // Token likely expired, remove it to prevent deadlock
+                await SessionManager.removeSession(userId);
+                return false;
+            }
+
+            // DOUBLE CHECK: Verify session is actually active
+            const { data: userData, error: userError } = await supabase.auth.getUser();
+            if (userError || !userData.user) {
+                console.warn('[SessionManager] Session set but User Invalid:', userError?.message);
+                await SessionManager.removeSession(userId);
+                return false;
+            }
+
             return true;
         } catch (e) {
             console.error('[SessionManager] Error switching session:', e);

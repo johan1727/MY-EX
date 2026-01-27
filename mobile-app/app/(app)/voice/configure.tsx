@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Dimensions, Platform, ActionSheetIOS } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -108,14 +108,14 @@ export default function VoiceConfigScreen() {
 
             // Try Supabase first
             const { data, error } = await supabase
-                .from('profiles')
+                .from('ex_profiles')
                 .select('voice_id')
                 .eq('id', profileId)
                 .single();
 
             if (data?.voice_id) {
                 voiceId = data.voice_id;
-                console.log('[Voice Configure] ✅ Found voice_id in Supabase:', voiceId);
+                console.log('[Voice Configure] ✅ Found voice_id in ex_profiles:', voiceId);
             } else if (error) {
                 console.log('[Voice Configure] ⚠️ Supabase query failed:', error.message);
             }
@@ -185,6 +185,12 @@ export default function VoiceConfigScreen() {
         setAudioFiles(files => files.filter((_, i) => i !== index));
     };
 
+    // Track mount state
+    const isMounted = useRef(true);
+    useEffect(() => {
+        return () => { isMounted.current = false; };
+    }, []);
+
     const startCloning = async () => {
         if (audioFiles.length < 1) {
             Alert.alert('Falta Audio', 'Sube al menos un audio para clonar la voz.');
@@ -202,18 +208,65 @@ export default function VoiceConfigScreen() {
             setStatusText(t('voice_lab_analyzing'));
 
             // Simulate "Analyzing" phases for user feedback
-            setTimeout(() => setStatusText(t('voice_lab_training')), 2000);
-            setTimeout(() => setStatusText(t('voice_lab_synthesizing')), 4500);
+            setTimeout(() => { if (isMounted.current) setStatusText(t('voice_lab_training')); }, 2000);
+
+            // --- 1. UPLOAD TO SUPABASE STORAGE (BACKUP) ---
+            setStatusText('Guardando respaldo seguro...');
+            const uploadedPaths: string[] = [];
+
+            for (const file of audioFiles) {
+                try {
+                    const ext = file.name ? file.name.split('.').pop() : 'm4a';
+                    const path = `${session?.user?.id || 'anon'}/${profileId}/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${ext}`;
+
+                    // Fetch blob from URI (Works on Expo/RN)
+                    const response = await fetch(file.uri);
+                    const blob = await response.blob();
+
+                    const { error: uploadError } = await supabase.storage
+                        .from('voice_samples')
+                        .upload(path, blob, {
+                            contentType: file.mimeType || 'audio/m4a',
+                            upsert: true
+                        });
+
+                    if (uploadError) {
+                        console.error('Upload failed:', uploadError);
+                        // Convert to string for alert
+                        throw new Error(`Error subiendo audio: ${uploadError.message}`);
+                    }
+
+                    uploadedPaths.push(path);
+                } catch (e) {
+                    console.error('File process error:', e);
+                    throw e;
+                }
+            }
+
+            // Save paths to DB immediately
+            const { error: dbPathError } = await supabase
+                .from('ex_profiles')
+                .update({ audio_paths: uploadedPaths })
+                .eq('id', profileId);
+
+            if (dbPathError) console.warn('Failed to save audio paths:', dbPathError);
+            console.log(`[Voice Configure] Backed up ${uploadedPaths.length} files to Storage.`);
+
+            // --- 2. CLONE VOICE ---
+            setTimeout(() => { if (isMounted.current) setStatusText(t('voice_lab_synthesizing')); }, 1000);
 
             const fileUris = audioFiles.map(f => f.uri);
-            const result = await elevenLabsService.cloneVoice(name || 'Ex', fileUris);
+            // Pass profileId for tracking/tagging
+            const result = await elevenLabsService.cloneVoice(name || 'Ex', fileUris, profileId);
+
+            if (!isMounted.current) return;
 
             console.log('[Voice Configure] Voice cloned successfully:', result.voiceId);
 
             // Save to DB (with fallback to AsyncStorage for testing)
             try {
                 const { error: saveError } = await supabase
-                    .from('profiles')
+                    .from('ex_profiles')
                     .update({ voice_id: result.voiceId })
                     .eq('id', profileId);
 
@@ -224,7 +277,7 @@ export default function VoiceConfigScreen() {
                     await AsyncStorage.setItem(`voice_${profileId}`, result.voiceId);
                     console.log('[Voice Configure] ✅ Saved to AsyncStorage as fallback');
                 } else {
-                    console.log('[Voice Configure] ✅ Saved voice_id to Supabase');
+                    console.log('[Voice Configure] ✅ Saved voice_id to Supabase ex_profiles');
                 }
             } catch (dbErr) {
                 console.error('[Voice Configure] DB Error:', dbErr);
@@ -234,19 +287,25 @@ export default function VoiceConfigScreen() {
                 console.log('[Voice Configure] ✅ Fallback: Saved to AsyncStorage');
             }
 
+            if (!isMounted.current) return;
+
             setExistingVoiceId(result.voiceId);
             setStatusText(t('voice_lab_success'));
 
             // Navigate after short delay
             setTimeout(() => {
-                setIsCloning(false);
-                router.replace({ pathname: '/(app)/voice/call', params: { profileId, name, voiceId: result.voiceId } });
+                if (isMounted.current) {
+                    setIsCloning(false);
+                    router.replace({ pathname: '/(app)/voice/call', params: { profileId, name, voiceId: result.voiceId } });
+                }
             }, 1000);
 
         } catch (error: any) {
-            setIsCloning(false);
-            console.error('[Voice Configure] Cloning failed:', error);
-            Alert.alert('Error', error.message || 'No se pudo clonar la voz.');
+            if (isMounted.current) {
+                setIsCloning(false);
+                console.error('[Voice Configure] Cloning failed:', error);
+                Alert.alert('Error', error.message || 'No se pudo clonar la voz.');
+            }
         }
     };
 
