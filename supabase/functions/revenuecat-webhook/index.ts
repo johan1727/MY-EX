@@ -47,6 +47,51 @@ serve(async (req) => {
             return false;
         };
 
+        if (eventType === 'NON_RENEWING_PURCHASE') {
+            const productId = event.product_id;
+            console.log(`Processing consumable purchase: ${productId} for user ${userId}`);
+
+            // Extract minutes from product ID (e.g., call_credits_30min -> 30)
+            let minutesToAdd = 0;
+            if (productId && productId.includes('call_credits_')) {
+                const parts = productId.split('_');
+                // parts might be ['call', 'credits', '30min']
+                const minutesPart = parts[parts.length - 1].replace('min', '');
+                minutesToAdd = parseInt(minutesPart, 10);
+            }
+
+            if (minutesToAdd > 0) {
+                // Fetch current credits
+                const { data: profile, error: fetchError } = await supabase
+                    .from('profiles')
+                    .select('call_credits')
+                    .eq('id', userId)
+                    .single();
+
+                if (fetchError) {
+                    console.error('Error fetching profile:', fetchError);
+                    // Just log, don't fail the webhook so RC doesn't retry infinitely if it's a logic error
+                }
+
+                const currentCredits = profile?.call_credits || 0;
+                const newCredits = currentCredits + minutesToAdd;
+
+                // Update credits
+                const { error: updateError } = await supabase
+                    .from('profiles')
+                    .update({ call_credits: newCredits })
+                    .eq('id', userId);
+
+                if (updateError) {
+                    console.error('Error updating credits:', updateError);
+                    return new Response(JSON.stringify({ error: 'Failed to update credits' }), { status: 500 });
+                }
+
+                console.log(`Successfully added ${minutesToAdd} credits. New balance: ${newCredits}`);
+                return new Response(JSON.stringify({ message: 'Credits added successfully' }), { status: 200 });
+            }
+        }
+
         switch (eventType) {
             case 'INITIAL_PURCHASE':
             case 'RENEWAL':

@@ -60,6 +60,15 @@ class CallLimitService {
             return { canCall: false, minutesUsed: 0, minutesLimit: 0, minutesRemaining: 0, tier, usagePercent: 100 };
         }
 
+        // Get call_credits from profiles
+        const { data: profileData } = await supabase
+            .from('profiles')
+            .select('call_credits')
+            .eq('id', userId)
+            .single();
+
+        const credits = profileData?.call_credits || 0;
+
         // Sumar todo el uso del mes
         const { data, error } = await supabase
             .from('voice_usage_logs')
@@ -74,14 +83,15 @@ class CallLimitService {
         }
 
         const totalUsed = data.reduce((sum, row) => sum + row.minutes_used, 0);
-        const remaining = Math.max(0, limit - totalUsed);
+        const monthlyRemaining = Math.max(0, limit - totalUsed);
+        const totalRemaining = monthlyRemaining + credits;
         const percent = Math.min(100, (totalUsed / limit) * 100);
 
         return {
-            canCall: totalUsed < limit,
+            canCall: totalRemaining > 0,
             minutesUsed: totalUsed,
             minutesLimit: limit,
-            minutesRemaining: remaining,
+            minutesRemaining: totalRemaining,
             tier,
             usagePercent: percent
         };
@@ -96,6 +106,7 @@ class CallLimitService {
         const minutes = Number((secondsUsed / 60).toFixed(2));
         const monthKey = this.getCurrentMonthKey();
 
+        // Log the usage
         const { error } = await supabase
             .from('voice_usage_logs')
             .insert({
@@ -107,9 +118,46 @@ class CallLimitService {
 
         if (error) {
             console.error('[CallLimitService] Failed to log usage:', error);
-            // Podríamos intentar reintentar o guardar localmente para sync después
-        } else {
-            console.log(`[CallLimitService] Logged ${minutes} mins for user ${userId}`);
+            return;
+        }
+
+        console.log(`[CallLimitService] Logged ${minutes} mins for user ${userId}`);
+
+        // Check if we need to deduct from credits
+        const tier = await this.getUserTier(userId);
+        const limit = VOICE_LIMITS_MINUTES[tier];
+
+        // Get total usage for this month
+        const { data: usageData } = await supabase
+            .from('voice_usage_logs')
+            .select('minutes_used')
+            .eq('user_id', userId)
+            .eq('month_year', monthKey);
+
+        const totalUsed = usageData?.reduce((sum, row) => sum + row.minutes_used, 0) || 0;
+        const overage = totalUsed - limit;
+
+        if (overage > 0) {
+            // We're over the monthly limit, deduct from credits
+            const { data: profileData } = await supabase
+                .from('profiles')
+                .select('call_credits')
+                .eq('id', userId)
+                .single();
+
+            const currentCredits = profileData?.call_credits || 0;
+            const creditsToDeduct = Math.min(overage, currentCredits);
+
+            if (creditsToDeduct > 0) {
+                const { error: updateError } = await supabase
+                    .from('profiles')
+                    .update({ call_credits: currentCredits - creditsToDeduct })
+                    .eq('id', userId);
+
+                if (!updateError) {
+                    console.log(`[CallLimitService] Deducted ${creditsToDeduct} mins from credits (${currentCredits} -> ${currentCredits - creditsToDeduct})`);
+                }
+            }
         }
     }
 }

@@ -36,15 +36,8 @@ export default function SubscribePage() {
     const [showConfetti, setShowConfetti] = useState(false);
     const prevTierRef = useRef(tier);
 
-    useEffect(() => {
-        // If tier changed from survivor to something else, show confetti
-        if (prevTierRef.current === 'survivor' && tier !== 'survivor') {
-            console.log('Tier upgraded! Showing confetti');
-            setShowConfetti(true);
-            setShowSuccessModal(true);
-        }
-        prevTierRef.current = tier;
-    }, [tier]);
+    // Confetti Logic removed from useEffect to avoid false positives on load
+    // It is now triggered only after a successful purchase action.
 
 
     const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('monthly');

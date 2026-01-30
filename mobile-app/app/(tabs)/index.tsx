@@ -988,7 +988,7 @@ export default function ExSimulatorChat() {
                                         try {
                                             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
                                             if (status !== 'granted') {
-                                                Alert.alert('Permiso necesario', 'Necesitamos acceso a tus fotos.');
+                                                Alert.alert(t('alert_permission_needed'), t('alert_permission_photos'));
                                                 return;
                                             }
                                             const result = await ImagePicker.launchImageLibraryAsync({
@@ -996,7 +996,7 @@ export default function ExSimulatorChat() {
                                                 quality: 0.7,
                                             });
                                             if (!result.canceled) {
-                                                Alert.alert('Análisis de imagen', 'Función de análisis de imágenes próximamente.');
+                                                Alert.alert(t('alert_image_analysis'), t('alert_image_analysis_soon'));
                                             }
                                         } catch (error) {
                                             console.error('ImagePicker error:', error);
@@ -1129,10 +1129,9 @@ export default function ExSimulatorChat() {
                             <View style={styles.modalIcon}>
                                 <Sparkles size={40} color="#a855f7" />
                             </View>
-                            <Text style={styles.modalTitle}>¡Guarda tu conversación!</Text>
+                            <Text style={styles.modalTitle}>{t('modal_save_title')}</Text>
                             <Text style={styles.modalText}>
-                                Crea una cuenta para que tu simulación y análisis se guarden automáticamente.
-                                Sin cuenta, podrías perder tus datos.
+                                {t('modal_save_text')}
                             </Text>
                             <TouchableOpacity
                                 style={styles.modalPrimaryBtn}
@@ -1141,13 +1140,13 @@ export default function ExSimulatorChat() {
                                     router.push('/auth');
                                 }}
                             >
-                                <Text style={styles.modalPrimaryText}>Crear cuenta / Iniciar sesión</Text>
+                                <Text style={styles.modalPrimaryText}>{t('modal_save_btn_login')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={styles.modalSecondaryBtn}
                                 onPress={() => setShowLoginModal(false)}
                             >
-                                <Text style={styles.modalSecondaryText}>Continuar sin guardar</Text>
+                                <Text style={styles.modalSecondaryText}>{t('modal_save_btn_continue')}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -1223,7 +1222,7 @@ export default function ExSimulatorChat() {
                                 textAlign: 'center',
                                 marginBottom: 12
                             }}>
-                                REMI LIVE
+                                {t('modal_voice_limit_title')}
                             </Text>
 
                             {/* Subtitle badge */}
@@ -1252,8 +1251,7 @@ export default function ExSimulatorChat() {
                                 marginBottom: 32,
                                 lineHeight: 24
                             }}>
-                                Las llamadas de voz requieren un plan Warrior o Phoenix.
-                                {'\n'}Actualiza tu plan para hablar directamente con tu simulación.
+                                {t('modal_voice_limit_text')}
                             </Text>
 
                             {/* CTA Button */}
@@ -1276,7 +1274,7 @@ export default function ExSimulatorChat() {
                                     router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
                                 }}
                             >
-                                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Ver planes Premium</Text>
+                                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{t('modal_btn_see_plans')}</Text>
                             </TouchableOpacity>
 
                             {/* Cancel button */}
@@ -1289,7 +1287,7 @@ export default function ExSimulatorChat() {
                                     fontSize: 15,
                                     fontWeight: '500',
                                     textAlign: 'center'
-                                }}>Quizás después</Text>
+                                }}>{t('modal_btn_maybe_later')}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -1314,15 +1312,14 @@ export default function ExSimulatorChat() {
                             </View>
 
                             <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginBottom: 12 }}>
-                                Has alcanzado el límite
+                                {t('modal_limit_title')}
                             </Text>
 
                             <Text style={{
                                 fontSize: 16, color: '#a1a1aa', textAlign: 'center',
                                 marginBottom: 28, lineHeight: 24
                             }}>
-                                Los usuarios gratuitos tienen 10 mensajes por simulación.
-                                Actualiza a Premium para chatear sin límites y desbloquear el análisis profundo.
+                                {t('modal_limit_text')}
                             </Text>
 
                             <TouchableOpacity
@@ -1344,14 +1341,14 @@ export default function ExSimulatorChat() {
                                     router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
                                 }}
                             >
-                                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Ver planes Premium</Text>
+                                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{t('modal_btn_see_plans')}</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
                                 style={{ padding: 12 }}
                                 onPress={() => setShowUpgradeModal(false)}
                             >
-                                <Text style={{ color: '#71717a', fontSize: 15, fontWeight: '500' }}>Quizás después</Text>
+                                <Text style={{ color: '#71717a', fontSize: 15, fontWeight: '500' }}>{t('modal_btn_maybe_later')}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>

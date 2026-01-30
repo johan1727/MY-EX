@@ -203,6 +203,34 @@ export const translations = {
     import_stage3: { en: 'Understanding the bonds of the heart...', es: 'Entendiendo los lazos del corazón...' },
     import_stage4: { en: 'Preparing your safe space...', es: 'Preparando tu espacio seguro...' },
     import_starting: { en: 'Starting...', es: 'Iniciando...' },
+    import_searching_shared: { en: 'Searching for shared files...', es: 'Buscando archivos compartidos...' },
+    import_file_found: { en: 'File found', es: 'Archivo encontrado' },
+    import_reading_file: { en: 'Reading file...', es: 'Leyendo archivo...' },
+    import_error_no_txt: { en: 'No .txt chat file found in ZIP. Try exporting without media.', es: 'No se encontró archivo de chat (.txt) dentro del ZIP. Intenta exportar sin medios.' },
+    import_error_empty: { en: 'The file is empty or too short.', es: 'El archivo está vacío o es muy corto.' },
+    import_error_read: { en: 'Error reading file:', es: 'Error al leer el archivo:' },
+    import_parsing: { en: 'Parsing messages...', es: 'Parseando mensajes...' },
+    import_msgs_found: { en: 'Messages found:', es: 'Mensajes encontrados:' },
+    import_optimizing: { en: 'Optimizing sample...', es: 'Optimizando muestra...' },
+    import_alert_small_file_title: { en: 'File too small', es: 'Archivo muy pequeño' },
+    import_alert_small_file_msg: { en: 'Only {count} messages detected. 100+ recommended to avoid errors.', es: 'Solo se detectaron {count} mensajes. Se recomiendan +100 para evitar errores.' },
+    import_alert_confirm_rel_title: { en: 'Confirm relationship type?', es: '¿Confirmar tipo de relación?' },
+    import_alert_confirm_rel_msg: { en: 'AI detected it seems to be "{suggested}", but you selected "{selected}".\n\nDo you want to continue?', es: 'La IA detectó que parece ser "{suggested}", pero tú seleccionaste "{selected}".\n\n¿Quieres continuar así?' },
+    import_missing_info: { en: 'Missing information', es: 'Falta información' },
+    import_missing_name: { en: "Please enter your Ex's name.", es: 'Por favor ingresa el nombre de tu Ex (o como quieres que se llame la IA).' },
+    import_missing_rel: { en: 'Please select the relationship type.', es: 'Por favor selecciona el tipo de relación.' },
+    import_btn_cancel: { en: 'Cancel', es: 'Cancelar' },
+    import_btn_continue: { en: 'Continue', es: 'Continuar' },
+    import_btn_correct: { en: 'Correct', es: 'Corregir' },
+    import_btn_sure: { en: "Yes, I'm sure", es: 'Sí, estoy seguro' },
+
+    import_btn_update: { en: 'Update', es: 'Actualizar' },
+    import_btn_create_new: { en: 'Create New', es: 'Crear Nuevo' },
+    import_btn_register: { en: 'Sign Up', es: 'Registrarme' },
+    import_alert_limit_title: { en: 'Free Limit Reached', es: 'Límite Gratuito Alcanzado' },
+    import_alert_limit_msg: { en: 'You have used your free guest analysis. Please sign up to continue (it\'s free).', es: 'Has utilizado tu análisis gratuito como invitado. Por favor regístrate para continuar (es gratis).' },
+    import_alert_profile_exists_title: { en: 'Profile Exists', es: 'Perfil Existente' },
+    import_alert_profile_exists_msg: { en: 'A profile named "{name}" already exists.\n\nWhat do you want to do?', es: 'Ya existe un perfil llamado "{name}".\n\n¿Qué quieres hacer?' },
 
     // Import Wizard - Participant Selection
     import_confirm_identity: { en: 'CONFIRM IDENTITY', es: 'CONFIRMAR IDENTIDAD' },
@@ -222,6 +250,8 @@ export const translations = {
     import_friend: { en: 'Friend', es: 'Amigo/a' },
     import_family: { en: 'Family', es: 'Familiar' },
     import_fake: { en: 'Situationship', es: 'Falseador/a' },
+    import_deceased: { en: 'Deceased', es: 'Fallecido/a' },
+    import_deceased_msg: { en: 'We understand how hard this is. This simulation can help you process emotions and remember special moments with respect and empathy.', es: 'Entendemos lo difícil que es. Esta simulación puede ayudarte a procesar emociones y recordar momentos especiales con respeto y empatía.' },
 
     // Coach Screen
     coach_title: { en: 'AI Coach', es: 'Coach IA' },
@@ -454,10 +484,29 @@ export const translations = {
     alert_btn_clear: { en: 'Clear', es: 'Borrar' },
     alert_btn_ok: { en: 'OK', es: 'OK' },
 
+    // Image Picker
+    alert_permission_needed: { en: 'Permission needed', es: 'Permiso necesario' },
+    alert_permission_photos: { en: 'We need access to your photos.', es: 'Necesitamos acceso a tus fotos.' },
+    alert_image_analysis: { en: 'Image Analysis', es: 'Análisis de imagen' },
+    alert_image_analysis_soon: { en: 'Image analysis feature coming soon.', es: 'Función de análisis de imágenes próximamente.' },
+
     // Free Preview Banner
     free_preview_title: { en: 'Free Preview', es: 'Vista Previa Gratuita' },
     free_preview_limit_msg: { en: 'Daily message limit applies', es: 'Límite de mensajes diario aplica' },
     free_preview_limit_reached: { en: 'Daily limit reached', es: 'Has alcanzado el límite diario' },
+    // Home Modals
+    modal_save_title: { en: 'Save your conversation!', es: '¡Guarda tu conversación!' },
+    modal_save_text: { en: 'Create an account to save your simulation and analysis automatically. Without an account, you could lose your data.', es: 'Crea una cuenta para que tu simulación y análisis se guarden automáticamente. Sin cuenta, podrías perder tus datos.' },
+    modal_save_btn_login: { en: 'Create account / Log In', es: 'Crear cuenta / Iniciar sesión' },
+    modal_save_btn_continue: { en: 'Continue without saving', es: 'Continuar sin guardar' },
+
+    modal_limit_title: { en: 'Limit Reached', es: 'Has alcanzado el límite' },
+    modal_limit_text: { en: 'Free users have 10 messages per simulation. Upgrade to Premium to chat without limits and unlock deep analysis.', es: 'Los usuarios gratuitos tienen 10 mensajes por simulación. Actualiza a Premium para chatear sin límites y desbloquear el análisis profundo.' },
+    modal_btn_see_plans: { en: 'View Premium Plans', es: 'Ver planes Premium' },
+    modal_btn_maybe_later: { en: 'Maybe later', es: 'Quizás después' },
+
+    modal_voice_limit_title: { en: 'REMI LIVE', es: 'REMI LIVE' },
+    modal_voice_limit_text: { en: 'Voice calls require a Warrior or Phoenix plan.\nUpgrade to speak directly with your simulation.', es: 'Las llamadas de voz requieren un plan Warrior o Phoenix.\nActualiza tu plan para hablar directamente con tu simulación.' },
 };
 
 interface LanguageState {

@@ -1,96 +1,85 @@
-import { storage } from './storage';
+import { supabase } from './supabase';
 
-const DAILY_LIMIT = 30;
-const BURST_LIMIT = 10;
-const BURST_WINDOW_MS = 3 * 60 * 60 * 1000; // 3 hours
+const DAILY_LIMIT = 20; // Matches SURVIVOR tier limit
+// Burst limit is handled locally for UI responsiveness but daily limit is the hard stop source of truth
 
-interface UsageData {
-    date: string;       // YYYY-MM-DD
-    dailyCount: number;
-    burstCount: number;
-    lastBurstStart: number;
-}
+export async function checkFreeTierLimits(userId: string): Promise<{ allowed: boolean; reason?: 'daily' | 'total', waitTime?: number }> {
+    try {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('daily_message_count, last_message_reset_date, subscription_tier')
+            .eq('id', userId)
+            .single();
 
-const getUsageKey = (userId: string) => `usage_tracking_${userId}`;
+        if (error || !data) {
+            console.error('[UsageTracking] Error checking limits:', error);
+            return { allowed: true }; // Fail open to not block user
+        }
 
-export async function checkFreeTierLimits(userId: string): Promise<{ allowed: boolean; reason?: 'daily' | 'burst', waitTime?: number }> {
-    const key = getUsageKey(userId);
-    const dataStr = await storage.getItem(key);
+        // If paid user, always allowed
+        if (data.subscription_tier !== 'survivor') {
+            return { allowed: true };
+        }
 
-    if (!dataStr) return { allowed: true };
+        // Check date reset
+        const today = new Date().toISOString().split('T')[0];
+        if (data.last_message_reset_date !== today) {
+            // It's a new day, we need to reset count. 
+            // We'll do this lazily on the next increment, so here we just allow it.
+            return { allowed: true };
+        }
 
-    const data: UsageData = JSON.parse(dataStr);
-    const now = Date.now();
-    const today = new Date().toISOString().split('T')[0];
+        // Check limit
+        if (data.daily_message_count >= DAILY_LIMIT) {
+            return { allowed: false, reason: 'daily' };
+        }
 
-    // 1. Reset Daily if new day
-    if (data.date !== today) {
-        return { allowed: true }; // Will be reset on increment
-    }
-
-    // 2. Check Daily Limit
-    if (data.dailyCount >= DAILY_LIMIT) {
-        return { allowed: false, reason: 'daily' };
-    }
-
-    // 3. Check Burst Refill
-    const timeSinceBurstStart = now - data.lastBurstStart;
-
-    // If window passed, we effectively have 0 burst usages (logic handled in increment, but checked here)
-    if (timeSinceBurstStart >= BURST_WINDOW_MS) {
+        return { allowed: true };
+    } catch (e) {
+        console.error('[UsageTracking] Exception checking limits:', e);
         return { allowed: true };
     }
-
-    // 4. Check Burst Limit
-    if (data.burstCount >= BURST_LIMIT) {
-        const waitTime = Math.ceil((BURST_WINDOW_MS - timeSinceBurstStart) / 60000); // Minutes
-        return { allowed: false, reason: 'burst', waitTime };
-    }
-
-    return { allowed: true };
 }
 
 export async function incrementFreeTierUsage(userId: string): Promise<void> {
-    const key = getUsageKey(userId);
-    const dataStr = await storage.getItem(key);
-    const now = Date.now();
-    const today = new Date().toISOString().split('T')[0];
+    try {
+        const today = new Date().toISOString().split('T')[0];
 
-    let data: UsageData = {
-        date: today,
-        dailyCount: 0,
-        burstCount: 0,
-        lastBurstStart: now
-    };
+        // Use RPC or direct update? Direct update is risky for race conditions but simpler.
+        // Better: Fetch, check date, update.
 
-    if (dataStr) {
-        data = JSON.parse(dataStr);
+        const { data } = await supabase
+            .from('profiles')
+            .select('daily_message_count, last_message_reset_date')
+            .eq('id', userId)
+            .single();
 
-        // Check Daily Reset
-        if (data.date !== today) {
-            data.date = today;
-            data.dailyCount = 0;
-            data.burstCount = 0;
-            data.lastBurstStart = now;
-        } else {
-            // Check Burst Reset
-            if (now - data.lastBurstStart >= BURST_WINDOW_MS) {
-                data.burstCount = 0;
-                data.lastBurstStart = now;
-            }
+        if (!data) return;
+
+        let newCount = data.daily_message_count + 1;
+        let newDate = data.last_message_reset_date;
+
+        if (data.last_message_reset_date !== today) {
+            newCount = 1;
+            newDate = today;
         }
+
+        await supabase
+            .from('profiles')
+            .update({
+                daily_message_count: newCount,
+                last_message_reset_date: newDate
+            })
+            .eq('id', userId);
+
+        console.log(`[UsageTracking] Updated limits for ${userId}: ${newCount}/${DAILY_LIMIT}`);
+
+    } catch (e) {
+        console.error('[UsageTracking] Error incrementing usage:', e);
     }
-
-    // Increment
-    data.dailyCount += 1;
-    data.burstCount += 1;
-
-    console.log('[UsageTracking] Updated:', data);
-    await storage.setItem(key, JSON.stringify(data));
 }
 
+// Legacy function kept for compatibility but no-op or clear storage
 export async function resetUsage(userId: string): Promise<void> {
-    const key = getUsageKey(userId);
-    await storage.removeItem(key);
-    console.log('[UsageTracking] Limits reset for:', userId);
+    // No-op for DB based tracking relies on dates
 }

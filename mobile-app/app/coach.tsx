@@ -293,6 +293,7 @@ RESPONDE:`;
             <KeyboardAvoidingView
                 style={styles.chatContainer}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 30}
             >
                 <ScrollView
                     ref={scrollViewRef}

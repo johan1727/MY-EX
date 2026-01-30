@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Platform, Alert } from 'react-native';
 import { supabase } from './supabase';
 import type { CustomerInfo, PurchasesPackage } from 'react-native-purchases';
+import { trackConversion } from './attributionService';
 
 // Dynamic import for native modules
 let Purchases: any;
@@ -192,22 +193,28 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             let finalTier = serverTier;
 
             if (localCustomerInfo) {
-                // Check if local is higher than server
-                const tiers: SubscriptionTier[] = ['survivor', 'explorer', 'warrior', 'phoenix'];
-                let localTier: SubscriptionTier = 'survivor';
-
-                if (localCustomerInfo.entitlements.active['phoenix']) localTier = 'phoenix';
-                else if (localCustomerInfo.entitlements.active['warrior']) localTier = 'warrior';
-                else if (localCustomerInfo.entitlements.active['explorer']) localTier = 'explorer';
-
-                const serverIndex = tiers.indexOf(serverTier);
-                const localIndex = tiers.indexOf(localTier);
-
-                if (localIndex > serverIndex) {
-                    console.log(`[Subscription] 🛡️ Using LOCAL tier (${localTier}) over SERVER (${serverTier}) due to higher value (likely webhook delay)`);
-                    finalTier = localTier;
+                // SAFETY CHECK: Ensure the RevenueCat user matches the current Supabase user
+                // This prevents "leaking" entitlements from User A to User B during switching
+                if (localCustomerInfo.originalAppUserId !== userId) {
+                    console.log(`[Subscription] ⚠️ ID Mismatch! RevenueCat ID (${localCustomerInfo.originalAppUserId}) !== Current User (${userId}). Ignoring local data.`);
                 } else {
-                    console.log(`[Subscription] ✅ Using SERVER tier (${serverTier}) (Equal or higher than local ${localTier})`);
+                    // Check if local is higher than server
+                    const tiers: SubscriptionTier[] = ['survivor', 'explorer', 'warrior', 'phoenix'];
+                    let localTier: SubscriptionTier = 'survivor';
+
+                    if (localCustomerInfo.entitlements.active['phoenix']) localTier = 'phoenix';
+                    else if (localCustomerInfo.entitlements.active['warrior']) localTier = 'warrior';
+                    else if (localCustomerInfo.entitlements.active['explorer']) localTier = 'explorer';
+
+                    const serverIndex = tiers.indexOf(serverTier);
+                    const localIndex = tiers.indexOf(localTier);
+
+                    if (localIndex > serverIndex) {
+                        console.log(`[Subscription] 🛡️ Using LOCAL tier (${localTier}) over SERVER (${serverTier}) due to higher value (likely webhook delay)`);
+                        finalTier = localTier;
+                    } else {
+                        console.log(`[Subscription] ✅ Using SERVER tier (${serverTier}) (Equal or higher than local ${localTier})`);
+                    }
                 }
             }
 
@@ -233,7 +240,17 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                 console.log('[Subscription] User found, fetching tier from Supabase FIRST');
                 await fetchTierFromSupabase(user.id);
             } else {
-                console.log('[Subscription] No user found');
+                console.log('[Subscription] No user found - resetting state');
+                setTier('survivor');
+                setCustomerInfo(null);
+                if (Platform.OS !== 'web') {
+                    try {
+                        await Purchases.logOut();
+                        console.log('[Subscription] RevenueCat logged out');
+                    } catch (e) {
+                        console.warn('Error logging out RevenueCat:', e);
+                    }
+                }
             }
 
             // THEN: Configure RevenueCat for native platforms
@@ -353,6 +370,14 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                         subscription_status: 'active',
                         updated_at: new Date().toISOString()
                     }).eq('id', user.id);
+
+                    // Track first subscription conversion for attribution
+                    const productPrice = pkg.product.price || 0;
+                    await trackConversion(user.id, 'first_subscription', {
+                        tier: finalTier,
+                        value: productPrice
+                    });
+                    console.log('[Subscription] ✅ Subscription conversion tracked');
                 }
 
                 console.log('[Subscription] ✅ Purchase success alert handled by UI component');

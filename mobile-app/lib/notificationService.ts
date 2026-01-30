@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import { getRandomPhrase, getStreakCelebration } from './motivationalPhrases';
+import { getPersonalizedMessage, getNotificationTitle } from './personalizedNotifications';
 
 // Configure notification handler
 Notifications.setNotificationHandler({
@@ -12,7 +13,7 @@ Notifications.setNotificationHandler({
     }),
 });
 
-export async function registerForPushNotifications(): Promise<string | null> {
+export async function registerForPushNotifications(userId?: string): Promise<string | null> {
     try {
         if (Platform.OS === 'android') {
             await Notifications.setNotificationChannelAsync('default', {
@@ -39,6 +40,18 @@ export async function registerForPushNotifications(): Promise<string | null> {
         }
 
         const token = (await Notifications.getExpoPushTokenAsync()).data;
+
+        // Save to Supabase if userId is provided
+        if (userId && token) {
+            const { error } = await supabase
+                .from('profiles')
+                .update({ push_token: token })
+                .eq('id', userId);
+
+            if (error) console.error('Error saving push token to DB:', error);
+            else console.log('Push token saved to DB for user:', userId);
+        }
+
         return token;
     } catch (error) {
         console.error('Error registering for push notifications:', error);
@@ -55,36 +68,83 @@ export async function scheduleDailyNotification(
         // Cancel existing daily notifications
         await Notifications.cancelAllScheduledNotificationsAsync();
 
-        // Get user profile for personalization
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('breakup_date, language')
-            .eq('id', userId)
+        // Get user settings
+        const { data: settings } = await supabase
+            .from('user_settings')
+            .select('personalized_notifications')
+            .eq('user_id', userId)
             .single();
 
-        const language = profile?.language || 'es';
-        let daysSinceBreakup = 30; // Default
+        const usePersonalized = settings?.personalized_notifications !== false; // Default true
 
-        if (profile?.breakup_date) {
-            const breakupDate = new Date(profile.breakup_date);
-            const today = new Date();
-            const diffTime = Math.abs(today.getTime() - breakupDate.getTime());
-            daysSinceBreakup = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        let title = '💜 Tu Ex Coach';
+        let body = '';
+        let data: any = { type: 'daily_motivation' };
+
+        if (usePersonalized) {
+            // Get most recent or primary profile
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, name, relationship_type, language, breakup_date')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (profiles && profiles.length > 0) {
+                const profile = profiles[0];
+                const language = profile.language || 'es';
+                const relationshipType = profile.relationship_type || 'ex';
+                const name = profile.name || 'Ex';
+
+                // Use personalized template
+                title = getNotificationTitle(relationshipType, name, language as 'es' | 'en');
+                body = getPersonalizedMessage(relationshipType, name, language as 'es' | 'en');
+                data = {
+                    type: 'personalized_ex',
+                    profileId: profile.id,
+                    deepLink: `soy-remi://simulator/${profile.id}`
+                };
+            } else {
+                // Fallback to classic if no profile
+                // usePersonalized will remain true but body will be empty, triggering classic fallback
+            }
         }
 
-        // Get motivational phrase
-        const phrase = getRandomPhrase(language as 'es' | 'en', daysSinceBreakup);
+        // Classic mode fallback
+        if (!usePersonalized || !body) {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('breakup_date, language')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
 
-        // Check for streak celebration
-        const celebration = getStreakCelebration(daysSinceBreakup, language as 'es' | 'en');
+            const language = profile?.language || 'es';
+            let daysSinceBreakup = 30;
+
+            if (profile?.breakup_date) {
+                const breakupDate = new Date(profile.breakup_date);
+                const today = new Date();
+                const diffTime = Math.abs(today.getTime() - breakupDate.getTime());
+                daysSinceBreakup = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            }
+
+            const phrase = getRandomPhrase(language as 'es' | 'en', daysSinceBreakup);
+            const celebration = getStreakCelebration(daysSinceBreakup, language as 'es' | 'en');
+
+            title = celebration ? '🎉 ¡Logro Desbloqueado!' : '💜 Tu Ex Coach';
+            body = celebration || phrase;
+            data = { type: 'daily_motivation' };
+        }
 
         const notificationId = await Notifications.scheduleNotificationAsync({
             content: {
-                title: celebration ? '🎉 ¡Logro Desbloqueado!' : '💜 Tu Ex Coach',
-                body: celebration || phrase,
+                title,
+                body,
                 sound: true,
                 priority: Notifications.AndroidNotificationPriority.HIGH,
-                data: { type: 'daily_motivation' },
+                data,
             },
             trigger: {
                 hour,

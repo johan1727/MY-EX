@@ -12,6 +12,8 @@ import { loadProfiles, type ExProfile as SyncedProfile } from '../../../lib/prof
 import { simulateResponse, ParsedMessage, ExProfile } from '../../../lib/exSimulator';
 // Import component relative to this file
 import PersonalitySelector from '../../../components/PersonalitySelector';
+import { supabase } from '../../../lib/supabase';
+import { trackConversion } from '../../../lib/attributionService';
 
 interface Message {
     _id: string;
@@ -96,6 +98,7 @@ export default function ExChatScreen() {
         // Auto scroll
         setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
 
+
         try {
             // Convert to format expected by simulator
             const conversationHistory: ParsedMessage[] = updatedMessages.map(m => ({
@@ -105,13 +108,31 @@ export default function ExChatScreen() {
                 hasMedia: !!m.image
             }));
 
-            // Simulate response
-            const { response } = await simulateResponse(
+            // OPTIMIZATION: Start AI request IMMEDIATELY, in parallel with the "typing delay"
+            // We calculate a sophisticated delay based on attachment style, but we capped it at 5s max before.
+            // Now we want the "delay" to be the minimum time we make the user wait, but we process in background.
+
+            // 1. Calculate how long the user SHOULD wait (simulation)
+            const calculatedDelay = 2000 + Math.random() * 2000; // Random between 2-4s for realism
+
+            // 2. Start AI Request Promise
+            console.log('[Chat] Starting AI request in parallel...');
+            const aiPromise = simulateResponse(
                 newMessage.text,
-                selectedImage, // Pass base64 image if any
-                profile.profile || profile, // Handle nested profile object structure if needed
+                selectedImage,
+                profile.profile || profile,
                 conversationHistory
             );
+
+            // 3. Start Delay Promise
+            const delayPromise = new Promise(resolve => setTimeout(resolve, calculatedDelay));
+
+            // 4. Wait for BOTH (whichever takes longer determines the final wait)
+            // If AI is fast (1s) and delay is 3s, we wait 3s total.
+            // If AI is slow (6s) and delay is 3s, we wait 6s total.
+            // This hides the AI latency inside the "natural" delay.
+            const [aiResult] = await Promise.all([aiPromise, delayPromise]);
+            const { response } = aiResult;
 
             const replyMessage: Message = {
                 _id: Math.random().toString(36).substring(7),
@@ -123,6 +144,17 @@ export default function ExChatScreen() {
             setMessages(prev => [...prev, replyMessage]);
             // Auto scroll again
             setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+
+            // Track first simulation conversion
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const hasSimulatedBefore = await storage.getItem('has_made_first_simulation');
+                if (!hasSimulatedBefore) {
+                    await trackConversion(user.id, 'first_simulation');
+                    await storage.setItem('has_made_first_simulation', 'true');
+                    console.log('[Simulator] First simulation tracked');
+                }
+            }
 
         } catch (error) {
             Alert.alert('Error', 'No se pudo generar la respuesta. Intenta de nuevo.');
@@ -254,7 +286,11 @@ export default function ExChatScreen() {
                 )}
             </SafeAreaView>
 
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 30}
+                style={{ flex: 1 }}
+            >
                 <ScrollView
                     ref={scrollViewRef}
                     style={{ flex: 1 }}

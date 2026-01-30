@@ -3,6 +3,7 @@ import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import * as Linking from 'expo-linking';
+import { saveAttribution, trackConversion } from '@/lib/attributionService';
 
 /**
  * OAuth Callback Handler
@@ -41,6 +42,15 @@ export default function AuthCallback() {
 
                         if (!error) {
                             console.log('[AuthCallback] Session set successfully, navigating...');
+
+                            // Track attribution for new user
+                            const { data: { user } } = await supabase.auth.getUser();
+                            if (user) {
+                                console.log('[AuthCallback] Saving attribution for user:', user.id);
+                                await saveAttribution(user.id);
+                                await trackConversion(user.id, 'registration');
+                            }
+
                             // Add delay to ensure session is fully established
                             setTimeout(() => {
                                 router.replace('/(tabs)');

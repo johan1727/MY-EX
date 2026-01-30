@@ -146,15 +146,44 @@ export default function RootLayout() {
         supabase.auth.getSession().then(({ data: { session } }) => {
             setSession(session);
             setLoading(false);
+            if (session?.user) {
+                trackUserSession(session.user.id);
+            }
         });
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
+            if (session?.user) {
+                trackUserSession(session.user.id);
+            }
         });
 
         return () => subscription.unsubscribe();
     }, []);
+
+    const trackUserSession = async (userId: string) => {
+        try {
+            // 1. Update last_active_at
+            await supabase
+                .from('profiles')
+                .update({ last_active_at: new Date().toISOString() })
+                .eq('id', userId);
+
+            // 2. Update Timezone
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            await supabase
+                .from('user_settings')
+                .upsert({
+                    user_id: userId,
+                    timezone: timezone
+                }, { onConflict: 'user_id' });
+
+            console.log('[Session] User activity & timezone tracked');
+        } catch (e) {
+            console.error('[Session] Error tracking session:', e);
+        }
+    };
 
     useEffect(() => {
         checkLockStatus();
@@ -166,6 +195,15 @@ export default function RootLayout() {
             const hasPermission = await NotificationManager.requestPermissions();
             if (hasPermission) {
                 await NotificationManager.scheduleDailyCheckIn();
+
+                // NEW: Register Push Token if user is logged in
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    // Import dynamically to avoid circular dependencies if any
+                    const { registerForPushNotifications } = require('../lib/notificationService');
+                    await registerForPushNotifications(user.id);
+                }
+
                 console.log('[Notifications] Initialized and scheduled daily check-in');
             }
         };

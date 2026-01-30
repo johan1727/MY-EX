@@ -21,6 +21,7 @@ import { detectRelationshipType } from '../../../lib/relationshipDetector';
 import { useTheme } from '../../../lib/ThemeContext';
 import { useLanguage } from '../../../lib/i18n';
 import { generateUUID } from '../../../lib/uuid';
+import { trackConversion } from '../../../lib/attributionService';
 
 // Helper to extract text from ZIP file (WhatsApp exports as ZIP with media)
 async function extractTextFromZip(zipData: string): Promise<string | null> {
@@ -156,13 +157,13 @@ export default function ImportChat() {
     useEffect(() => {
         const checkSharedFile = async () => {
             try {
-                addDebug('🔍 Buscando archivos compartidos...');
+                addDebug('🔍 ' + t('import_searching_shared'));
                 const sharedFileUri = await storage.getItem('sharedFileUri');
                 const sharedText = await storage.getItem('sharedText');
 
                 if (sharedFileUri) {
                     console.log('[Import] Found shared file:', sharedFileUri);
-                    addDebug('📂 Archivo encontrado: ' + sharedFileUri.substring(0, 50) + '...');
+                    addDebug('📂 ' + t('import_file_found') + ': ' + sharedFileUri.substring(0, 50) + '...');
 
                     // Set loading immediately
                     setStep('loading');
@@ -172,7 +173,7 @@ export default function ImportChat() {
                     await storage.removeItem('sharedFileName');
 
                     try {
-                        addDebug('📖 Leyendo archivo...');
+                        addDebug('📖 ' + t('import_reading_file'));
                         let text = '';
 
                         // For content:// URIs, we need to copy to cache first
@@ -227,7 +228,7 @@ export default function ImportChat() {
                                 addDebug(`✅ Texto extraído: ${(text.length / 1024 / 1024).toFixed(1)}MB`);
                             } else {
                                 setStep('error');
-                                setErrorMessage('No se encontró archivo de chat (.txt) dentro del ZIP. Intenta exportar sin medios.');
+                                setErrorMessage(t('import_error_no_txt'));
                                 addDebug('❌ No se encontró .txt en el ZIP');
                                 return;
                             }
@@ -261,7 +262,7 @@ export default function ImportChat() {
 
                         if (text && text.length > 50) {
                             setRawText(text);
-                            addDebug('🔍 Parseando mensajes de WhatsApp...');
+                            addDebug('🔍 ' + t('import_parsing'));
                             await new Promise(resolve => setTimeout(resolve, 100)); // Force UI update
 
                             const messages = parseWhatsAppExport(text);
@@ -610,12 +611,12 @@ export default function ImportChat() {
             if (messages.length < 50) {
                 await new Promise<void>((resolve) => {
                     showPrettyAlert(
-                        '⚠️ Archivo muy pequeño',
-                        `Solo se detectaron ${messages.length} mensajes. Para un buen análisis, recomendamos al menos 100 mensajes.\n\nEl análisis podría fallar o ser poco preciso. ¿Deseas continuar de todas formas?`,
+                        t('import_alert_small_file_title'),
+                        t('import_alert_small_file_msg').replace('{count}', messages.length.toString()) + `\n\n${t('analysis_valid_continue')}`,
                         'info',
                         [
-                            { text: 'Cancelar', style: 'cancel', onPress: () => { setStep('upload'); resolve(); } }, // Go back to upload
-                            { text: 'Continuar', onPress: () => resolve() } // Proceed
+                            { text: t('import_btn_cancel'), style: 'cancel', onPress: () => { setStep('upload'); resolve(); } }, // Go back to upload
+                            { text: t('import_btn_continue'), onPress: () => resolve() } // Proceed
                         ]
                     );
                 });
@@ -754,32 +755,35 @@ export default function ImportChat() {
 
     const handleAnalyze = async () => {
         if (!exName.trim()) {
-            showPrettyAlert('Falta información', 'Por favor ingresa el nombre de tu Ex (o como quieres que se llame la IA).', 'error');
+            showPrettyAlert(t('import_missing_info'), t('import_missing_name'), 'error');
             return;
         }
 
         if (!relationshipType) {
-            showPrettyAlert('Falta información', 'Por favor selecciona el tipo de relación.', 'error');
+            showPrettyAlert(t('import_missing_info'), t('import_missing_rel'), 'error');
             return;
         }
 
         // AI SUGGESTION CHECK
         if (suggestedRelationshipType && relationshipType !== suggestedRelationshipType) {
             // User selected something different from AI
-            const translateType = (t: string) =>
-                t === 'partner' ? 'Pareja Actual' :
-                    t === 'ex' ? 'Ex Pareja' :
-                        t === 'friend' ? 'Amigo/a' :
-                            t === 'family' ? 'Familiar' : 'Fallecido';
+            const translateType = (type: string) => {
+                if (type === 'partner') return t('import_partner');
+                if (type === 'ex') return t('import_ex_partner');
+                if (type === 'friend') return t('import_friend');
+                if (type === 'family') return t('import_family');
+                if (type === 'deceased') return t('import_deceased');
+                return type;
+            };
 
             showPrettyAlert(
-                '¿Confirmar tipo de relación?',
-                `La IA detectó que parece ser "${translateType(suggestedRelationshipType)}", pero tú seleccionaste "${translateType(relationshipType)}".\n\n¿Quieres continuar así ? `,
+                t('import_alert_confirm_rel_title'),
+                t('import_alert_confirm_rel_msg').replace('{suggested}', translateType(suggestedRelationshipType)).replace('{selected}', translateType(relationshipType)),
                 'info',
                 [
-                    { text: 'Corregir', style: 'cancel' }, // Stay
+                    { text: t('import_btn_correct'), style: 'cancel' }, // Stay
                     {
-                        text: 'Sí, estoy seguro',
+                        text: t('import_btn_sure'),
                         onPress: async () => await executeAnalysis() // Proceed
                     }
                 ]
@@ -827,12 +831,12 @@ export default function ImportChat() {
                 if (count > 0 && !__DEV__) {
                     console.log('[handleAnalyze] Guest limit reached');
                     showPrettyAlert(
-                        'Límite Gratuito Alcanzado',
-                        'Has utilizado tu análisis gratuito como invitado. Por favor regístrate para continuar (es gratis).',
+                        t('import_alert_limit_title'),
+                        t('import_alert_limit_msg'),
                         'info',
                         [
-                            { text: 'Cancelar', style: 'cancel' },
-                            { text: 'Registrarme', onPress: () => router.push('/auth') }
+                            { text: t('import_btn_cancel'), style: 'cancel' },
+                            { text: t('import_btn_register'), onPress: () => router.push('/auth') }
                         ]
                     );
                     return;
@@ -874,12 +878,12 @@ export default function ImportChat() {
                 // Profile exists - ask user what to do
                 return new Promise<void>((resolve) => {
                     showPrettyAlert(
-                        '⚠️ Perfil Existente',
-                        `Ya existe un perfil llamado "${existingProfile.ex_name}".\n\n¿Qué quieres hacer?`,
+                        t('import_alert_profile_exists_title'),
+                        t('import_alert_profile_exists_msg').replace('{name}', existingProfile.ex_name),
                         'info',
                         [
                             {
-                                text: 'Cancelar',
+                                text: t('import_btn_cancel'),
                                 style: 'cancel',
                                 onPress: () => {
                                     closePrettyAlert();
@@ -887,7 +891,7 @@ export default function ImportChat() {
                                 }
                             },
                             {
-                                text: 'Actualizar',
+                                text: t('import_btn_update'),
                                 onPress: async () => {
                                     closePrettyAlert();
                                     await continueAnalysis(existingProfile.id);
@@ -895,7 +899,7 @@ export default function ImportChat() {
                                 }
                             },
                             {
-                                text: 'Crear Nuevo',
+                                text: t('import_btn_create_new'),
                                 onPress: async () => {
                                     closePrettyAlert();
                                     // FORCE NEW: Append suffix to name to avoid analysis.tsx finding the old profile
@@ -956,6 +960,17 @@ export default function ImportChat() {
                 exName,
                 relationshipType
             );
+
+            // Track first analysis conversion
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const hasAnalyzedBefore = await storage.getItem('has_made_first_analysis');
+                if (!hasAnalyzedBefore) {
+                    await trackConversion(user.id, 'first_analysis');
+                    await storage.setItem('has_made_first_analysis', 'true');
+                    console.log('[Analysis] First chat analysis tracked');
+                }
+            }
 
             // Navigate to analysis screen (with visual progress)
             router.push(`/tools/ex-simulator/analysis?profile_id=${profileId}`);
@@ -1367,7 +1382,7 @@ export default function ImportChat() {
                     <ArrowLeft size={20} color={isDark ? "white" : "#111827"} />
                 </TouchableOpacity>
                 <View>
-                    <Text style={[styles.headerTitle, !isDark && { color: '#111827' }]}>Nuevo Análisis</Text>
+                    <Text style={[styles.headerTitle, !isDark && { color: '#111827' }]}>{t('import_new_analysis')}</Text>
                     <Text style={[styles.headerSubtitle, !isDark && { color: '#6b7280' }]}>REMI AI ENGINE</Text>
                 </View>
             </LinearGradient>
@@ -1377,7 +1392,7 @@ export default function ImportChat() {
                 {step === 'upload' && (
                     <>
                  */}
-                <Text style={styles.sectionLabel}>SELECCIONA FUENTE DE DATOS</Text>
+                <Text style={styles.sectionLabel}>{t('import_select_source')}</Text>
 
                 <View style={styles.sourceRow}>
                     <TouchableOpacity
@@ -1387,8 +1402,8 @@ export default function ImportChat() {
                         <View style={[styles.sourceIcon, importType === 'whatsapp' && styles.sourceIconWhatsApp]}>
                             <MessageSquare size={24} color={importType === 'whatsapp' ? '#22c55e' : 'white'} />
                         </View>
-                        <Text style={styles.sourceTitle}>WhatsApp</Text>
-                        <Text style={styles.sourceSubtitle}>Archivo .txt exportado</Text>
+                        <Text style={styles.sourceTitle}>{t('import_whatsapp')}</Text>
+                        <Text style={styles.sourceSubtitle}>{t('import_whatsapp_subtitle')}</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -1408,16 +1423,16 @@ export default function ImportChat() {
                     <View style={[styles.uploadIcon, !isDark && { backgroundColor: '#f3f4f6' }]}>
                         <Upload size={24} color={isDark ? "white" : "#4b5563"} />
                     </View>
-                    <Text style={[styles.uploadTitle, !isDark && { color: '#111827' }]}>Subir Archivo .txt</Text>
+                    <Text style={[styles.uploadTitle, !isDark && { color: '#111827' }]}>{t('import_upload_file')}</Text>
                     <Text style={[styles.uploadSubtitle, !isDark && { color: '#6b7280' }]}>
-                        Soporta historiales completos (10k - 200k+ msgs). Analizamos todo automáticamente.
+                        {t('import_upload_subtitle')}
                     </Text>
                 </TouchableOpacity>
 
 
                 {step === 'preview' && (
                     <View>
-                        <Text style={styles.sectionLabel}>CONFIRMAR IDENTIDAD</Text>
+                        <Text style={styles.sectionLabel}>{t('import_confirm_identity')}</Text>
 
                         <View style={[styles.statsCard, {
                             backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#ffffff',
@@ -1427,10 +1442,10 @@ export default function ImportChat() {
                         }]}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <View>
-                                    <Text style={[styles.statsTitle, { color: isDark ? '#a3a3a3' : '#111827', textTransform: 'uppercase', letterSpacing: 1, fontSize: 10 }]}>CONVERSACIÓN DETECTADA</Text>
+                                    <Text style={[styles.statsTitle, { color: isDark ? '#a3a3a3' : '#111827', textTransform: 'uppercase', letterSpacing: 1, fontSize: 10 }]}>{t('import_conversation_detected')}</Text>
                                     <Text style={[styles.statsValue, { color: isDark ? '#fff' : '#059669', fontSize: 32, fontWeight: '700', letterSpacing: -1 }]}>{parsedCount.toLocaleString()}</Text>
                                     <Text style={{ color: isDark ? '#4fd1c5' : '#059669', fontSize: 13, fontWeight: '600', marginTop: 2 }}>
-                                        Mensajes totales
+                                        {t('import_total_messages')}
                                     </Text>
                                 </View>
                                 <View style={{ padding: 12, backgroundColor: 'rgba(34, 197, 94, 0.1)', borderRadius: 50 }}>
@@ -1439,13 +1454,13 @@ export default function ImportChat() {
                             </View>
                             <View style={{ height: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#f3f4f6', marginVertical: 16 }} />
                             <Text style={{ color: isDark ? '#888' : '#6b7280', fontSize: 13 }}>
-                                Participantes: <Text style={{ color: isDark ? '#e5e5e5' : '#111' }}>{detectedParticipants.map(p => p.name).join(' y ')}</Text>
+                                {t('import_participants')} <Text style={{ color: isDark ? '#e5e5e5' : '#111' }}>{detectedParticipants.map(p => p.name).join(' y ')}</Text>
                             </Text>
                         </View>
 
                         <View style={styles.roleSelectionContainer}>
-                            <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#000' }]}>¿Quién eres tú?</Text>
-                            <Text style={[styles.sectionSubtitle, { color: isDark ? '#aaa' : '#666' }]}>Selecciona tu nombre para que la IA simule a la otra persona.</Text>
+                            <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#000' }]}>{t('import_who_are_you')}</Text>
+                            <Text style={[styles.sectionSubtitle, { color: isDark ? '#aaa' : '#666' }]}>{t('import_who_subtitle')}</Text>
 
                             {detectedParticipants.map((participant, index) => {
                                 const isMe = userRole === 'me' && exName !== participant.name;
@@ -1489,7 +1504,7 @@ export default function ImportChat() {
                                                 {participant.name}
                                             </Text>
                                             <Text style={[styles.roleCount, { color: isDark ? '#888' : '#6b7280', fontSize: 13 }]}>
-                                                {participant.count.toLocaleString()} mensajes
+                                                {participant.count.toLocaleString()} {t('import_messages_count')}
                                             </Text>
                                         </View>
 
@@ -1517,13 +1532,13 @@ export default function ImportChat() {
                                 onPress={() => setShowManualInput(!showManualInput)}
                             >
                                 <Text style={{ color: isDark ? '#888' : '#666', fontSize: 12, textDecorationLine: 'underline' }}>
-                                    ¿No aparecen los nombres correctos? Ingresar manualmente
+                                    {t('import_wrong_names')}
                                 </Text>
                             </TouchableOpacity>
 
                             {showManualInput && (
                                 <View style={{ marginTop: 12, backgroundColor: isDark ? 'rgba(168, 85, 247, 0.1)' : 'rgba(168, 85, 247, 0.08)', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: isDark ? 'rgba(168, 85, 247, 0.3)' : 'rgba(168, 85, 247, 0.2)' }}>
-                                    <Text style={{ color: isDark ? '#fff' : '#000', fontSize: 14, marginBottom: 8 }}>Escribe el nombre exacto:</Text>
+                                    <Text style={{ color: isDark ? '#fff' : '#000', fontSize: 14, marginBottom: 8 }}>{t('import_enter_exact_name')}</Text>
                                     <TextInput
                                         style={{
                                             backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -1551,7 +1566,7 @@ export default function ImportChat() {
                                     <Text style={[styles.confirmationText, {
                                         color: isDark ? '#fff' : '#000'
                                     }]}>
-                                        🔮 Creando simulación de: <Text style={{ fontWeight: 'bold', color: isDark ? '#fff' : '#000' }}>{exName}</Text>
+                                        🔮 {t('import_creating_simulation')} <Text style={{ fontWeight: 'bold', color: isDark ? '#fff' : '#000' }}>{exName}</Text>
                                     </Text>
                                 </View>
                             )}
@@ -1559,9 +1574,9 @@ export default function ImportChat() {
                             {/* 🕊️ SELECTOR DE TIPO DE RELACIÓN - Para evitar confusiones */}
                             {exName && (
                                 <View style={{ marginTop: 20, marginBottom: 10 }}>
-                                    <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#000' }]}>¿Qué relación tienes con {exName}?</Text>
+                                    <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#000' }]}>{t('import_relationship_question')} {exName}?</Text>
                                     <Text style={{ color: isDark ? '#888' : '#666', fontSize: 12, marginBottom: 12, textAlign: 'center' }}>
-                                        Esto ayuda a la IA a ser más precisa y respetuosa
+                                        {t('import_relationship_help')}
                                     </Text>
 
                                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
@@ -1591,7 +1606,7 @@ export default function ImportChat() {
                                             <Text style={{
                                                 color: isDark ? '#fff' : '#000',
                                                 fontWeight: relationshipType === 'partner' ? '700' : '500'
-                                            }}>Pareja</Text>
+                                            }}>{t('import_partner')}</Text>
                                         </TouchableOpacity>
 
                                         {/* Ex-Pareja */}
@@ -1619,7 +1634,7 @@ export default function ImportChat() {
                                             <Text style={{
                                                 color: isDark ? '#fff' : '#000',
                                                 fontWeight: relationshipType === 'ex' ? '700' : '500'
-                                            }}>Ex-Pareja</Text>
+                                            }}>{t('import_ex_partner')}</Text>
                                         </TouchableOpacity>
 
                                         {/* Amigo/a */}
@@ -1647,7 +1662,7 @@ export default function ImportChat() {
                                             <Text style={{
                                                 color: isDark ? '#fff' : '#000',
                                                 fontWeight: relationshipType === 'friend' ? '700' : '500'
-                                            }}>Amigo/a</Text>
+                                            }}>{t('import_friend')}</Text>
                                         </TouchableOpacity>
 
                                         {/* Familiar */}
@@ -1675,7 +1690,7 @@ export default function ImportChat() {
                                             <Text style={{
                                                 color: isDark ? '#fff' : '#000',
                                                 fontWeight: relationshipType === 'family' ? '700' : '500'
-                                            }}>Familiar</Text>
+                                            }}>{t('import_family')}</Text>
                                         </TouchableOpacity>
 
                                         {/* Fallecido */}
@@ -1703,7 +1718,7 @@ export default function ImportChat() {
                                             <Text style={{
                                                 color: isDark ? '#fff' : '#000',
                                                 fontWeight: relationshipType === 'deceased' ? '700' : '500'
-                                            }}>Fallecido/a</Text>
+                                            }}>{t('import_deceased')}</Text>
                                         </TouchableOpacity>
                                     </View>
 
@@ -1720,7 +1735,7 @@ export default function ImportChat() {
                                         }}>
                                             <Sparkles size={20} color="#a78bfa" style={{ marginBottom: 8 }} />
                                             <Text style={{ color: '#c4b5fd', fontSize: 13, textAlign: 'center', lineHeight: 20, fontWeight: '500' }}>
-                                                Entendemos lo difícil que es. Esta simulación puede ayudarte a procesar emociones y recordar momentos especiales con respeto y empatía.
+                                                {t('import_deceased_msg')}
                                             </Text>
                                         </View>
                                     )}

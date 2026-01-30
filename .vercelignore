@@ -1,0 +1,24 @@
+# Vercel Ignore File
+# Exclude native mobile build folders
+mobile-app/android/
+mobile-app/ios/
+android/
+ios/
+
+# Exclude dependencies (Vercel installs them)
+node_modules/
+**/node_modules/
+
+# Exclude build artifacts
+.expo/
+dist/
+web-build/
+build/
+*.apk
+*.aab
+*.ipa
+.git/
+
+# Exclude local envs and logs
+.env*
+*.log

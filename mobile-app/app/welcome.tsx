@@ -11,20 +11,47 @@ import {
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Brain, MessageCircle, Shield, Sparkles, ArrowRight } from 'lucide-react-native';
+import { Brain, MessageCircle, Shield, Sparkles, ArrowRight, FileText, UserCheck } from 'lucide-react-native';
+import { supabase } from '../lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../lib/ThemeContext';
+import { useLanguage } from '../lib/i18n';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 const SLIDES = [
     {
-        id: 1,
-        title: 'Hola, soy REMI',
-        subtitle: 'Tu compañero de sanación emocional',
-        description: 'Estoy aquí para escucharte, analizar tu situación y ayudarte a avanzar hacia una versión más fuerte de ti, sin juicios.',
-        icon: Sparkles,
-        gradient: ['#8b5cf6', '#6366f1'],
+        id: 'import',
+        title: { es: 'Tu Chat es la Llave', en: 'Your Chat is the Key' },
+        subtitle: { es: 'Importa tu historial', en: 'Import your history' },
+        description: {
+            es: 'Sube tu chat exportado de WhatsApp. Es la materia prima para que la IA entienda tu historia real.',
+            en: 'Upload your exported WhatsApp chat. It is the raw material for AI to understand your real story.'
+        },
+        icon: FileText,
+        gradient: ['#10b981', '#059669'], // Green/Emerald
+    },
+    {
+        id: 'analyze',
+        title: { es: 'Análisis Profundo', en: 'Deep Analysis' },
+        subtitle: { es: 'Descubre la verdad', en: 'Discover the truth' },
+        description: {
+            es: 'La IA detecta patrones ocultos, señales de toxicidad y lo que no se dijo entre líneas.',
+            en: 'AI detects hidden patterns, signs of toxicity, and what was left unsaid between the lines.'
+        },
+        icon: Brain,
+        gradient: ['#8b5cf6', '#6366f1'], // Violet/Indigo
+    },
+    {
+        id: 'simulate',
+        title: { es: 'Simulación Realista', en: 'Realistic Simulation' },
+        subtitle: { es: 'Practica el cierre', en: 'Practice closure' },
+        description: {
+            es: 'Habla con una versión digital de tu ex (o quien necesites) basada 100% en sus mensajes reales.',
+            en: 'Talk to a digital version of your ex (or whoever you need) based 100% on their real messages.'
+        },
+        icon: MessageCircle,
+        gradient: ['#f43f5e', '#e11d48'], // Rose
     }
 ];
 
@@ -34,31 +61,48 @@ export default function WelcomeScreen() {
     const scrollViewRef = useRef<ScrollView>(null);
     const fadeAnim = useRef(new Animated.Value(1)).current;
 
+    // Theme & Language
+    const { isDark } = useTheme();
+    const { language } = useLanguage(); // Hooks from i18n
+
+    // Defaults
+    const bgColor = isDark ? '#000000' : '#ffffff';
+    const textColor = isDark ? '#fff' : '#111827';
+    const subTextColor = isDark ? '#9ca3af' : '#4b5563';
+    const dotColor = isDark ? '#333' : '#e5e7eb';
+    const activeDotColor = isDark ? '#fff' : '#111';
+
     const handleNext = () => {
         if (currentSlide < SLIDES.length - 1) {
-            Animated.timing(fadeAnim, {
-                toValue: 0,
-                duration: 150,
-                useNativeDriver: true,
-            }).start(() => {
-                setCurrentSlide(currentSlide + 1);
-                scrollViewRef.current?.scrollTo({ x: width * (currentSlide + 1), animated: true });
-                Animated.timing(fadeAnim, {
-                    toValue: 1,
-                    duration: 200,
-                    useNativeDriver: true,
-                }).start();
-            });
+            scrollToSlide(currentSlide + 1);
         } else {
             handleStart();
         }
     };
 
+    const scrollToSlide = (index: number) => {
+        scrollViewRef.current?.scrollTo({ x: width * index, animated: true });
+        setCurrentSlide(index);
+    };
+
     const handleStart = async () => {
         try {
             await AsyncStorage.setItem('hasSeenWelcome', 'true');
+
+            // FIX: Update database state so it persists across installs/devices
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { error } = await supabase
+                    .from('profiles')
+                    .update({ onboarding_completed: true })
+                    .eq('id', user.id);
+
+                if (error) console.error('[Welcome] Error updating onboarding status:', error);
+                else console.log('[Welcome] Onboarding marked as completed in DB');
+            }
         } catch (e) {
             // Continue anyway
+            console.error('[Welcome] Error in handleStart:', e);
         }
         router.replace('/(tabs)');
     };
@@ -70,58 +114,83 @@ export default function WelcomeScreen() {
         }
     };
 
-    const slide = SLIDES[currentSlide];
-    const IconComponent = slide.icon;
-
-    // Theme Support
-    const { isDark } = useTheme();
-    // Defaults
-    const bgColor = isDark ? '#0a0a0a' : '#ffffff';
-    const textColor = isDark ? '#fff' : '#111827';
-    const subTextColor = isDark ? '#9ca3af' : '#4b5563';
-    const dotColor = isDark ? '#333' : '#e5e7eb';
-
     return (
         <View style={[styles.container, { backgroundColor: bgColor }]}>
             <StatusBar style={isDark ? "light" : "dark"} />
 
-            {/* Skip Button - Conditional visibility if needed */}
-            <TouchableOpacity style={styles.skipButton} onPress={handleStart}>
-                <Text style={styles.skipText}>Saltar</Text>
-            </TouchableOpacity>
+            <ScrollView
+                ref={scrollViewRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+                style={{ flex: 1 }}
+                contentContainerStyle={{ width: width * SLIDES.length }}
+            >
+                {SLIDES.map((slide, index) => {
+                    const IconComponent = slide.icon;
+                    return (
+                        <View key={slide.id} style={[styles.slide, { width }]}>
+                            <View style={styles.content}>
+                                {/* Icon with gradient background */}
+                                <Animated.View style={[styles.iconContainer, { opacity: fadeAnim }]}>
+                                    <LinearGradient
+                                        colors={slide.gradient as [string, string]}
+                                        style={styles.iconGradient}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                    >
+                                        <IconComponent size={48} color="#fff" />
+                                    </LinearGradient>
+                                </Animated.View>
 
-            {/* Content */}
-            <View style={styles.content}>
-                {/* Icon with gradient background */}
-                <Animated.View style={[styles.iconContainer, { opacity: fadeAnim }]}>
-                    <LinearGradient
-                        colors={slide.gradient as [string, string]}
-                        style={styles.iconGradient}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                    >
-                        <IconComponent size={48} color="#fff" />
-                    </LinearGradient>
-                </Animated.View>
+                                {/* Text content */}
+                                <Animated.View style={[styles.textContainer, { opacity: fadeAnim }]}>
+                                    <Text style={[styles.title, { color: textColor }]}>
+                                        {slide.title[language as 'es' | 'en']}
+                                    </Text>
+                                    <Text style={[styles.subtitle, { color: slide.gradient[0] }]}>
+                                        {slide.subtitle[language as 'es' | 'en']}
+                                    </Text>
+                                    <Text style={[styles.description, { color: subTextColor }]}>
+                                        {slide.description[language as 'es' | 'en']}
+                                    </Text>
+                                </Animated.View>
+                            </View>
+                        </View>
+                    );
+                })}
+            </ScrollView>
 
-                {/* Text content */}
-                <Animated.View style={[styles.textContainer, { opacity: fadeAnim }]}>
-                    <Text style={[styles.title, { color: textColor }]}>{slide.title}</Text>
-                    <Text style={styles.subtitle}>{slide.subtitle}</Text>
-                    <Text style={[styles.description, { color: subTextColor }]}>{slide.description}</Text>
-                </Animated.View>
+            {/* Pagination Dots */}
+            <View style={styles.pagination}>
+                {SLIDES.map((_, index) => (
+                    <View
+                        key={index}
+                        style={[
+                            styles.dot,
+                            { backgroundColor: index === currentSlide ? activeDotColor : dotColor },
+                            index === currentSlide && styles.dotActive
+                        ]}
+                    />
+                ))}
             </View>
 
-            {/* Action button */}
+            {/* Footer Action */}
             <View style={styles.footer}>
-                <TouchableOpacity style={styles.button} onPress={handleStart}>
+                <TouchableOpacity style={styles.button} onPress={handleNext}>
                     <LinearGradient
                         colors={['#8b5cf6', '#6366f1'] as [string, string]}
                         style={styles.buttonGradient}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
                     >
-                        <Text style={styles.buttonText}>Comenzar a sanar</Text>
+                        <Text style={styles.buttonText}>
+                            {currentSlide === SLIDES.length - 1
+                                ? (language === 'es' ? 'Crear mi Análisis' : 'Create my Analysis')
+                                : (language === 'es' ? 'Siguiente' : 'Next')}
+                        </Text>
                         <ArrowRight size={20} color="#fff" style={styles.buttonIcon} />
                     </LinearGradient>
                 </TouchableOpacity>
@@ -132,7 +201,10 @@ export default function WelcomeScreen() {
                     onPress={() => router.push('/auth')}
                 >
                     <Text style={styles.loginText}>
-                        ¿Ya tienes cuenta? <Text style={styles.loginLink}>Iniciar sesión</Text>
+                        {language === 'es' ? '¿Ya tienes cuenta?' : 'Already have an account?'}{' '}
+                        <Text style={styles.loginLink}>
+                            {language === 'es' ? 'Iniciar sesión' : 'Sign in'}
+                        </Text>
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -144,17 +216,10 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
-    skipButton: {
-        position: 'absolute',
-        top: 60,
-        right: 24,
-        zIndex: 10,
-        padding: 8,
-    },
-    skipText: {
-        color: '#6b7280',
-        fontSize: 14,
-        fontWeight: '600',
+    slide: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     content: {
         flex: 1,
@@ -181,43 +246,38 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     title: {
-        color: '#fff',
-        fontSize: 36,
+        fontSize: 32,
         fontWeight: '800',
         textAlign: 'center',
         marginBottom: 8,
-        letterSpacing: -1,
+        letterSpacing: -0.5,
     },
     subtitle: {
-        color: '#a855f7',
         fontSize: 18,
         fontWeight: '600',
         textAlign: 'center',
         marginBottom: 16,
     },
     description: {
-        color: '#9ca3af',
         fontSize: 16,
         textAlign: 'center',
         lineHeight: 24,
-        maxWidth: 320,
+        maxWidth: 300,
     },
     pagination: {
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 32,
+        marginBottom: 24,
     },
     dot: {
         width: 8,
         height: 8,
         borderRadius: 4,
-        backgroundColor: '#333',
         marginHorizontal: 4,
     },
     dotActive: {
         width: 24,
-        backgroundColor: '#8b5cf6',
     },
     footer: {
         paddingHorizontal: 24,

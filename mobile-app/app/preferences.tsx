@@ -10,7 +10,8 @@ import { useTheme } from '../lib/ThemeContext';
 import { storage } from '../lib/storage';
 import { useLanguage } from '../lib/i18n';
 import { NotificationManager } from '../lib/notifications';
-import { cancelAllNotifications } from '../lib/notificationService';
+import { cancelAllNotifications, scheduleDailyNotification } from '../lib/notificationService';
+import { supabase } from '../lib/supabase';
 
 const LANGUAGES = [
     { code: 'es', label: 'Español' },
@@ -37,22 +38,84 @@ export default function PreferencesScreen() {
     };
 
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+    const [personalizedNotifications, setPersonalizedNotifications] = useState(true);
+    const [userId, setUserId] = useState<string | null>(null);
+
+    // Load user settings on mount
+    React.useEffect(() => {
+        const loadSettings = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                setUserId(user.id);
+
+                // Fetch personalized notification preference
+                const { data: settings } = await supabase
+                    .from('user_settings')
+                    .select('personalized_notifications')
+                    .eq('user_id', user.id)
+                    .single();
+
+                if (settings) {
+                    setPersonalizedNotifications(settings.personalized_notifications !== false);
+                }
+            }
+        };
+        loadSettings();
+    }, []);
 
     // Toggle Notifications
     const handleNotificationToggle = async (value: boolean) => {
         setNotificationsEnabled(value);
         if (value) {
             const granted = await NotificationManager.requestPermissions();
-            if (granted) {
-                await NotificationManager.scheduleDailyCheckIn();
-                showAlert(t('pref_notifications'), '✅ Notificaciones activadas y programadas para las 8:00 PM', [], 'success');
+            if (granted && userId) {
+                await scheduleDailyNotification(userId);
+                showAlert(t('pref_notifications'), '✅ Notificaciones activadas', [], 'success');
             } else {
-                setNotificationsEnabled(false); // Revert if denied
+                setNotificationsEnabled(false);
                 showAlert(t('pref_notifications'), '❌ Permiso denegado. Habilítalo en ajustes del sistema.', [], 'error');
             }
         } else {
-            // Cancel all if disabled
             await cancelAllNotifications();
+        }
+    };
+
+    // Toggle Personalized Notifications  
+    const handlePersonalizedToggle = async (value: boolean) => {
+        setPersonalizedNotifications(value);
+
+        if (!userId) return;
+
+        try {
+            // Upsert user settings
+            const { error } = await supabase
+                .from('user_settings')
+                .upsert({
+                    user_id: userId,
+                    personalized_notifications: value
+                }, {
+                    onConflict: 'user_id'
+                });
+
+            if (error) {
+                console.error('Error updating notification preference:', error);
+                setPersonalizedNotifications(!value); // Revert on error
+                return;
+            }
+
+            // Reschedule notifications with new preference
+            if (notificationsEnabled) {
+                await scheduleDailyNotification(userId);
+            }
+
+            const message = value
+                ? '✨ Las notificaciones ahora parecerán venir de tu Ex'
+                : '📌 Las notificaciones usarán el estilo clásico';
+
+            showAlert('Notificaciones', message, [], 'success');
+        } catch (error) {
+            console.error('Error:', error);
+            setPersonalizedNotifications(!value);
         }
     };
     const [hapticsEnabled, setHapticsEnabled] = useState(true);
@@ -199,6 +262,12 @@ export default function PreferencesScreen() {
                         label={t('pref_notifications')}
                         value={notificationsEnabled}
                         onToggle={handleNotificationToggle}
+                    />
+                    <SettingRow
+                        icon={Sparkles}
+                        label="Notificaciones Personalizadas"
+                        value={personalizedNotifications}
+                        onToggle={handlePersonalizedToggle}
                     />
                     <SettingRow
                         icon={Smartphone}

@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { useTheme } from '../lib/ThemeContext';
 import { useLanguage } from '../lib/i18n';
+import { isAdmin } from '../lib/adminService';
 
 const SettingItem = ({ label, icon: Icon, onPress, danger = false, highlight = false, badge, isDark }: any) => (
     <TouchableOpacity
@@ -54,6 +55,8 @@ export default function ProfileScreen() {
     const isPremium = tier !== SubscriptionTier.SURVIVOR;
     // Badge State
     const [badgeModalVisible, setBadgeModalVisible] = useState(false);
+    // Secret admin menu
+    const [tapCount, setTapCount] = useState(0);
     const badges = [
         { id: '1', name: 'Primeros Pasos', icon: '🚀', description: 'Creaste tu cuenta en REMI.', unlocked: true },
         { id: '2', name: 'Analista', icon: '🔍', description: 'Completaste tu primer análisis.', unlocked: true },
@@ -176,6 +179,25 @@ export default function ProfileScreen() {
         ], 'warning');
     };
 
+    const handleAvatarTap = async () => {
+        const newCount = tapCount + 1;
+        setTapCount(newCount);
+
+        if (newCount >= 5) {
+            // Check if admin
+            const admin = await isAdmin();
+            if (admin) {
+                setTapCount(0); // Reset counter
+                router.push('/(app)/analytics/attribution');
+            } else {
+                setTapCount(0);
+            }
+        } else {
+            // Reset counter after 2 seconds if not completed
+            setTimeout(() => setTapCount(0), 2000);
+        }
+    };
+
     const handleExportData = async () => {
         showAlert('📦 Exportando...', 'Generando archivo de respaldo...', [], 'info');
 
@@ -250,23 +272,25 @@ export default function ProfileScreen() {
 
                     {/* Avatar Selection */}
                     <View style={styles.heroSection}>
-                        <View style={styles.avatarWrapper}>
-                            <LinearGradient
-                                colors={['#a855f7', '#ec4899']}
-                                style={styles.avatarGradient}
-                            >
-                                <View style={styles.avatarContainer}>
-                                    {avatarUrl ? (
-                                        <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-                                    ) : (
-                                        <User size={48} color="#fff" />
-                                    )}
+                        <TouchableOpacity onPress={handleAvatarTap} activeOpacity={0.9}>
+                            <View style={styles.avatarWrapper}>
+                                <LinearGradient
+                                    colors={['#a855f7', '#ec4899']}
+                                    style={styles.avatarGradient}
+                                >
+                                    <View style={styles.avatarContainer}>
+                                        {avatarUrl ? (
+                                            <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                                        ) : (
+                                            <User size={48} color="#fff" />
+                                        )}
+                                    </View>
+                                </LinearGradient>
+                                <View style={styles.percentageBadge}>
+                                    <Text style={styles.percentageText}>100%</Text>
                                 </View>
-                            </LinearGradient>
-                            <View style={styles.percentageBadge}>
-                                <Text style={styles.percentageText}>100%</Text>
                             </View>
-                        </View>
+                        </TouchableOpacity>
                         <Text style={[styles.userName, !isDark && { color: '#000' }]}>{isGuest ? t('profile_guest') : email.split('@')[0]}</Text>
 
                         <TouchableOpacity style={[styles.chatStatusButton, !isDark && { backgroundColor: '#f3f4f6' }]} disabled>
@@ -301,14 +325,14 @@ export default function ProfileScreen() {
                                     </View>
                                 </View>
 
-                                {!isPremium && (
-                                    <TouchableOpacity
-                                        style={styles.upgradeButton}
-                                        onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
-                                    >
-                                        <Text style={styles.upgradeButtonText}>{t('btn_improve_plan')}</Text>
-                                    </TouchableOpacity>
-                                )}
+                                <TouchableOpacity
+                                    style={styles.upgradeButton}
+                                    onPress={() => router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall')}
+                                >
+                                    <Text style={styles.upgradeButtonText}>
+                                        {isPremium ? 'Gestionar Plan' : t('btn_improve_plan')}
+                                    </Text>
+                                </TouchableOpacity>
                             </View>
                         </LinearGradient>
                     </View>
@@ -318,6 +342,7 @@ export default function ProfileScreen() {
                         <SettingItem label={t('profile_preferences')} icon={Settings} onPress={() => router.push('/preferences')} />
                         <SettingItem label={t('profile_help_support')} icon={HelpCircle} onPress={() => Linking.openURL('mailto:support@soyremi.app')} />
                         <SettingItem label={t('profile_badges')} icon={Star} badge="Nuevo" onPress={() => setBadgeModalVisible(true)} />
+                        <SettingItem label="Recargar Créditos" icon={Zap} onPress={() => router.push('/voice/credits-store')} />
 
                         <View style={styles.menuSpacer} />
 

@@ -14,6 +14,8 @@ import OrganicOrb from '../../../components/OrganicOrb'; // Re-using the nice Or
 import Animated, { FadeIn, useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import LowCreditsModal from '../../../components/LowCreditsModal';
+import { trackConversion } from '../../../lib/attributionService';
 
 // --- HELPER: Pulse Rings for Visual Depth ---
 const PulseRings = () => {
@@ -97,6 +99,10 @@ export default function ActiveCallScreen() {
 
     // Animation for mode transitions
     const modeOpacity = useSharedValue(1);
+
+    // Low Credits Modal State
+    const [showLowCreditsModal, setShowLowCreditsModal] = useState(false);
+    const [remainingCredits, setRemainingCredits] = useState(0);
 
     // Context/Memory (Persistent Chat Session)
     const chatSession = useRef<any>(null); // GoogleGenerativeAI ChatSession
@@ -367,6 +373,12 @@ export default function ActiveCallScreen() {
 
         const status = await callLimitService.checkUsageStatus(userId);
         setUsagePercent(status.usagePercent);
+        setRemainingCredits(status.minutesRemaining);
+
+        // Show low credits warning if under 5 minutes
+        if (status.canCall && status.minutesRemaining < 5 && status.minutesRemaining > 0) {
+            setShowLowCreditsModal(true);
+        }
 
         if (!status.canCall) {
             if (Platform.OS !== 'web') {
@@ -387,6 +399,17 @@ export default function ActiveCallScreen() {
 
     const startRecording = async () => {
         try {
+            // Track first call conversion
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const hasCalledBefore = await AsyncStorage.getItem('has_made_first_call');
+                if (!hasCalledBefore) {
+                    await trackConversion(user.id, 'first_call');
+                    await AsyncStorage.setItem('has_made_first_call', 'true');
+                    console.log('[Call] First voice call tracked');
+                }
+            }
+
             // Cancel any pending silence checks
             if (silenceTimer.current) clearTimeout(silenceTimer.current);
 
@@ -731,6 +754,17 @@ export default function ActiveCallScreen() {
                     </TouchableOpacity>
                 </View>
             )}
+
+            {/* Low Credits Modal */}
+            <LowCreditsModal
+                visible={showLowCreditsModal}
+                currentCredits={remainingCredits}
+                onBuyCredits={() => {
+                    setShowLowCreditsModal(false);
+                    router.push('/voice/credits-store' as any);
+                }}
+                onDismiss={() => setShowLowCreditsModal(false)}
+            />
         </View>
     );
 }
