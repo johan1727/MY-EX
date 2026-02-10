@@ -18,6 +18,8 @@ import WebAnalytics from '../components/WebAnalytics';
 import HotjarTracking from '../components/HotjarTracking';
 import { NotificationManager } from '../lib/notifications';
 import * as Sentry from '@sentry/react-native';
+import TikTokBusiness from 'expo-tiktok-business';
+import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
 
 // Initialize Sentry for error monitoring
 if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
@@ -110,18 +112,22 @@ export default function RootLayout() {
     }, [showSplash, shareIntentHandled, hasShareIntent, shareIntent]);
 
     // Initialize TikTok Ads
+    // Initialize TikTok Ads with Permission
     useEffect(() => {
         const initTikTok = async () => {
             try {
-                // Initialize TikTok SDK
-                // @ts-ignore
-                if (typeof TikTokBusiness !== 'undefined') {
-                    // @ts-ignore
-                    TikTokBusiness.init(
+                // Request IDFA/Tracking Permission (Critical for "Get IDFA" error)
+                const { status } = await requestTrackingPermissionsAsync();
+                console.log('[TikTok] Tracking permission:', status);
+
+                if (TikTokBusiness) {
+                    await TikTokBusiness.init(
                         process.env.EXPO_PUBLIC_TIKTOK_APP_ID || '',
                         process.env.EXPO_PUBLIC_TIKTOK_ACCESS_TOKEN || ''
                     );
-                    console.log('[TikTok] SDK initialized');
+                    console.log('[TikTok] SDK initialized successfully');
+                } else {
+                    console.warn('[TikTok] Module not found');
                 }
             } catch (e) {
                 console.error('[TikTok] Initialization error:', e);
