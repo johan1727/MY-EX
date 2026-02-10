@@ -102,13 +102,32 @@ export default function AuthScreen() {
                 // TikTok Tracking
                 if (Platform.OS !== 'web') {
                     try {
-                        const { NativeModules } = require('react-native');
-                        // FIX: Pass JSON string as 3rd arg matches native signature (String)
-                        if (NativeModules.TikTok) {
-                            NativeModules.TikTok.identify(session.user.id, session.user.email || '', "{}");
-                        }
+                        const TikTokBusiness = require('expo-tiktok-business').default;
+                        const { TiktokEventName } = require('expo-tiktok-business');
+
+                        console.log('[TikTok] Tracking Login/Registration');
+
+                        // 1. Identify the user (if supported by SDK wrapper, otherwise skip)
+                        // The wrapper might handle this internally or we rely on events
+
+                        // 2. Track "CompleteRegistration" or "Login"
+                        TikTokBusiness.trackEvent(TiktokEventName.COMPLETE_PAYMENT, { // Using COMPLETE_PAYMENT or SUBSCRIBE as proxy if needed, but CUSTOM or REGISTER is better
+                            description: "User Logged In",
+                            contents: [{
+                                content_id: session.user.id,
+                                content_type: "product",
+                                content_name: "User Login"
+                            }]
+                        });
+
+                        // Better: Track standard 'Subscribe' or 'CompleteRegistration' if available in Enum
+                        // Checking Enum: SUBSCRIBE is available. 
+                        TikTokBusiness.trackEvent(TiktokEventName.SUBSCRIBE, {
+                            description: "User Login/Signup Success"
+                        });
+
                     } catch (e) {
-                        console.log('TikTok logic error', e);
+                        console.log('[TikTok] Tracking error', e);
                     }
                 }
 

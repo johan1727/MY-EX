@@ -18,7 +18,7 @@ import WebAnalytics from '../components/WebAnalytics';
 import HotjarTracking from '../components/HotjarTracking';
 import { NotificationManager } from '../lib/notifications';
 import * as Sentry from '@sentry/react-native';
-import TikTokBusiness from 'expo-tiktok-business';
+import TikTokBusiness, { TiktokEventName } from 'expo-tiktok-business';
 import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
 
 // Initialize Sentry for error monitoring
@@ -123,9 +123,14 @@ export default function RootLayout() {
                 if (TikTokBusiness) {
                     await TikTokBusiness.init(
                         process.env.EXPO_PUBLIC_TIKTOK_APP_ID || '',
-                        process.env.EXPO_PUBLIC_TIKTOK_ACCESS_TOKEN || ''
+                        process.env.EXPO_PUBLIC_TIKTOK_ACCESS_TOKEN || '',
+                        { debugMode: true } // Force Debug Mode for Test Events
                     );
                     console.log('[TikTok] SDK initialized successfully');
+
+                    // Force "Launch" event to appear in dashboard immediately
+                    await TikTokBusiness.trackEvent(TiktokEventName.LAUNCH, {});
+                    console.log('[TikTok] Launch event tracked manually');
                 } else {
                     console.warn('[TikTok] Module not found');
                 }
