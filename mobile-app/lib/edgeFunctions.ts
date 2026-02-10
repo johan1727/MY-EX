@@ -1,32 +1,42 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+import { supabase } from './supabase';
 
 export async function generateChatResponse(userMessage: string, systemPrompt: string): Promise<string> {
     const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('TIMEOUT')), 20000)
+        setTimeout(() => reject(new Error('TIMEOUT')), 30000) // 30s timeout
     );
 
     try {
-        console.log('[EdgeFunctions] Generating response with Gemini...');
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        console.log('[EdgeFunctions] Generating response via Supabase...');
 
-        const prompt = `${systemPrompt}\n\nUser: ${userMessage}\nAssistant:`;
+        // Call Supabase Edge Function instead of Gemini directly
+        const fullPrompt = `${systemPrompt}\n\nUser: ${userMessage}\nAssistant:`;
 
-        const result = await Promise.race([
-            model.generateContent(prompt),
+        const apiCall = supabase.functions.invoke('chat-ai', {
+            body: {
+                message: fullPrompt,
+                model: 'gemini-2.0-flash'
+            }
+        });
+
+        const { data, error } = await Promise.race([
+            apiCall,
             timeoutPromise
         ]);
 
-        const response = (result as any).response;
-        const text = response.text();
+        if (error) {
+            console.error('[EdgeFunctions] Supabase function error:', error);
+            throw new Error(error.message || 'Error de conexión con el backend');
+        }
+
+        if (!data || !data.text) {
+            throw new Error('Respuesta inválida del servidor');
+        }
 
         console.log('[EdgeFunctions] Response generated successfully');
-        return text;
+        return data.text;
     } catch (error: any) {
         if (error.message === 'TIMEOUT') {
-            console.error('[EdgeFunctions] Gemini request timed out');
+            console.error('[EdgeFunctions] Request timed out');
             throw new Error('La respuesta está tardando demasiado. Intenta de nuevo en unos segundos.');
         }
         console.error('[EdgeFunctions] Error generating response:', error);

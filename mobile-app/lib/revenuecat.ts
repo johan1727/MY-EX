@@ -14,7 +14,12 @@ const REVENUECAT_API_KEY = Platform.select({
     android: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || 'goog_XXXXXXXXXXXXXXXX'
 }) || '';
 
+// Debug variables
+export let initializationStatus = 'NOT_STARTED';
+export let initializationError = '';
+
 export async function initializeRevenueCat(userId: string) {
+    initializationStatus = 'STARTING';
     try {
         // Enable debug logs in development
         if (__DEV__) {
@@ -27,6 +32,7 @@ export async function initializeRevenueCat(userId: string) {
         });
 
         console.log('✅ RevenueCat initialized for user:', userId);
+        initializationStatus = 'SUCCESS';
 
         // Set up listener for subscription changes
         setupPurchaseListener();
@@ -35,12 +41,17 @@ export async function initializeRevenueCat(userId: string) {
         const customerInfo = await Purchases.getCustomerInfo();
         await syncSubscriptionToSupabase(customerInfo);
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('❌ Error initializing RevenueCat:', error);
+        initializationStatus = 'FAILED';
+        initializationError = error.message;
     }
 }
 
 export async function getOfferings(): Promise<PurchasesOfferings | null> {
+    if (initializationStatus !== 'SUCCESS') {
+        console.warn('Attempting to get offerings before init success:', initializationStatus);
+    }
     try {
         const offerings = await Purchases.getOfferings();
 

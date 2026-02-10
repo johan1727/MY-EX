@@ -16,6 +16,7 @@ import { BackgroundAnalysisManager } from '../lib/BackgroundAnalysisManager';
 import { AnalysisProgressIndicator } from '../components/AnalysisProgressIndicator';
 import WebAnalytics from '../components/WebAnalytics';
 import HotjarTracking from '../components/HotjarTracking';
+import { NotificationManager } from '../lib/notifications';
 import * as Sentry from '@sentry/react-native';
 
 // Initialize Sentry for error monitoring
@@ -56,8 +57,8 @@ export default function RootLayout() {
 
     // Process share intent - MINIMAL VERSION
     useEffect(() => {
-        // Only process after splash and if not already handled
-        if (showSplash || shareIntentHandled) return;
+        // ALWAYS process intent, even if splash is showing
+        // if (showSplash) return; // <-- REMOVED BLOCKER
         if (!hasShareIntent || !shareIntent) return;
 
         try {
@@ -107,6 +108,27 @@ export default function RootLayout() {
             resetShareIntent();
         }
     }, [showSplash, shareIntentHandled, hasShareIntent, shareIntent]);
+
+    // Initialize TikTok Ads
+    useEffect(() => {
+        const initTikTok = async () => {
+            try {
+                // Initialize TikTok SDK
+                // @ts-ignore
+                if (typeof TikTokBusiness !== 'undefined') {
+                    // @ts-ignore
+                    TikTokBusiness.init(
+                        process.env.EXPO_PUBLIC_TIKTOK_APP_ID || '',
+                        process.env.EXPO_PUBLIC_TIKTOK_ACCESS_TOKEN || ''
+                    );
+                    console.log('[TikTok] SDK initialized');
+                }
+            } catch (e) {
+                console.error('[TikTok] Initialization error:', e);
+            }
+        };
+        initTikTok();
+    }, []);
 
     // AUTO-NAVIGATION: Listen for analysis completions
     useEffect(() => {
@@ -158,6 +180,18 @@ export default function RootLayout() {
     useEffect(() => {
         checkLockStatus();
         const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+        // 🔔 Initialize Notifications
+        // Request permissions and schedule daily check-in (8:00 PM)
+        const initNotifications = async () => {
+            const hasPermission = await NotificationManager.requestPermissions();
+            if (hasPermission) {
+                await NotificationManager.scheduleDailyCheckIn();
+                console.log('[Notifications] Initialized and scheduled daily check-in');
+            }
+        };
+        initNotifications();
+
         return () => subscription.remove();
     }, []);
 

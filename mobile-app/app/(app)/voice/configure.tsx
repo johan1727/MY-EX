@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Dimensions, Platform, ActionSheetIOS } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,6 +11,7 @@ import { supabase } from '../../../lib/supabase';
 import { AudioLines, Sparkles, CloudUpload, Info, CheckCircle2, ChevronLeft, Mic, Play, MoreVertical, X } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../../../lib/ThemeContext';
+import { useLanguage } from '../../../lib/i18n';
 
 const { width } = Dimensions.get('window');
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB Limit
@@ -69,10 +70,15 @@ const WaveformVisualizer = ({ isActive }: { isActive: boolean }) => {
 export default function VoiceConfigScreen() {
     const router = useRouter();
     const { isDark } = useTheme();
+    const { t } = useLanguage();
     const { profileId, name, force } = useLocalSearchParams<{ profileId: string, name: string, force?: string }>();
     const [audioFiles, setAudioFiles] = useState<any[]>([]);
     const [isCloning, setIsCloning] = useState(false);
-    const [statusText, setStatusText] = useState('Esperando muestras de audio...');
+    const [statusText, setStatusText] = useState('');
+
+    useEffect(() => {
+        setStatusText(t('voice_lab_status_waiting'));
+    }, [t]);
     const [existingVoiceId, setExistingVoiceId] = useState<string | null>(null);
     const [loadingVoice, setLoadingVoice] = useState(true);
 
@@ -98,24 +104,51 @@ export default function VoiceConfigScreen() {
                 return;
             }
 
-            const { data } = await supabase
-                .from('profiles')
+            let voiceId: string | null = null;
+
+            // Try Supabase first
+            const { data, error } = await supabase
+                .from('ex_profiles')
                 .select('voice_id')
                 .eq('id', profileId)
                 .single();
 
             if (data?.voice_id) {
+                voiceId = data.voice_id;
+                console.log('[Voice Configure] ✅ Found voice_id in ex_profiles:', voiceId);
+            } else if (error) {
+                console.log('[Voice Configure] ⚠️ Supabase query failed:', error.message);
+            }
+
+            // FALLBACK: Check AsyncStorage if not found in DB
+            if (!voiceId) {
+                try {
+                    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+                    voiceId = await AsyncStorage.getItem(`voice_${profileId}`);
+                    if (voiceId) {
+                        console.log('[Voice Configure] ✅ Found voice_id in AsyncStorage:', voiceId);
+                    }
+                } catch (storageErr) {
+                    console.log('[Voice Configure] AsyncStorage check failed:', storageErr);
+                }
+            }
+
+            if (voiceId) {
                 if (force === 'true') {
                     // Recalibration requested, stay here
                     setExistingVoiceId(null);
+                    console.log('[Voice Configure] Force recalibration - ignoring saved voice');
                 } else {
-                    setExistingVoiceId(data.voice_id);
+                    setExistingVoiceId(voiceId);
                     // AUTO REDIRECT
-                    router.replace({ pathname: '/(app)/voice/call', params: { profileId, name, voiceId: data.voice_id } });
+                    console.log('[Voice Configure] Auto-redirecting to call with voice:', voiceId);
+                    router.replace({ pathname: '/(app)/voice/call', params: { profileId, name, voiceId } });
                 }
+            } else {
+                console.log('[Voice Configure] No existing voice found - ready for cloning');
             }
         } catch (e) {
-            console.error('Error checking voice:', e);
+            console.error('[Voice Configure] Error checking voice:', e);
         } finally {
             setLoadingVoice(false);
         }
@@ -152,6 +185,12 @@ export default function VoiceConfigScreen() {
         setAudioFiles(files => files.filter((_, i) => i !== index));
     };
 
+    // Track mount state
+    const isMounted = useRef(true);
+    useEffect(() => {
+        return () => { isMounted.current = false; };
+    }, []);
+
     const startCloning = async () => {
         if (audioFiles.length < 1) {
             Alert.alert('Falta Audio', 'Sube al menos un audio para clonar la voz.');
@@ -159,40 +198,114 @@ export default function VoiceConfigScreen() {
         }
 
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) {
+        if (!session?.user && !__DEV__) {
             Alert.alert('Sesión expirada', 'Inicia sesión de nuevo.');
             return;
         }
 
         try {
             setIsCloning(true);
-            setStatusText('Analizando espectrograma...');
+            setStatusText(t('voice_lab_analyzing'));
 
             // Simulate "Analyzing" phases for user feedback
-            setTimeout(() => setStatusText('Entrenando red neuronal...'), 2000);
-            setTimeout(() => setStatusText('Sintetizando voz...'), 4500);
+            setTimeout(() => { if (isMounted.current) setStatusText(t('voice_lab_training')); }, 2000);
 
-            const fileUris = audioFiles.map(f => f.uri);
-            const result = await elevenLabsService.cloneVoice(name || 'Ex', fileUris);
+            // --- 1. UPLOAD TO SUPABASE STORAGE (BACKUP) ---
+            setStatusText('Guardando respaldo seguro...');
+            const uploadedPaths: string[] = [];
 
-            // Save to DB
-            await supabase
-                .from('profiles')
-                .update({ voice_id: result.voiceId })
+            for (const file of audioFiles) {
+                try {
+                    const ext = file.name ? file.name.split('.').pop() : 'm4a';
+                    const path = `${session?.user?.id || 'anon'}/${profileId}/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${ext}`;
+
+                    // Fetch blob from URI (Works on Expo/RN)
+                    const response = await fetch(file.uri);
+                    const blob = await response.blob();
+
+                    const { error: uploadError } = await supabase.storage
+                        .from('voice_samples')
+                        .upload(path, blob, {
+                            contentType: file.mimeType || 'audio/m4a',
+                            upsert: true
+                        });
+
+                    if (uploadError) {
+                        console.error('Upload failed:', uploadError);
+                        // Convert to string for alert
+                        throw new Error(`Error subiendo audio: ${uploadError.message}`);
+                    }
+
+                    uploadedPaths.push(path);
+                } catch (e) {
+                    console.error('File process error:', e);
+                    throw e;
+                }
+            }
+
+            // Save paths to DB immediately
+            const { error: dbPathError } = await supabase
+                .from('ex_profiles')
+                .update({ audio_paths: uploadedPaths })
                 .eq('id', profileId);
 
+            if (dbPathError) console.warn('Failed to save audio paths:', dbPathError);
+            console.log(`[Voice Configure] Backed up ${uploadedPaths.length} files to Storage.`);
+
+            // --- 2. CLONE VOICE ---
+            setTimeout(() => { if (isMounted.current) setStatusText(t('voice_lab_synthesizing')); }, 1000);
+
+            const fileUris = audioFiles.map(f => f.uri);
+            // Pass profileId for tracking/tagging
+            const result = await elevenLabsService.cloneVoice(name || 'Ex', fileUris, profileId);
+
+            if (!isMounted.current) return;
+
+            console.log('[Voice Configure] Voice cloned successfully:', result.voiceId);
+
+            // Save to DB (with fallback to AsyncStorage for testing)
+            try {
+                const { error: saveError } = await supabase
+                    .from('ex_profiles')
+                    .update({ voice_id: result.voiceId })
+                    .eq('id', profileId);
+
+                if (saveError) {
+                    console.error('[Voice Configure] ⚠️ DB Save failed:', saveError);
+                    // FALLBACK: Save to AsyncStorage for testing/offline mode
+                    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+                    await AsyncStorage.setItem(`voice_${profileId}`, result.voiceId);
+                    console.log('[Voice Configure] ✅ Saved to AsyncStorage as fallback');
+                } else {
+                    console.log('[Voice Configure] ✅ Saved voice_id to Supabase ex_profiles');
+                }
+            } catch (dbErr) {
+                console.error('[Voice Configure] DB Error:', dbErr);
+                // Even if DB fails, continue with AsyncStorage fallback
+                const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+                await AsyncStorage.setItem(`voice_${profileId}`, result.voiceId);
+                console.log('[Voice Configure] ✅ Fallback: Saved to AsyncStorage');
+            }
+
+            if (!isMounted.current) return;
+
             setExistingVoiceId(result.voiceId);
-            setStatusText('Voz clonada exitosamente');
+            setStatusText(t('voice_lab_success'));
 
             // Navigate after short delay
             setTimeout(() => {
-                setIsCloning(false);
-                router.replace({ pathname: '/(app)/voice/call', params: { profileId, name, voiceId: result.voiceId } });
+                if (isMounted.current) {
+                    setIsCloning(false);
+                    router.replace({ pathname: '/(app)/voice/call', params: { profileId, name, voiceId: result.voiceId } });
+                }
             }, 1000);
 
         } catch (error: any) {
-            setIsCloning(false);
-            Alert.alert('Error', error.message || 'No se pudo clonar la voz.');
+            if (isMounted.current) {
+                setIsCloning(false);
+                console.error('[Voice Configure] Cloning failed:', error);
+                Alert.alert('Error', error.message || 'No se pudo clonar la voz.');
+            }
         }
     };
 
@@ -237,8 +350,8 @@ export default function VoiceConfigScreen() {
                 <ChevronLeft size={24} color={textMain} />
             </TouchableOpacity>
             <View>
-                <Text style={[styles.headerTitle, { color: textMain }]}>VOICE LAB</Text>
-                <Text style={styles.headerSubtitle}>Neural Synthesis Engine</Text>
+                <Text style={[styles.headerTitle, { color: textMain }]}>{t('voice_lab_title')}</Text>
+                <Text style={styles.headerSubtitle}>{t('voice_lab_subtitle')}</Text>
             </View>
             {existingVoiceId ? (
                 <TouchableOpacity onPress={handleMenuPress} style={[styles.iconButton, { backgroundColor: 'transparent' }]}>
@@ -290,7 +403,7 @@ export default function VoiceConfigScreen() {
                         {/* Audio Upload Cards */}
                         <View style={styles.sectionContainer}>
                             <View style={styles.sectionHeader}>
-                                <Text style={styles.sectionTitle}>MUESTRAS DE AUDIO</Text>
+                                <Text style={styles.sectionTitle}>{t('voice_lab_samples_title')}</Text>
                                 <Text style={styles.sectionCounter}>{audioFiles.length}/5</Text>
                             </View>
 
@@ -299,8 +412,7 @@ export default function VoiceConfigScreen() {
                                 <Info size={16} color="#9333ea" style={{ marginTop: 2 }} />
                                 <View style={{ flex: 1 }}>
                                     <Text style={[styles.guidelineText, { color: textSub }]}>
-                                        Sube audios de <Text style={{ color: textMain, fontWeight: 'bold' }}>WhatsApp</Text> donde hable solo esa persona.
-                                        Evita ruidos de fondo.
+                                        {t('voice_lab_instruction')}
                                     </Text>
                                 </View>
                             </View>
@@ -329,7 +441,7 @@ export default function VoiceConfigScreen() {
                                     activeOpacity={0.7}
                                 >
                                     <CloudUpload size={24} color={textSub} />
-                                    <Text style={[styles.addCardText, { color: textSub }]}>Subir Audio o Video</Text>
+                                    <Text style={[styles.addCardText, { color: textSub }]}>{t('voice_lab_upload_btn')}</Text>
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -346,11 +458,11 @@ export default function VoiceConfigScreen() {
                             if (audioFiles.length === 1) {
                                 // Warning for single audio sample
                                 Alert.alert(
-                                    '⚠️ Advertencia de Calidad',
-                                    'Con una sola muestra de audio, la voz clonada puede sonar menos natural. Se recomienda usar 3-5 muestras para mejor calidad.\n\n¿Deseas continuar de todos modos?',
+                                    t('voice_lab_warning_title'),
+                                    t('voice_lab_warning_msg'),
                                     [
-                                        { text: 'Cancelar', style: 'cancel' },
-                                        { text: 'Continuar', onPress: startCloning }
+                                        { text: t('alert_cancel'), style: 'cancel' },
+                                        { text: t('welcome_conf_button'), onPress: startCloning }
                                     ]
                                 );
                             } else {
@@ -363,12 +475,11 @@ export default function VoiceConfigScreen() {
                             <ActivityIndicator color={isDark ? "#000" : "#fff"} />
                         ) : (
                             <>
-                                <Text style={[styles.mainButtonText, { color: isDark ? '#000' : '#fff' }]}>CLONAR VOZ</Text>
+                                <Text style={[styles.mainButtonText, { color: isDark ? '#000' : '#fff' }]}>{t('voice_lab_clone_btn')}</Text>
                                 <Sparkles size={18} color={isDark ? "#000" : "#fff"} style={{ marginLeft: 8 }} />
                             </>
                         )}
                     </TouchableOpacity>
-                    <Text style={[styles.disclaimer, { color: textSub }]}>Powered by ElevenLabs™ Neural Engine</Text>
                 </View>
             )}
         </View>

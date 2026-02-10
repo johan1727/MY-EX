@@ -1,10 +1,16 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Switch, ScrollView, Platform, StyleSheet, Modal, StatusBar as RNStatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Bell, Smartphone, Shield, FileText, Trash2, ChevronRight, Globe, Cookie, Database, X, LogOut, Sparkles, HelpCircle, Check, Download } from 'lucide-react-native';
+import { ArrowLeft, Bell, Smartphone, Shield, FileText, Trash2, ChevronRight, Globe, Cookie, Database, X, LogOut, Sparkles, HelpCircle, Check, Download, Share } from 'lucide-react-native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import { Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../lib/ThemeContext';
 import { storage } from '../lib/storage';
+import { useLanguage } from '../lib/i18n';
+import { NotificationManager } from '../lib/notifications';
+import { cancelAllNotifications } from '../lib/notificationService';
 
 const LANGUAGES = [
     { code: 'es', label: 'Español' },
@@ -14,6 +20,7 @@ const LANGUAGES = [
 export default function PreferencesScreen() {
     const { isDark } = useTheme();
     const router = useRouter();
+    const { t, language, setLanguage } = useLanguage();
 
     // Theme Constants (Eleven Labs Style)
     // Light: Clean White (#FFFFFF), Text (#111827), Border (#E5E7EB), Subtle BG (#F9FAFB)
@@ -30,8 +37,25 @@ export default function PreferencesScreen() {
     };
 
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
+    // Toggle Notifications
+    const handleNotificationToggle = async (value: boolean) => {
+        setNotificationsEnabled(value);
+        if (value) {
+            const granted = await NotificationManager.requestPermissions();
+            if (granted) {
+                await NotificationManager.scheduleDailyCheckIn();
+                showAlert(t('pref_notifications'), '✅ Notificaciones activadas y programadas para las 8:00 PM', [], 'success');
+            } else {
+                setNotificationsEnabled(false); // Revert if denied
+                showAlert(t('pref_notifications'), '❌ Permiso denegado. Habilítalo en ajustes del sistema.', [], 'error');
+            }
+        } else {
+            // Cancel all if disabled
+            await cancelAllNotifications();
+        }
+    };
     const [hapticsEnabled, setHapticsEnabled] = useState(true);
-    const [currentLanguage, setCurrentLanguage] = useState('es');
     const [showLanguageModal, setShowLanguageModal] = useState(false);
 
     const [customAlert, setCustomAlert] = useState<{ visible: boolean; title: string; message: string; buttons?: any[]; type: 'success' | 'error' | 'warning' | 'info' }>({ visible: false, title: '', message: '', type: 'info' });
@@ -41,6 +65,50 @@ export default function PreferencesScreen() {
     };
 
     const closeAlert = () => setCustomAlert(prev => ({ ...prev, visible: false }));
+
+    // 📤 Handle Data Export
+    const handleExportData = async () => {
+        try {
+            // 1. Gather all local data
+            const keys = await storage.getAllKeys(); // Assuming storage has this, or use raw AsyncStorage
+            const allData: any = {};
+
+            // Fallback to AsyncStorage directly if storage wrapper is limited
+            const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+            const rawKeys = await AsyncStorage.getAllKeys();
+
+            // Filter only our app keys
+            const appKeys = rawKeys.filter((k: string) => k.startsWith('ex_') || k.includes('profile') || k.includes('chat'));
+
+            const stores = await AsyncStorage.multiGet(appKeys);
+            stores.forEach((result: [string, string | null]) => {
+                if (result[1]) {
+                    try {
+                        allData[result[0]] = JSON.parse(result[1]);
+                    } catch (e) {
+                        allData[result[0]] = result[1];
+                    }
+                }
+            });
+
+            // 2. Create file
+            const fileName = `my_ex_coach_data_${new Date().toISOString().split('T')[0]}.json`;
+            const fileUri = FileSystem.documentDirectory + fileName;
+
+            await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(allData, null, 2));
+
+            // 3. Share file
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(fileUri);
+            } else {
+                showAlert('Error', 'No se puede compartir en este dispositivo.', undefined, 'error');
+            }
+
+        } catch (error) {
+            console.error('Export error:', error);
+            showAlert('Error', 'Hubo un problema exportando tus datos.', undefined, 'error');
+        }
+    };
 
     const SettingGroup = ({ title, children }: { title: string, children: React.ReactNode }) => (
         <View style={styles.groupWrapper}>
@@ -114,79 +182,79 @@ export default function PreferencesScreen() {
                 >
                     <ArrowLeft size={20} color={theme.text} />
                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>Settings</Text>
+                <Text style={[styles.headerTitle, { color: theme.text }]}>{t('pref_title')}</Text>
             </View>
 
             <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }}>
 
-                <SettingGroup title="GENERAL">
+                <SettingGroup title={t('pref_group_general')}>
                     <SettingRow
                         icon={Globe}
-                        label="Idioma"
+                        label={t('pref_language')}
                         showChevron
                         onPress={() => setShowLanguageModal(true)}
                     />
                     <SettingRow
                         icon={Bell}
-                        label="Notificaciones"
+                        label={t('pref_notifications')}
                         value={notificationsEnabled}
-                        onToggle={setNotificationsEnabled}
+                        onToggle={handleNotificationToggle}
                     />
                     <SettingRow
                         icon={Smartphone}
-                        label="Haptics & Sonidos"
+                        label={t('pref_haptics')}
                         value={hapticsEnabled}
                         onToggle={setHapticsEnabled}
                         isLast
                     />
                 </SettingGroup>
 
-                <SettingGroup title="DATA">
+                <SettingGroup title={t('pref_group_data')}>
                     <SettingRow
                         icon={Download}
-                        label="Exportar Datos"
+                        label={t('pref_export')}
                         showChevron
-                        onPress={() => showAlert('Exportar', 'Tu descarga comenzará en breve.', undefined, 'success')}
+                        onPress={handleExportData}
                     />
                     <SettingRow
                         icon={Cookie}
-                        label="Privacidad & Cookies"
+                        label={t('pref_privacy_cookies')}
                         showChevron
-                        onPress={() => showAlert('Cookies', 'Preferencias actualizadas.', undefined, 'info')}
+                        onPress={() => router.push('/legal/privacy' as any)}
                         isLast
                     />
                 </SettingGroup>
 
-                <SettingGroup title="LEGAL">
+                <SettingGroup title={t('pref_group_legal')}>
                     <SettingRow
                         icon={Shield}
-                        label="Política de Privacidad"
+                        label={t('pref_privacy_policy')}
                         showChevron
-                        onPress={() => router.push('/privacy' as any)}
+                        onPress={() => router.push('/legal/privacy' as any)}
                     />
                     <SettingRow
                         icon={FileText}
-                        label="Términos de Servicio"
+                        label={t('pref_terms')}
                         showChevron
                         isLast
-                        onPress={() => router.push('/terms' as any)}
+                        onPress={() => router.push('/legal/terms' as any)}
                     />
                 </SettingGroup>
 
-                <SettingGroup title="DANGER ZONE">
+                <SettingGroup title={t('pref_group_danger')}>
                     <SettingRow
                         icon={Database}
-                        label="Borrar Caché Local"
+                        label={t('pref_clear_cache')}
                         isDestructive
                         onPress={() => showAlert(
-                            'Borrar Caché',
-                            'Esto eliminará datos locales. ¿Continuar?',
+                            t('alert_clear_cache_title'),
+                            t('alert_clear_cache_msg'),
                             [
-                                { text: 'Cancelar', style: 'cancel' },
+                                { text: t('alert_btn_cancel'), style: 'cancel' },
                                 {
-                                    text: 'Borrar', style: 'destructive', onPress: async () => {
+                                    text: t('alert_btn_clear'), style: 'destructive', onPress: async () => {
                                         await storage.clear();
-                                        showAlert('Listo', 'Caché eliminado.', [{ text: 'OK', onPress: () => router.replace('/tools/ex-simulator/import') }]);
+                                        showAlert(t('alert_clear_cache_success_title'), t('alert_clear_cache_success_msg'), [{ text: t('alert_btn_ok'), onPress: () => router.replace('/tools/ex-simulator/import') }]);
                                     }
                                 }
                             ],
@@ -195,10 +263,10 @@ export default function PreferencesScreen() {
                     />
                     <SettingRow
                         icon={Trash2}
-                        label="Eliminar Cuenta"
+                        label={t('pref_delete_account')}
                         isDestructive
                         isLast
-                        onPress={() => showAlert('Eliminar Cuenta', 'Esta acción es irreversible.', [{ text: 'Cancelar' }, { text: 'Eliminar', style: 'destructive' }], 'error')}
+                        onPress={() => showAlert(t('alert_delete_account_title'), t('alert_delete_account_msg'), [{ text: t('alert_btn_cancel') }, { text: t('alert_btn_delete'), style: 'destructive' }], 'error')}
                     />
                 </SettingGroup>
 
@@ -212,22 +280,26 @@ export default function PreferencesScreen() {
             <Modal visible={showLanguageModal} transparent animationType="fade" onRequestClose={() => setShowLanguageModal(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={[styles.modalContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                        <Text style={[styles.modalTitle, { color: theme.text }]}>Seleccionar Idioma</Text>
+                        <Text style={[styles.modalTitle, { color: theme.text }]}>{t('pref_modal_lang_title')}</Text>
                         {LANGUAGES.map((lang) => (
                             <TouchableOpacity
                                 key={lang.code}
                                 style={[
                                     styles.langOption,
-                                    { backgroundColor: currentLanguage === lang.code ? (isDark ? '#333' : '#F3F4F6') : 'transparent' }
+                                    { backgroundColor: language === lang.code ? (isDark ? '#333' : '#F3F4F6') : 'transparent' }
                                 ]}
-                                onPress={() => { setCurrentLanguage(lang.code); setShowLanguageModal(false); }}
+                                onPress={() => {
+                                    setLanguage(lang.code as 'en' | 'es');
+                                    setShowLanguageModal(false);
+                                    // Language change is instant via Zustand, no reload needed
+                                }}
                             >
                                 <Text style={[styles.langText, { color: theme.text }]}>{lang.label}</Text>
-                                {currentLanguage === lang.code && <Check size={18} color={theme.text} />}
+                                {language === lang.code && <Check size={18} color={theme.text} />}
                             </TouchableOpacity>
                         ))}
                         <TouchableOpacity style={styles.closeModal} onPress={() => setShowLanguageModal(false)}>
-                            <Text style={{ color: theme.textSecondary }}>Cancelar</Text>
+                            <Text style={{ color: theme.textSecondary }}>{t('pref_modal_cancel')}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

@@ -680,29 +680,45 @@ Responde SOLO con JSON:
 }
 
 // Internal helper for retrying AI calls with timeout and exponential backoff
-// Optimized for paid tier with better error handling
+// Now uses Supabase Edge Function as proxy to Gemini API for better reliability
 async function generateWithRetry(model: any, prompt: string, retries = 3, timeoutMs = 90000): Promise<string> {
+    const { supabase } = await import('@/lib/supabase');
     let lastError: any;
     const errors: string[] = [];
 
     for (let i = 0; i <= retries; i++) {
         try {
-            console.log(`[AI Call] Attempt ${i + 1}/${retries + 1}, timeout: ${timeoutMs}ms, prompt: ${prompt.length} chars`);
+            console.log(`[AI Call] Attempt ${i + 1}/${retries + 1} via Supabase, timeout: ${timeoutMs}ms, prompt: ${prompt.length} chars`);
 
             // Create timeout promise
             const timeoutPromise = new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error(`API timeout after ${timeoutMs}ms`)), timeoutMs)
             );
 
+            // Call Supabase Edge Function instead of Gemini directly
+            const apiCall = supabase.functions.invoke('chat-ai', {
+                body: {
+                    message: prompt,
+                    model: 'gemini-2.0-flash'
+                }
+            });
+
             // Race between API call and timeout
-            const result = await Promise.race([
-                model.generateContent(prompt),
+            const { data, error } = await Promise.race([
+                apiCall,
                 timeoutPromise
             ]);
 
-            const text = result.response.text();
-            console.log(`[AI Call] ✅ Success! Response length: ${text.length} chars`);
-            return text;
+            if (error) {
+                throw new Error(error.message || 'Supabase function error');
+            }
+
+            if (!data || !data.text) {
+                throw new Error('Invalid response from backend');
+            }
+
+            console.log(`[AI Call] ✅ Success! Response length: ${data.text.length} chars`);
+            return data.text;
         } catch (error: any) {
             lastError = error;
             const errorMsg = error?.message || String(error);
@@ -1729,18 +1745,62 @@ Responde SOLO con un JSON v�lido con esta estructura:
  * Genera el prompt del sistema para simulateResponse
  * Construye un prompt basado en el perfil psicológico del ex
  */
+/**
+ * Genera el prompt del sistema para simulateResponse
+ * Construye un prompt basado en el perfil psicológico del ex
+ */
 function generateSystemPrompt(profile: ExProfile, conversationHistory: ParsedMessage[]): string {
     const recentMessages = conversationHistory.slice(-10).map(m =>
-        `${m.sender}: ${m.content}`
+        `${m.sender === 'user' ? 'Usuario' : profile.exName}: ${m.content}`
     ).join('\n');
+
+    const isEx = profile.relationshipType === 'ex' || profile.relationshipType === 'partner';
+    const isDeceased = profile.relationshipType === 'deceased';
+
+    // 1. LINGUISTIC FINGERPRINT (Estilo de escritura)
+    const linguisticRules: string[] = [];
+    if (profile.linguisticFingerprint) {
+        if (profile.linguisticFingerprint.usesCapitals === false) {
+            linguisticRules.push('CRITICAL: WRITE IN ALL LOWERCASE (no mayúsculas).');
+        }
+        if (profile.linguisticFingerprint.periodMeaning === 'pasivo-agresivo') {
+            linguisticRules.push('INSTRUCTION: Use "." at the end of short phrases ONLY to show annoyance/passive-aggression.');
+        }
+        if (profile.linguisticFingerprint.usesOpeningMarks === false) {
+            linguisticRules.push('INSTRUCTION: Do NOT use opening question/exclamation marks (¿ ¡).');
+        }
+        if (profile.linguisticFingerprint.laughStyle && profile.linguisticFingerprint.laughStyle.length > 0) {
+            linguisticRules.push(`INSTRUCTION: When laughing, use EXACTLY these styles: ${profile.linguisticFingerprint.laughStyle.join(' or ')}.`);
+        }
+    }
+
+    // 2. RELATIONSHIP SPECIFIC LOGIC
+    let roleInstructions = '';
+    if (isEx) {
+        roleInstructions = `
+        ROLE: INTENSELY REALISTIC EX-PARTNER.
+        - DO NOT sound like a therapist or AI. NEVER use phrases like "I understand how you feel" or "It's important to process this".
+        - If the profile is TOXIC/AVOIDANT, ACT like it. Pull away, be cold, gaslight if that's their style.
+        - If the user begs, and you are avoidant, be annoyed or distant.
+        - YOU ARE NOT HERE TO HELP THE USER HEAL. You are here to simulate the experience of talking to ${profile.exName}.
+        `;
+    } else if (isDeceased) {
+        roleInstructions = `
+        ROLE: MEMORIAL SIMULATION.
+        - Be warm, comforting, and reflective of their best self.
+        - Use their vocabulary and memories, but maintain a sense of peace/legacy.
+        `;
+    } else {
+        roleInstructions = `ROLE: SIMULATION OF ${profile.relationshipType?.toUpperCase() || 'PERSON'}. Act naturally according to the profile.`;
+    }
 
     // Intimate Details Section
     const intimateDetailsSection = profile.intimateDetails ? `
 DETALLES ÍNTIMOS (ÚSALOS NATURALMENTE):
 - Apodos para el usuario: ${profile.intimateDetails.nicknames?.fromExToUser?.join(', ') || 'ninguno'}
 - Apodos que usaba el usuario: ${profile.intimateDetails.nicknames?.fromUserToEx?.join(', ') || 'ninguno'}
-- Quejas típicas: ${profile.intimateDetails.recurringComplaints?.slice(0, 3).join(', ')}
-- Chistes internos: ${profile.intimateDetails.insideJokes?.slice(0, 3).join(', ')}` : '';
+- Quejas típicas: ${profile.intimateDetails.recurringComplaints?.slice(0, 3).map(c => c.complaint).join(', ')}
+- Chistes internos: ${profile.intimateDetails.insideJokes?.slice(0, 3).map(j => j.joke).join(', ')}` : '';
 
     // Psychological X-Ray Section
     const psychologicalSection = profile.psychologicalXRay ? `
@@ -1752,19 +1812,22 @@ PERFIL PSICOLÓGICO (VITAL PARA EL ROL):
    - INDIFERENCIA (Stonewalling): ${profile.psychologicalXRay.fourHorsemen.stonewalling}% (Si alto: Sé cortante, tarda en responder).
 
 2. ESTILO DE APEGO: ${profile.psychologicalXRay.attachmentStyle.type.toUpperCase()} (Confianza: ${profile.psychologicalXRay.attachmentStyle.confidence}%)
-   - Comportamiento típico: ${profile.psychologicalXRay.attachmentStyle.manifestations.join('. ')}` : `
+   - Comportamiento típico: ${profile.psychologicalXRay.attachmentStyle.manifestations.map(m => m.behavior).join('. ')}` : `
 PERFIL BÁSICO:
 - Apego: ${profile.attachment?.style || 'desconocido'}`;
 
-    return `Eres ${profile.exName}. Simula sus respuestas naturales basándote en su personalidad:
+    return `Eres ${profile.exName}. Simula sus respuestas EXTREMADAMENTE REALISTAS:
 
-PERFIL BÁSICO:
+${roleInstructions}
+
+ESTILO DE ESCRITURA OBLIGATORIO:
+${linguisticRules.join('\n')}
+
+PERFIL:
 - Estilo de comunicación: ${profile.communicationStyle}
-- Tono emocional: ${profile.emotionalTone}
-- Frases comunes: ${profile.commonPhrases?.slice(0, 5).join(', ') || 'ninguna'}
+- Tono emocional base: ${profile.emotionalTone}
+- Frases comunes (ÚSALAS): ${profile.commonPhrases?.slice(0, 5).join(', ') || 'ninguna'}
 - Emojis favoritos: ${profile.commonEmojis?.join(' ') || 'ninguno'}
-
-${intimateDetailsSection}
 
 ${intimateDetailsSection}
 
@@ -1775,23 +1838,14 @@ INSTRUCCIONES DE PERSONALIDAD (MASTER PROMPT):
 ${profile.masterPrompt}
 ` : ''}
 
-BIG FIVE:
-- Apertura: ${profile.bigFive?.openness}/10
-- Responsabilidad: ${profile.bigFive?.conscientiousness}/10
-- Extroversión: ${profile.bigFive?.extraversion}/10
-- Amabilidad: ${profile.bigFive?.agreeableness}/10
-- Neuroticismo: ${profile.bigFive?.neuroticism}/10
-
 CONVERSACIÓN RECIENTE:
 ${recentMessages || 'Sin historial'}
 
-INSTRUCCIONES:
-- Responde SOLO como ${profile.exName} respondería
-- Usa su vocabulario y estilo natural
-- NO uses frases formales o genéricas
-- Mantén coherencia con mensajes anteriores
-- Si estás enojado/a, tu tono debe reflejarlo
-- NO inventes fechas o eventos que no han pasado`;
+INSTRUCCIONES FINALES:
+- Responde SOLO como ${profile.exName}.
+- NO uses gramática perfecta si ellos no lo hacen.
+- Si están enojados, mantén el enojo. NO cedas fácil.
+- NO inventes fechas, usa "null" o evade si no sabes.`;
 }
 
 // Simulate response from ex
@@ -1806,40 +1860,81 @@ export async function simulateResponse(
     // 🔗 Buscar hechos relevantes basados en el mensaje del usuario
     let relevantFacts: string[] = [];
     if (userMessage) {
-        relevantFacts = await getRelevantFactsForMessage(profile.exName, userMessage);
+        try {
+            relevantFacts = await getRelevantFactsForMessage(profile.exName, userMessage);
+            console.log(`[Simulator] Found ${relevantFacts.length} relevant facts for "${userMessage.substring(0, 20)}..."`);
+        } catch (e) {
+            console.warn('[Simulator] Error getting relevant facts:', e);
+        }
     }
 
-    let fullPrompt = `${systemPrompt} \n\n`;
+    // 🧠 NUEVO: Contexto de continuidad (Resume Context)
+    // Si es un saludo o inicio de conversación, buscar de qué hablaban antes
+    let resumeContext = '';
+    const isGreeting = !userMessage || ['hola', 'hey', 'buenos dias', 'buenas', 'hi'].includes(userMessage.toLowerCase().trim());
+
+    if (conversationHistory.length > 0 && isGreeting) {
+        const lastExMsg = [...conversationHistory].reverse().find(m => m.sender !== 'user');
+        const lastUserMsg = [...conversationHistory].reverse().find(m => m.sender === 'user');
+
+        if (lastExMsg || lastUserMsg) {
+            resumeContext = `
+[CONTEXTO DE CONTINUIDAD - IMPORTANTE]
+El usuario está retomando la conversación.
+Lo último que se habló fue:
+${lastExMsg ? `- Tú dijiste: "${lastExMsg.content}"` : ''}
+${lastUserMsg ? `- Usuario dijo: "${lastUserMsg.content}"` : ''}
+
+INSTRUCCIÓN: NO saludes con un simple "Hola".
+Refiérete al tema anterior para mostrar que te acuerdas.
+Ejemplo: "Hola, ¿al final qué pasó con [tema anterior]?" o "Hola, me quedé pensando en lo que dijiste de..."
+`;
+        }
+    }
+
+    // Combine system prompt + resume context for the System Instruction
+    const finalSystemInstruction = `${systemPrompt}\n\n${resumeContext}`;
 
     // 🔗 Agregar hechos relevantes al contexto si existen
+    // Estos se quedan en el prompt "usuario" o "contexto" porque son datos dinámicos de consulta
+    let dynamicFacts = '';
     if (relevantFacts.length > 0) {
-        fullPrompt += `[HECHOS RELEVANTES - Usa esta información si es pertinente]\n`;
+        dynamicFacts += `[HECHOS RELEVANTES - Usa esta información si es pertinente]\n`;
         relevantFacts.forEach(fact => {
-            fullPrompt += `- ${fact} \n`;
+            dynamicFacts += `- ${fact} \n`;
         });
-        fullPrompt += `\n`;
+        dynamicFacts += `\n`;
     }
 
+    let userPrompt = '';
     if (userMessage) {
-        fullPrompt += `Usuario: ${userMessage} `;
+        userPrompt = `${dynamicFacts}Usuario: ${userMessage}`;
     } else {
-        fullPrompt += `(Contexto: El usuario ha estado en silencio.Inicia tú una conversación casual o continúa un tema pendiente.)`;
+        userPrompt = `${dynamicFacts}(Contexto: El usuario ha estado en silencio. Inicia tú una conversación casual o continúa un tema pendiente.)`;
     }
 
-    const promptParts: any[] = [fullPrompt];
-
-    if (userImage) {
-        promptParts.push({ inlineData: { data: userImage, mimeType: 'image/jpeg' } });
-        fullPrompt += `\n[El usuario ha enviado una imagen]`;
-    }
-
-    fullPrompt += `\n\n${profile.exName}: `;
-    promptParts[0] = fullPrompt; // Update text part
+    // COMBINE EVERYTHING for Edge Function (which accepts a single 'message' string)
+    // We send: System Instruction + User Prompt
+    const fullUnknownPrompt = `${finalSystemInstruction}\n\n${userPrompt}`;
 
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-        const result = await model.generateContent(promptParts);
-        let response = result.response.text().trim();
+        // 🔥 CRITICAL FIX: Use Supabase Edge Function (Server-Side) instead of direct Client-Side call
+        // This solves 403/Blocked requests on mobile networks
+        const { supabase } = await import('@/lib/supabase');
+
+        console.log('[Simulator] Sending request via Supabase Edge Function...');
+
+        const { data, error } = await supabase.functions.invoke('chat-ai', {
+            body: {
+                message: fullUnknownPrompt,
+                model: 'gemini-2.0-flash',
+                temperature: isEx ? 1.15 : 0.9 // Pass temp if supported, or handled by instructions
+            }
+        });
+
+        if (error) throw new Error(error.message);
+
+        let response = data?.text?.trim();
 
         // 🐛 FIX: Prevent empty or "." only messages
         if (!response || response === '.' || response === '...' || response.length < 2) {
@@ -1847,19 +1942,24 @@ export async function simulateResponse(
             response = '...'; // Fallback: typing indicator
         }
 
+        // Apply programmatic lowercase enforcement if detected
+        if (profile.linguisticFingerprint && profile.linguisticFingerprint.usesCapitals === false) {
+            response = response.toLowerCase();
+        }
+
         // Calculate confidence based on response characteristics
         const usesCommonPhrases = profile.commonPhrases.some(phrase =>
             response.toLowerCase().includes(phrase.toLowerCase())
         );
-        const confidence = usesCommonPhrases ? 0.85 : 0.70;
+        const confidence = usesCommonPhrases ? 0.90 : 0.75;
 
         return {
             response,
             confidence
         };
     } catch (error) {
-        console.error('Error simulating response:', error);
-        throw new Error('Error al generar respuesta. Intenta de nuevo.');
+        console.error('Error simulating response via Supabase:', error);
+        throw new Error('Error de conexión. Verifica tu internet.');
     }
 }
 

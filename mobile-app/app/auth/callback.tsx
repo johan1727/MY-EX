@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, Text, StyleSheet, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import * as Linking from 'expo-linking';
@@ -12,23 +12,23 @@ import * as Linking from 'expo-linking';
 export default function AuthCallback() {
     const router = useRouter();
 
+    const url = Linking.useURL();
+
     useEffect(() => {
-        handleCallback();
-    }, []);
+        if (url) {
+            handleCallback(url);
+        }
+    }, [url]);
 
-    const handleCallback = async () => {
+    const handleCallback = async (currentUrl: string) => {
         try {
-            console.log('[AuthCallback] Starting callback handling...');
+            console.log('[AuthCallback] Starting callback handling with URL:', currentUrl?.substring(0, 50));
 
-            // Get the current URL
-            const url = await Linking.getInitialURL();
-            console.log('[AuthCallback] URL:', url?.substring(0, 100));
-
-            if (url) {
+            if (currentUrl) {
                 // Parse the hash fragment for tokens
-                const hashIndex = url.indexOf('#');
+                const hashIndex = currentUrl.indexOf('#');
                 if (hashIndex !== -1) {
-                    const hashParams = new URLSearchParams(url.substring(hashIndex + 1));
+                    const hashParams = new URLSearchParams(currentUrl.substring(hashIndex + 1));
                     const accessToken = hashParams.get('access_token');
                     const refreshToken = hashParams.get('refresh_token');
 
@@ -41,38 +41,36 @@ export default function AuthCallback() {
 
                         if (!error) {
                             console.log('[AuthCallback] Session set successfully, navigating...');
-                            // Add delay to ensure session is fully established
+                            // Force navigation to ensure we don't get stuck
                             setTimeout(() => {
                                 router.replace('/(tabs)');
                             }, 500);
-                            return;
                         } else {
                             console.error('[AuthCallback] Error setting session:', error);
+                            // Fallback to auth if session set fails
+                            setTimeout(() => router.replace('/auth'), 1000);
                         }
+                        return;
                     }
                 }
             }
 
-            // If we get here, check if there's already a session
+            // Fallback: Check existing session
             console.log('[AuthCallback] Checking existing session...');
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
                 console.log('[AuthCallback] Found existing session, navigating...');
-                setTimeout(() => {
-                    router.replace('/(tabs)');
-                }, 500);
+                router.replace('/(tabs)');
             } else {
-                console.log('[AuthCallback] No session found, going to auth...');
-                // No session, go to login screen
-                setTimeout(() => {
-                    router.replace('/auth');
-                }, 500);
+                console.log('[AuthCallback] No session found in callback, waiting...');
+                // Do NOT redirect to auth immediately, user might just be arriving
             }
         } catch (error) {
             console.error('[AuthCallback] Callback error:', error);
+            // Safety net
             setTimeout(() => {
-                router.replace('/(tabs)');
-            }, 500);
+                router.replace('/auth');
+            }, 2000);
         }
     };
 

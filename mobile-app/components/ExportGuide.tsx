@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from '
 import { ChevronDown, ChevronRight, MessageSquare, BookOpen, Sparkles, ArrowLeft, Share2 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../lib/ThemeContext';
+import { useLanguage } from '../lib/i18n';
 
 interface ExportGuideProps {
     onClose?: () => void;
@@ -11,20 +12,21 @@ interface ExportGuideProps {
 
 export default function ExportGuide({ onClose, onBack }: ExportGuideProps) {
     const { isDark } = useTheme();
+    const { t } = useLanguage();
     const whatsappSteps = Platform.OS === 'web' ? [
-        { title: 'Desde WhatsApp', desc: 'Usa WhatsApp Web o tu celular para exportar.' },
-        { title: 'Exportar chat', desc: 'Entra al chat > Menú (⋮) > Más > Exportar chat.' },
-        { title: 'Sin archivos', desc: 'Selecciona "Sin archivos multimedia" (importante).', highlight: true },
-        { title: 'Envíalo a tu PC', desc: 'Mándate el archivo .txt por correo, Drive o Telegram.' },
-        { title: 'Descárgalo', desc: 'Guarda el archivo .txt en tu computadora.' },
-        { title: 'Súbelo aquí', desc: 'Haz clic en "Subir archivo .txt" y selecciónalo.', isHint: true },
+        { title: t('guide_web_1_title'), desc: t('guide_web_1_desc') },
+        { title: t('guide_web_2_title'), desc: t('guide_web_2_desc') },
+        { title: t('guide_web_3_title'), desc: t('guide_web_3_desc'), highlight: true },
+        { title: t('guide_web_4_title'), desc: t('guide_web_4_desc') },
+        { title: t('guide_web_5_title'), desc: t('guide_web_5_desc') },
+        { title: t('guide_web_6_title'), desc: t('guide_web_6_desc'), isHint: true },
     ] : [
-        { title: 'Abre el chat', desc: 'Ve a la conversación en WhatsApp que quieres analizar.' },
-        { title: 'Menú de opciones', desc: 'Toca los 3 puntos (⋮) en la esquina superior derecha.' },
-        { title: 'Exportar chat', desc: 'Selecciona "Más" → "Exportar chat".' },
-        { title: 'Sin archivos', desc: 'MUY IMPORTANTE: Elige "Sin archivos multimedia".', highlight: true },
-        { title: 'Compartir a REMI', desc: 'Busca "REMI" en la lista de apps para compartir.' },
-        { title: '¿No ves REMI?', desc: 'Desliza a la derecha o toca "Más" (...) para ver todas las apps disponibles.', isHint: true },
+        { title: t('guide_mob_1_title'), desc: t('guide_mob_1_desc') },
+        { title: t('guide_mob_2_title'), desc: t('guide_mob_2_desc') },
+        { title: t('guide_mob_3_title'), desc: t('guide_mob_3_desc') },
+        { title: t('guide_mob_4_title'), desc: t('guide_mob_4_desc'), highlight: true },
+        { title: t('guide_mob_5_title'), desc: t('guide_mob_5_desc') },
+        { title: t('guide_mob_6_title'), desc: t('guide_mob_6_desc'), isHint: true },
     ];
 
     return (
@@ -41,8 +43,8 @@ export default function ExportGuide({ onClose, onBack }: ExportGuideProps) {
                         <MessageSquare size={24} color="#22c55e" />
                     </View>
                     <View>
-                        <Text style={[styles.headerTitle, { color: isDark ? '#fff' : '#000' }]}>WhatsApp</Text>
-                        <Text style={styles.headerSubtitle}>Paso a paso</Text>
+                        <Text style={[styles.headerTitle, { color: isDark ? '#fff' : '#000' }]}>{t('guide_whatsapp_title')}</Text>
+                        <Text style={styles.headerSubtitle}>{t('guide_step_by_step')}</Text>
                     </View>
                 </View>
 
@@ -83,20 +85,20 @@ export default function ExportGuide({ onClose, onBack }: ExportGuideProps) {
 
                 {/* Footer Note */}
                 <View style={[styles.footerNote, { backgroundColor: isDark ? '#0f172a' : '#e0f2fe', borderColor: isDark ? '#1e293b' : '#bae6fd' }]}>
-                    <Text style={[styles.footerTitle, { color: isDark ? '#60a5fa' : '#0369a1' }]}>¿REMI no aparece en la lista?</Text>
+                    <Text style={[styles.footerTitle, { color: isDark ? '#60a5fa' : '#0369a1' }]}>{t('guide_footer_title')}</Text>
                     <View style={styles.bulletRow}>
                         <View style={[styles.bulletDot, { backgroundColor: isDark ? '#60a5fa' : '#0369a1' }]} />
-                        <Text style={[styles.footerText, { color: isDark ? '#93c5fd' : '#0c4a6e' }]}>Si REMI no aparece, guarda el archivo .txt en tu dispositivo.</Text>
+                        <Text style={[styles.footerText, { color: isDark ? '#93c5fd' : '#0c4a6e' }]}>{t('guide_footer_1')}</Text>
                     </View>
                     <View style={styles.bulletRow}>
                         <View style={[styles.bulletDot, { backgroundColor: isDark ? '#60a5fa' : '#0369a1' }]} />
-                        <Text style={[styles.footerText, { color: isDark ? '#93c5fd' : '#0c4a6e' }]}>Luego abre REMI y sube el archivo desde aquí.</Text>
+                        <Text style={[styles.footerText, { color: isDark ? '#93c5fd' : '#0c4a6e' }]}>{t('guide_footer_2')}</Text>
                     </View>
                 </View>
 
                 {onClose && (
                     <TouchableOpacity onPress={onClose} style={[styles.startButton, { backgroundColor: isDark ? '#fff' : '#000' }]}>
-                        <Text style={[styles.startButtonText, { color: isDark ? '#000' : '#fff' }]}>Entendido, Empezar</Text>
+                        <Text style={[styles.startButtonText, { color: isDark ? '#000' : '#fff' }]}>{t('guide_btn_start')}</Text>
                     </TouchableOpacity>
                 )}
                 <View style={{ height: 40 }} />

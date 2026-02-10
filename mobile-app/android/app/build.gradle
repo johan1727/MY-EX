@@ -91,8 +91,8 @@ android {
         applicationId 'com.soyremi.remi'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 52
-        versionName "1.0.4"
+        versionCode 79
+        versionName "1.1.0"
     }
     signingConfigs {
         debug {
@@ -103,6 +103,7 @@ android {
         }
         release {
             if (project.hasProperty('MYAPP_UPLOAD_STORE_FILE')) {
+                println "Release Signing: Using keystore at " + file(MYAPP_UPLOAD_STORE_FILE).absolutePath
                 storeFile file(MYAPP_UPLOAD_STORE_FILE)
                 storePassword MYAPP_UPLOAD_STORE_PASSWORD
                 keyAlias MYAPP_UPLOAD_KEY_ALIAS
@@ -115,7 +116,8 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // Release builds signed with production keystore
+            // Caution! In production, you need to generate your own keystore file.
+            // see https://reactnative.dev/docs/signed-apk-android.
             signingConfig signingConfigs.release
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds
@@ -154,6 +156,12 @@ android {
 }
 
 dependencies {
+    // TikTok Ads SDK
+    implementation 'com.github.tiktok:tiktok-business-android-sdk:1.5.0'
+    implementation 'androidx.lifecycle:lifecycle-process:2.3.1'
+    implementation 'androidx.lifecycle:lifecycle-common-java8:2.3.1'
+    implementation 'com.android.installreferrer:installreferrer:2.2'
+
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 

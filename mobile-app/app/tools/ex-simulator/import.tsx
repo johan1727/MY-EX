@@ -19,6 +19,7 @@ import { useAnalysis } from '../../../lib/AnalysisContext';
 import { BackgroundAnalysisManager } from '../../../lib/BackgroundAnalysisManager';
 import { detectRelationshipType } from '../../../lib/relationshipDetector';
 import { useTheme } from '../../../lib/ThemeContext';
+import { useLanguage } from '../../../lib/i18n';
 import { generateUUID } from '../../../lib/uuid';
 
 // Helper to extract text from ZIP file (WhatsApp exports as ZIP with media)
@@ -67,6 +68,8 @@ type ImportStep = 'guide' | 'terms' | 'upload' | 'loading' | 'preview' | 'analyz
 
 export default function ImportChat() {
     const router = useRouter();
+    const { isDark } = useTheme();
+    const { t } = useLanguage();
     const [step, setStep] = useState<ImportStep>('guide');
     const [importType, setImportType] = useState<'whatsapp' | 'text'>('whatsapp');
     const [rawText, setRawText] = useState('');
@@ -88,8 +91,7 @@ export default function ImportChat() {
         resetAnalysis
     } = useAnalysis();
 
-    // Theme
-    const { isDark } = useTheme();
+
 
     // Custom Alert State
     const [customAlert, setCustomAlert] = useState<{
@@ -139,7 +141,7 @@ export default function ImportChat() {
     // 🕊️ Selector de tipo de relación (evitar confusiones entre ex y fallecidos)
     const [relationshipType, setRelationshipType] = useState<'partner' | 'ex' | 'friend' | 'family' | 'deceased' | null>(null);
     const [suggestedRelationshipType, setSuggestedRelationshipType] = useState<'partner' | 'ex' | 'friend' | 'family' | 'deceased' | null>(null);
-    const [showManualInput, setShowManualInput] = useState(false);
+    // const [showManualInput, setShowManualInput] = useState(false); // Removed
 
     // Debug helper to log steps visually (mapped to console for background compat)
     const addDebug = (msg: string) => {
@@ -741,13 +743,7 @@ export default function ImportChat() {
 
 
     const handleTextPaste = async () => {
-        if (!rawText.trim()) { showPrettyAlert('Error', 'Pega el texto', 'error'); return; }
-        await new Promise(resolve => setTimeout(resolve, 50));
-        const messages = parseWhatsAppExport(rawText);
-        if (messages.length < 5) { Alert.alert('Error', 'Mínimo 5 mensajes'); return; }
-        const { messages: finalMessages } = intelligentTokenSampling(messages);
-        setParsedMessages(finalMessages);
-        setStep('preview');
+        // Disabled manually
     };
 
     const handleAnalyze = async () => {
@@ -1129,7 +1125,7 @@ export default function ImportChat() {
                     <TouchableOpacity onPress={() => setStep('guide')} style={styles.backButton}>
                         <ArrowLeft size={24} color={isDark ? "#fff" : "#000"} />
                     </TouchableOpacity>
-                    <Text style={[styles.headerTitle, { color: isDark ? '#fff' : '#000' }]}>Términos de Uso</Text>
+                    <Text style={[styles.headerTitle, { color: isDark ? '#fff' : '#000' }]}>{t('import_terms_title')}</Text>
                 </View>
 
                 <ScrollView style={{ flex: 1, padding: 24 }}>
@@ -1138,26 +1134,26 @@ export default function ImportChat() {
                             <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(239, 68, 68, 0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
                                 <FileText size={18} color="#EF4444" />
                             </View>
-                            <Text style={[styles.termsTitle, { color: isDark ? '#EF4444' : '#dc2626', fontWeight: '700' }]}>Responsabilidad Legal</Text>
+                            <Text style={[styles.termsTitle, { color: isDark ? '#EF4444' : '#dc2626', fontWeight: '700' }]}>{t('import_legal_responsibility')}</Text>
                         </View>
 
                         <Text style={[styles.termsText, { color: isDark ? '#ccc' : '#374151', lineHeight: 22 }]}>
-                            Esta herramienta es solo para fines terapéuticos y de auto-análisis ("Coaching").
+                            {t('import_terms_intro')}
                             {"\n\n"}
-                            Al continuar, declaras bajo protesta de decir verdad que:
+                            {t('import_terms_declaration')}
                         </Text>
 
                         <View style={styles.checkItem}>
                             <CheckCircle size={20} color="#a855f7" />
-                            <Text style={[styles.checkText, { color: isDark ? '#ddd' : '#1f2937', lineHeight: 20 }]}>Tienes permiso explícito de los participantes para procesar este chat.</Text>
+                            <Text style={[styles.checkText, { color: isDark ? '#ddd' : '#1f2937', lineHeight: 20 }]}>{t('import_terms_check1')}</Text>
                         </View>
                         <View style={styles.checkItem}>
                             <CheckCircle size={20} color="#a855f7" />
-                            <Text style={[styles.checkText, { color: isDark ? '#ddd' : '#1f2937', lineHeight: 20 }]}>El chat será anonimizado automáticamente antes de enviarse a la IA.</Text>
+                            <Text style={[styles.checkText, { color: isDark ? '#ddd' : '#1f2937', lineHeight: 20 }]}>{t('import_terms_check2')}</Text>
                         </View>
                         <View style={styles.checkItem}>
                             <CheckCircle size={20} color="#a855f7" />
-                            <Text style={[styles.checkText, { color: isDark ? '#ddd' : '#1f2937', lineHeight: 20 }]}>Asumes total responsabilidad legal por el uso de esta información.</Text>
+                            <Text style={[styles.checkText, { color: isDark ? '#ddd' : '#1f2937', lineHeight: 20 }]}>{t('import_terms_check3')}</Text>
                         </View>
                     </View>
 
@@ -1165,7 +1161,7 @@ export default function ImportChat() {
                         style={[styles.acceptButton, { backgroundColor: isDark ? '#fff' : '#000', marginTop: 24 }]}
                         onPress={() => setStep('upload')}
                     >
-                        <Text style={[styles.acceptButtonText, { color: isDark ? '#000' : '#fff' }]}>ACEPTO Y CONTINUAR</Text>
+                        <Text style={[styles.acceptButtonText, { color: isDark ? '#000' : '#fff' }]}>{t('import_accept_continue')}</Text>
                     </TouchableOpacity>
                 </ScrollView>
             </View>
@@ -1179,12 +1175,12 @@ export default function ImportChat() {
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                         <ArrowLeft size={24} color={isDark ? "#fff" : "#000"} />
                     </TouchableOpacity>
-                    <Text style={[styles.headerTitle, { color: isDark ? '#fff' : '#000' }]}>Nuevo Análisis</Text>
+                    <Text style={[styles.headerTitle, { color: isDark ? '#fff' : '#000' }]}>{t('import_new_analysis')}</Text>
                     <Text style={[styles.headerSubtitle, { color: isDark ? '#888' : '#666' }]}>REMI</Text>
                 </View>
 
                 <ScrollView style={styles.scrollView}>
-                    <Text style={[styles.sectionLabel, { color: isDark ? '#888' : '#666' }]}>SELECCIONA FUENTE DE DATOS</Text>
+                    <Text style={[styles.sectionLabel, { color: isDark ? '#888' : '#666' }]}>{t('import_select_source')}</Text>
 
                     <TouchableOpacity
                         style={[styles.sourceCard, styles.sourceCardFull, { backgroundColor: isDark ? '#1a1a1a' : '#f9f9f9', borderColor: isDark ? '#333' : '#e0e0e0' }]}
@@ -1193,8 +1189,8 @@ export default function ImportChat() {
                         <View style={[styles.sourceIcon, styles.sourceIconWhatsApp]}>
                             <MessageSquare size={28} color="#22c55e" />
                         </View>
-                        <Text style={[styles.sourceTitle, { color: isDark ? '#fff' : '#000' }]}>WhatsApp</Text>
-                        <Text style={[styles.sourceSubtitle, { color: isDark ? '#999' : '#666' }]}>Archivo .txt exportado</Text>
+                        <Text style={[styles.sourceTitle, { color: isDark ? '#fff' : '#000' }]}>{t('import_whatsapp')}</Text>
+                        <Text style={[styles.sourceSubtitle, { color: isDark ? '#999' : '#666' }]}>{t('import_whatsapp_subtitle')}</Text>
                     </TouchableOpacity>
 
                     <View style={{ height: 24 }} />
@@ -1206,8 +1202,8 @@ export default function ImportChat() {
                         <View style={styles.sourceIcon}>
                             <Upload size={28} color={isDark ? '#fff' : '#000'} />
                         </View>
-                        <Text style={[styles.sourceTitle, { color: isDark ? '#fff' : '#000' }]}>Subir Archivo .txt</Text>
-                        <Text style={[styles.sourceSubtitle, { color: isDark ? '#999' : '#666' }]}>Soporta historiales completos (10k - 200k+ msgs). Analizamos todo automáticamente.</Text>
+                        <Text style={[styles.sourceTitle, { color: isDark ? '#fff' : '#000' }]}>{t('import_upload_file')}</Text>
+                        <Text style={[styles.sourceSubtitle, { color: isDark ? '#999' : '#666' }]}>{t('import_upload_subtitle')}</Text>
                     </TouchableOpacity>
 
                     {/* Debug Button (Hidden in production) */}
@@ -1225,10 +1221,10 @@ export default function ImportChat() {
     if (step === 'loading' || step === 'analyzing') {
         // Mensajes emocionales
         const stages = [
-            { label: 'Conectando con tu historia...', threshold: 0 },
-            { label: 'Escuchando lo que no se dijo...', threshold: 20 },
-            { label: 'Entendiendo los lazos del corazón...', threshold: 60 },
-            { label: 'Preparando tu espacio seguro...', threshold: 90 }
+            { label: t('import_stage1'), threshold: 0 },
+            { label: t('import_stage2'), threshold: 20 },
+            { label: t('import_stage3'), threshold: 60 },
+            { label: t('import_stage4'), threshold: 90 }
         ];
 
         // Display progress - show at least 1% if we're in analyzing mode
@@ -1253,16 +1249,16 @@ export default function ImportChat() {
                         <Brain size={64} color={isDark ? "#ffffff" : "#7c3aed"} />
                     </View>
                     <Text style={[styles.loadingTitle, !isDark && { color: '#111827' }]}>
-                        {step === 'loading' ? 'Procesando' : 'Analizando'}
+                        {step === 'loading' ? t('import_processing') : t('import_analyzing')}
                     </Text>
-                    <Text style={[styles.loadingSubtitle, !isDark && { color: '#6b7280' }]}>Esto puede tomar hasta 5 minutos...</Text>
+                    <Text style={[styles.loadingSubtitle, !isDark && { color: '#6b7280' }]}>{t('import_processing_time')}</Text>
 
                     {/* Progress Bar */}
                     <View style={[styles.progressBarContainer, !isDark && { backgroundColor: '#e5e7eb', borderColor: '#d1d5db' }]}>
                         <View style={[styles.progressBarFill, { width: `${Math.max(displayProgress, 3)}%` }]} />
                     </View>
                     <Text style={styles.progressPercentage}>
-                        {displayProgress === 0 ? 'Iniciando...' : `${displayProgress}%`}
+                        {displayProgress === 0 ? t('import_starting') : `${displayProgress}%`}
                     </Text>
 
                     <View style={[styles.stagesCard, !isDark && { backgroundColor: '#ffffff', borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 }]}>
@@ -1510,36 +1506,7 @@ export default function ImportChat() {
                             })}
 
                             {/* Fallback manual input if detection fails or users wants to override */}
-                            <TouchableOpacity
-                                style={{ marginTop: 16, padding: 10, alignItems: 'center' }}
-                                onPress={() => setShowManualInput(!showManualInput)}
-                            >
-                                <Text style={{ color: isDark ? '#888' : '#666', fontSize: 12, textDecorationLine: 'underline' }}>
-                                    ¿No aparecen los nombres correctos? Ingresar manualmente
-                                </Text>
-                            </TouchableOpacity>
-
-                            {showManualInput && (
-                                <View style={{ marginTop: 12, backgroundColor: isDark ? 'rgba(168, 85, 247, 0.1)' : 'rgba(168, 85, 247, 0.08)', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: isDark ? 'rgba(168, 85, 247, 0.3)' : 'rgba(168, 85, 247, 0.2)' }}>
-                                    <Text style={{ color: isDark ? '#fff' : '#000', fontSize: 14, marginBottom: 8 }}>Escribe el nombre exacto:</Text>
-                                    <TextInput
-                                        style={{
-                                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                                            borderRadius: 8,
-                                            padding: 12,
-                                            color: '#fff',
-                                            fontSize: 16,
-                                            borderWidth: 1,
-                                            borderColor: '#a855f7'
-                                        }}
-                                        placeholder="ej: María García"
-                                        placeholderTextColor="#666"
-                                        value={exName}
-                                        onChangeText={setExName}
-                                        autoCapitalize="words"
-                                    />
-                                </View>
-                            )}
+                            {/* Fallback manual input removed per requirement */}
 
                             {exName && (
                                 <View style={[styles.confirmationBox, {

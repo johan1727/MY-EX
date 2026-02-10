@@ -12,13 +12,14 @@ import {
     ScrollView,
     Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { Eye, EyeOff, Brain } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { useTheme } from '../../lib/ThemeContext';
+import { useLanguage, syncLanguageToProfile } from '../../lib/i18n';
 
 // Try to import native Google Sign-In
 let GoogleSignin: any = null;
@@ -47,6 +48,8 @@ const { width } = Dimensions.get('window');
 
 export default function AuthScreen() {
     const router = useRouter();
+    const params = useLocalSearchParams();
+    const { t } = useLanguage();
     const [loading, setLoading] = useState(false);
     const [oauthLoading, setOauthLoading] = useState<'google' | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -56,9 +59,13 @@ export default function AuthScreen() {
         const handleOAuthCallback = async () => {
             if (hasNavigated) return;
 
+            // If switching accounts, ignore existing session to allow login
+            const isSwitching = params.action === 'switch';
+
             const { data: { session: existingSession } } = await supabase.auth.getSession();
-            if (existingSession && !hasNavigated) {
+            if (existingSession && !hasNavigated && !isSwitching) {
                 setHasNavigated(true);
+                syncLanguageToProfile(existingSession.user.id);
                 router.replace('/welcome-confirmation');
                 return;
             }
@@ -90,6 +97,21 @@ export default function AuthScreen() {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_IN' && session && !hasNavigated) {
                 setHasNavigated(true);
+                syncLanguageToProfile(session.user.id);
+
+                // TikTok Tracking
+                if (Platform.OS !== 'web') {
+                    try {
+                        const { NativeModules } = require('react-native');
+                        // FIX: Pass JSON string as 3rd arg matches native signature (String)
+                        if (NativeModules.TikTok) {
+                            NativeModules.TikTok.identify(session.user.id, session.user.email || '', "{}");
+                        }
+                    } catch (e) {
+                        console.log('TikTok logic error', e);
+                    }
+                }
+
                 setTimeout(() => router.replace('/welcome-confirmation'), 100);
             }
         });
@@ -121,7 +143,7 @@ export default function AuthScreen() {
                             redirectTo: targetUrl,
                             queryParams: {
                                 access_type: 'offline',
-                                prompt: 'consent'
+                                prompt: 'select_account'
                             }
                         }
                     });
@@ -138,7 +160,7 @@ export default function AuthScreen() {
                         skipBrowserRedirect: true,
                         queryParams: {
                             access_type: 'offline',
-                            prompt: 'consent'
+                            prompt: 'select_account'
                         }
                     }
                 });
@@ -175,6 +197,12 @@ export default function AuthScreen() {
                 }
             } else {
                 await GoogleSignin.hasPlayServices();
+                try {
+                    // Force sign out to ensure account picker appears for "Add Account" flow
+                    await GoogleSignin.signOut();
+                } catch (e) {
+                    // Ignore if not signed in
+                }
                 const userInfo = await GoogleSignin.signIn();
                 const tokens = await GoogleSignin.getTokens();
                 if (!tokens.idToken) throw new Error('No se pudo obtener el token de Google');
@@ -222,17 +250,17 @@ export default function AuthScreen() {
                     </View>
                     <View style={[styles.floatingTag, styles.tagLeft, { backgroundColor: tagBg, borderColor: tagBorder }]}>
                         <Text style={styles.tagEmoji}>💜</Text>
-                        <Text style={[styles.tagText, { color: tagText }]}>Sanación</Text>
+                        <Text style={[styles.tagText, { color: tagText }]}>{t('auth_sanacion')}</Text>
                     </View>
                     <View style={[styles.floatingTag, styles.tagRight, { backgroundColor: tagBg, borderColor: tagBorder }]}>
                         <Text style={styles.tagEmoji}>🤖</Text>
-                        <Text style={[styles.tagText, { color: tagText }]}>IA Coach</Text>
+                        <Text style={[styles.tagText, { color: tagText }]}>{t('auth_ia_coach')}</Text>
                     </View>
                 </View>
             </View>
 
             <View style={styles.bottomSection}>
-                <Text style={[styles.title, { color: textColor }]}>Tu coach de IA para{'\n'}superar el pasado</Text>
+                <Text style={[styles.title, { color: textColor }]}>{t('auth_welcome_title')}</Text>
 
                 {errorMsg && (
                     <View style={styles.errorBox}>
@@ -250,7 +278,7 @@ export default function AuthScreen() {
                         {oauthLoading === 'google' ? <ActivityIndicator color={googleBtnText} size="small" /> : (
                             <>
                                 <Text style={[styles.googleIcon, { color: googleIconColor }]}>G</Text>
-                                <Text style={[styles.googleButtonText, { color: googleBtnText }]}>Continuar con Google</Text>
+                                <Text style={[styles.googleButtonText, { color: googleBtnText }]}>{t('auth_continue_google')}</Text>
                             </>
                         )}
                     </TouchableOpacity>

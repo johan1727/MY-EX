@@ -83,6 +83,9 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
     // State for user menu dropdown
     const [showUserMenu, setShowUserMenu] = useState(false);
 
+    // State for chat previews
+    const [chatPreviews, setChatPreviews] = useState<Record<string, string>>({});
+
     // Custom Alert State
     interface AlertConfig {
         visible: boolean;
@@ -106,6 +109,38 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
     const closeAlert = () => {
         setCustomAlert(prev => ({ ...prev, visible: false }));
     };
+
+    // Load chat previews for all profiles
+    useEffect(() => {
+        const loadPreviews = async () => {
+            const previews: Record<string, string> = {};
+            for (const p of allProfiles) {
+                try {
+                    const key = `exSimulator_conversation_${p.id}`;
+                    const savedConv = await storage.getItem(key);
+                    if (savedConv) {
+                        const messages = JSON.parse(savedConv);
+                        if (messages.length > 0) {
+                            const lastMsg = messages[messages.length - 1];
+                            const content = typeof lastMsg.content === 'string' ? lastMsg.content : lastMsg.content?.text || '';
+                            previews[p.id] = content.substring(0, 40) + (content.length > 40 ? '...' : '');
+                        } else {
+                            previews[p.id] = 'Pulsa para chatear...';
+                        }
+                    } else {
+                        previews[p.id] = 'Pulsa para chatear...';
+                    }
+                } catch (err) {
+                    previews[p.id] = 'Pulsa para chatear...';
+                }
+            }
+            setChatPreviews(previews);
+        };
+
+        if (allProfiles.length > 0) {
+            loadPreviews();
+        }
+    }, [allProfiles]);
 
     // Logout function with confirmation
     const handleLogout = () => {
@@ -448,13 +483,23 @@ export default function Sidebar({ visible, onClose, profile, onNavigate, onDelet
                                             onClose();
                                         }}
                                     >
-                                        <MessageCircle size={16} color={isActive ? "#fff" : "#9ca3af"} />
-                                        <Text
-                                            style={[styles.profileName, isActive && styles.profileNameActive]}
-                                            numberOfLines={1}
-                                        >
-                                            {p.exName}
-                                        </Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 8 }}>
+                                            <MessageCircle size={16} color={isActive ? "#fff" : "#9ca3af"} />
+                                            <View style={{ flex: 1 }}>
+                                                <Text
+                                                    style={[styles.profileName, isActive && styles.profileNameActive]}
+                                                    numberOfLines={1}
+                                                >
+                                                    {p.exName}
+                                                </Text>
+                                                <Text
+                                                    style={[styles.profilePreview, isActive && { color: 'rgba(255,255,255,0.6)' }]}
+                                                    numberOfLines={1}
+                                                >
+                                                    {chatPreviews[p.id] || 'Pulsa para chatear...'}
+                                                </Text>
+                                            </View>
+                                        </View>
                                         <TouchableOpacity
                                             style={styles.editBtn}
                                             onPress={(e) => {

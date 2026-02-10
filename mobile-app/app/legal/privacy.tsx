@@ -5,10 +5,12 @@ import { ArrowLeft, Shield } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useTheme } from '../../lib/ThemeContext';
+import { useLanguage } from '../../lib/i18n';
 
 export default function PrivacyPolicy() {
     const router = useRouter();
     const { isDark } = useTheme();
+    const { t } = useLanguage();
 
     const openExternalPolicy = () => {
         Linking.openURL('https://doc-hosting.flycricket.io/remi-privacy-policy/05311c5a-0b5e-4454-8c86-d6176c777cd4/privacy');
@@ -20,7 +22,7 @@ export default function PrivacyPolicy() {
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                     <ArrowLeft size={24} color={!isDark ? '#000' : 'white'} />
                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, !isDark && { color: '#000' }]}>Política de Privacidad</Text>
+                <Text style={[styles.headerTitle, !isDark && { color: '#000' }]}>{t('privacy_title')}</Text>
             </SafeAreaView>
 
             <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
@@ -34,39 +36,39 @@ export default function PrivacyPolicy() {
                 {/* Main Card */}
                 <View style={[styles.card, !isDark && { backgroundColor: '#fff', borderColor: '#e5e7eb', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' }]}>
                     <Text style={styles.updateText}>
-                        Última actualización: 23 de diciembre de 2025
+                        {t('privacy_last_updated')}
                     </Text>
 
                     <TouchableOpacity onPress={openExternalPolicy} style={styles.externalButton}>
-                        <Text style={styles.externalButtonText}>🌐 Ver Política Oficial (Online)</Text>
+                        <Text style={styles.externalButtonText}>🌐 {t('privacy_official_btn')}</Text>
                     </TouchableOpacity>
 
-                    <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>Información que Recopilamos</Text>
-                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• Email y nombre (para tu cuenta)</Text>
-                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• Conversaciones con la IA</Text>
-                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• Datos de uso de la app</Text>
+                    <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>{t('privacy_section_1_title')}</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• {t('privacy_section_1_item_1')}</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• {t('privacy_section_1_item_2')}</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• {t('privacy_section_1_item_3')}</Text>
 
-                    <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>Cómo Usamos tus Datos</Text>
-                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• Generar respuestas personalizadas de IA</Text>
-                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• Mejorar el servicio</Text>
-                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• Procesar suscripciones</Text>
+                    <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>{t('privacy_section_2_title')}</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• {t('privacy_section_2_item_1')}</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• {t('privacy_section_2_item_2')}</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• {t('privacy_section_2_item_3')}</Text>
 
-                    <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>Compartir con Terceros</Text>
+                    <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>{t('privacy_section_3_title')}</Text>
                     <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>
-                        <Text style={styles.highlight}>Google Gemini AI:</Text> Tus conversaciones se envían a Google para generar respuestas
+                        {t('privacy_section_3_google')}
                     </Text>
                     <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>
-                        <Text style={styles.highlight}>Supabase:</Text> Almacenamiento y autenticación
+                        {t('privacy_section_3_supabase')}
                     </Text>
                     <Text style={[styles.bulletPoint, styles.importantText]}>
-                        ❌ NO VENDEMOS tus datos a terceros
+                        ❌ {t('privacy_section_3_warning')}
                     </Text>
 
-                    <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>Tus Derechos (LFPDPPP)</Text>
-                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• <Text style={[styles.bold, !isDark && { color: '#111' }]}>Acceso:</Text> Ver tus datos</Text>
-                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• <Text style={[styles.bold, !isDark && { color: '#111' }]}>Rectificación:</Text> Corregir datos</Text>
-                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• <Text style={[styles.bold, !isDark && { color: '#111' }]}>Cancelación:</Text> Eliminar cuenta</Text>
-                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• <Text style={[styles.bold, !isDark && { color: '#111' }]}>Oposición:</Text> Limitar uso de datos</Text>
+                    <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>{t('privacy_section_4_title')}</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• {t('privacy_section_4_item_1')}</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• {t('privacy_section_4_item_2')}</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• {t('privacy_section_4_item_3')}</Text>
+                    <Text style={[styles.bulletPoint, !isDark && { color: '#4b5563' }]}>• {t('privacy_section_4_item_4')}</Text>
 
                     <Text style={[styles.sectionTitle, !isDark && { color: '#111' }]}>Seguridad</Text>
                     <Text style={[styles.paragraph, !isDark && { color: '#4b5563' }]}>

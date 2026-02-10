@@ -3,10 +3,12 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking } from 'r
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Shield, FileText, Mail, ExternalLink, Heart } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLanguage } from '../lib/i18n';
 import { StatusBar } from 'expo-status-bar';
 
 export default function PrivacyLegalScreen() {
     const router = useRouter();
+    const { t } = useLanguage();
 
     return (
         <View style={styles.container}>
@@ -16,7 +18,7 @@ export default function PrivacyLegalScreen() {
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                         <ArrowLeft size={24} color="#fff" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Privacidad y Legal</Text>
+                    <Text style={styles.headerTitle}>{t('privacy_legal_section_title')}</Text>
                     <View style={styles.headerSpacer} />
                 </View>
 
@@ -26,14 +28,14 @@ export default function PrivacyLegalScreen() {
                         <View style={styles.warningIcon}>
                             <Heart size={28} color="#ec4899" />
                         </View>
-                        <Text style={styles.warningTitle}>Aviso de Salud Mental</Text>
+                        <Text style={styles.warningTitle}>{t('privacy_mental_health_title')}</Text>
                         <Text style={styles.warningText}>
-                            Esta aplicación es una herramienta de práctica y autoconocimiento. No reemplaza la terapia profesional. Si experimentas pensamientos de autolesión, por favor busca ayuda profesional inmediatamente.
+                            {t('privacy_mental_health_msg')}
                         </Text>
                     </View>
 
                     {/* Legal Section */}
-                    <Text style={styles.sectionLabel}>Legal</Text>
+                    <Text style={styles.sectionLabel}>{t('privacy_section_legal')}</Text>
 
                     <TouchableOpacity
                         style={styles.menuItem}
@@ -41,7 +43,7 @@ export default function PrivacyLegalScreen() {
                     >
                         <View style={styles.menuItemLeft}>
                             <Shield size={20} color="#9ca3af" />
-                            <Text style={styles.menuItemText}>Política de Privacidad</Text>
+                            <Text style={styles.menuItemText}>{t('privacy_policy')}</Text>
                         </View>
                         <ExternalLink size={18} color="#6b7280" />
                     </TouchableOpacity>
@@ -52,13 +54,13 @@ export default function PrivacyLegalScreen() {
                     >
                         <View style={styles.menuItemLeft}>
                             <FileText size={20} color="#9ca3af" />
-                            <Text style={styles.menuItemText}>Términos de Servicio</Text>
+                            <Text style={styles.menuItemText}>{t('privacy_terms')}</Text>
                         </View>
                         <ExternalLink size={18} color="#6b7280" />
                     </TouchableOpacity>
 
                     {/* Contact Section */}
-                    <Text style={styles.sectionLabel}>Contacto</Text>
+                    <Text style={styles.sectionLabel}>{t('privacy_section_contact')}</Text>
 
                     <TouchableOpacity
                         style={styles.menuItem}
@@ -66,7 +68,7 @@ export default function PrivacyLegalScreen() {
                     >
                         <View style={styles.menuItemLeft}>
                             <Mail size={20} color="#9ca3af" />
-                            <Text style={styles.menuItemText}>Contactar Soporte</Text>
+                            <Text style={styles.menuItemText}>{t('privacy_contact_support')}</Text>
                         </View>
                         <ExternalLink size={18} color="#6b7280" />
                     </TouchableOpacity>

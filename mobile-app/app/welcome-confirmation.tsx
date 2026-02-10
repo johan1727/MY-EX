@@ -5,11 +5,13 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Shield, AlertTriangle, ArrowRight } from 'lucide-react-native';
 import { useTheme } from '../lib/ThemeContext';
+import { useLanguage } from '../lib/i18n';
 
 export default function WelcomeConfirmationScreen() {
     const router = useRouter();
 
     const { isDark } = useTheme();
+    const { t } = useLanguage();
 
     const handleContinue = () => {
         router.replace('/');
@@ -29,21 +31,20 @@ export default function WelcomeConfirmationScreen() {
             <SafeAreaView style={styles.safeArea}>
                 <View style={styles.content}>
                     {/* Header */}
-                    <Text style={[styles.title, { color: textColor }]}>Bienvenido a SOYREMI</Text>
-                    <Text style={[styles.subtitle, { color: subTextColor }]}>Tu espacio seguro de sanación y análisis.</Text>
+                    <Text style={[styles.title, { color: textColor }]}>{t('welcome_conf_title')}</Text>
+                    <Text style={[styles.subtitle, { color: subTextColor }]}>{t('welcome_conf_subtitle')}</Text>
 
                     {/* Warning Card */}
                     <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
                         <View style={styles.cardHeader}>
                             <AlertTriangle size={24} color="#f59e0b" />
-                            <Text style={styles.cardTitle}>Importante</Text>
+                            <Text style={styles.cardTitle}>{t('welcome_conf_important')}</Text>
                         </View>
                         <Text style={[styles.cardText, { color: cardTextColor }]}>
-                            SOYREMI utiliza Inteligencia Artificial avanzada para analizar tus conversaciones.
-                            Aunque es muy precisa, la IA puede cometer errores.
+                            {t('welcome_conf_ai_desc')}
                         </Text>
                         <Text style={[styles.cardTextBold, { color: cardBoldColor }]}>
-                            Esta herramienta no sustituye la terapia profesional ni el consejo médico.
+                            {t('welcome_conf_not_therapy')}
                         </Text>
                     </View>
 
@@ -51,11 +52,11 @@ export default function WelcomeConfirmationScreen() {
                     <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
                         <View style={styles.cardHeader}>
                             <Shield size={24} color="#10b981" />
-                            <Text style={[styles.cardTitle, { color: '#10b981' }]}>Tu Privacidad</Text>
+                            <Text style={[styles.cardTitle, { color: '#10b981' }]}>{t('welcome_conf_privacy')}</Text>
                         </View>
                         <Text style={[styles.cardText, { color: cardTextColor }]}>
-                            Tus conversaciones son analizadas de forma anónima y segura.
-                            <Text style={{ fontWeight: '700', color: cardBoldColor }}> NO guardamos tus mensajes originales</Text>, solo el análisis resultante.
+                            {t('welcome_conf_privacy_desc')}
+                            <Text style={{ fontWeight: '700', color: cardBoldColor }}> {t('welcome_conf_no_storage')}</Text>, solo el análisis resultante.
                         </Text>
                     </View>
 
@@ -63,15 +64,15 @@ export default function WelcomeConfirmationScreen() {
 
                     {/* Footer / Terms */}
                     <Text style={[styles.footerText, { color: subTextColor }]}>
-                        Al continuar, aceptas nuestros{' '}
-                        <Text style={styles.link} onPress={() => router.push('/terms')}>Términos de Servicio</Text>
+                        {t('welcome_conf_terms')}{' '}
+                        <Text style={styles.link} onPress={() => router.push('/terms')}>{t('pref_terms')}</Text>
                         {' '}y{' '}
-                        <Text style={styles.link} onPress={() => router.push('/privacy')}>Política de Privacidad</Text>.
+                        <Text style={styles.link} onPress={() => router.push('/privacy')}>{t('pref_privacy_policy')}</Text>.
                     </Text>
 
                     {/* Continue Button */}
                     <TouchableOpacity style={[styles.button, isDark ? { backgroundColor: '#FFFFFF' } : { backgroundColor: '#111827' }]} onPress={handleContinue}>
-                        <Text style={[styles.buttonText, isDark ? { color: '#000000' } : { color: '#FFFFFF' }]}>Aceptar y Continuar</Text>
+                        <Text style={[styles.buttonText, isDark ? { color: '#000000' } : { color: '#FFFFFF' }]}>{t('welcome_conf_button')}</Text>
                         <ArrowRight size={20} color={isDark ? "#000" : "#fff"} />
                     </TouchableOpacity>
                 </View>

@@ -38,6 +38,8 @@ import { Linking, Pressable } from 'react-native'; // Added Pressable for hover
 import { useSubscription } from '@/lib/SubscriptionContext';
 import { useTheme } from '@/lib/ThemeContext'; // Import Theme Context
 import { SUBSCRIPTION_CONFIG, SubscriptionTier } from '../lib/subscriptions';
+import { useLanguage } from '../lib/i18n';
+import UserAccountSwitcher from './UserAccountSwitcher';
 
 interface Profile {
     id: string;
@@ -67,12 +69,14 @@ export default function ProfileDrawer({
 }: ProfileDrawerProps) {
     const router = useRouter();
     const { isDark, toggleTheme } = useTheme(); // Use Global Theme
+    const { t } = useLanguage();
 
     // Hover States for Web
     const [hoveredProfile, setHoveredProfile] = useState<string | null>(null);
     const [hoveredCoach, setHoveredCoach] = useState(false);
     const [hoveredMenuItem, setHoveredMenuItem] = useState<string | null>(null);
     const [coachPreview, setCoachPreview] = useState<string | null>(null);
+    const [selectedMenuItem, setSelectedMenuItem] = useState<string | null>(null);
 
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const { tier } = useSubscription();
@@ -112,6 +116,7 @@ export default function ProfileDrawer({
     };
 
     useEffect(() => {
+        console.log('[ProfileDrawer] Visible changed:', visible);
         if (visible) {
             loadProfiles();
             Animated.spring(slideAnim, {
@@ -156,12 +161,27 @@ export default function ProfileDrawer({
                     .limit(10);
 
                 if (data) {
-                    setProfiles(data.map(p => ({
-                        id: p.id, // Use Supabase ID as local ID for now
-                        supabaseId: p.id, // Store Supabase ID separately
-                        exName: p.ex_name,
-                        timestamp: p.updated_at
-                    })));
+                    const loadedProfiles = await Promise.all(data.map(async p => {
+                        let lastMsg = '';
+                        try {
+                            // Try loading local conversation first for speed
+                            const key = `exSimulator_conversation_${p.id}`;
+                            const stored = await storage.getItem(key);
+                            if (stored) {
+                                const msgs = JSON.parse(stored);
+                                if (msgs.length > 0) lastMsg = msgs[msgs.length - 1].content;
+                            }
+                        } catch (e) { console.log('Error loading preview', e); }
+
+                        return {
+                            id: p.id, // Use Supabase ID as local ID for now
+                            supabaseId: p.id, // Store Supabase ID separately
+                            exName: p.ex_name,
+                            timestamp: p.updated_at,
+                            lastMessage: lastMsg
+                        };
+                    }));
+                    setProfiles(loadedProfiles);
                 }
 
                 setIsGuest(false);
@@ -171,20 +191,46 @@ export default function ProfileDrawer({
                 if (allProfilesJson) {
                     const allProfiles = JSON.parse(allProfilesJson);
                     console.log('[ProfileDrawer] Guest mode - loaded profiles:', allProfiles.length);
-                    setProfiles(allProfiles.map((p: any) => ({
-                        id: p.id || 'local',
-                        exName: p.exName || 'Perfil Local',
-                        timestamp: p.createdAt
-                    })));
+
+                    const loadedProfiles = await Promise.all(allProfiles.map(async (p: any) => {
+                        let lastMsg = '';
+                        try {
+                            const key = `exSimulator_conversation_${p.id || 'local'}`;
+                            const stored = await storage.getItem(key);
+                            if (stored) {
+                                const msgs = JSON.parse(stored);
+                                if (msgs.length > 0) lastMsg = msgs[msgs.length - 1].content;
+                            }
+                        } catch (e) { }
+
+                        return {
+                            id: p.id || 'local',
+                            exName: p.exName || 'Perfil Local',
+                            timestamp: p.createdAt,
+                            lastMessage: lastMsg || t('drawer_tap_to_chat')
+                        };
+                    }));
+                    setProfiles(loadedProfiles);
                 } else {
                     // Fallback: try loading current profile only
                     const localProfile = await storage.getItem('exSimulator_currentProfile');
                     if (localProfile) {
                         const parsed = JSON.parse(localProfile);
+                        let lastMsg = '';
+                        try {
+                            const key = `exSimulator_conversation_${parsed.id || 'local'}`;
+                            const stored = await storage.getItem(key);
+                            if (stored) {
+                                const msgs = JSON.parse(stored);
+                                if (msgs.length > 0) lastMsg = msgs[msgs.length - 1].content;
+                            }
+                        } catch (e) { }
+
                         setProfiles([{
                             id: parsed.id || 'local',
                             exName: parsed.exName || 'Perfil Local',
-                            timestamp: parsed.createdAt
+                            timestamp: parsed.createdAt,
+                            lastMessage: lastMsg
                         }]);
                     } else {
                         setProfiles([]);
@@ -306,6 +352,11 @@ export default function ProfileDrawer({
         router.replace('/auth');
     };
 
+    useEffect(() => {
+        return () => { isMounted.current = false; };
+    }, []);
+    const isMounted = React.useRef(true); // SAFETY
+
     const performDelete = async (profile: Profile) => {
         try {
             console.log('[Delete] Executing deletion for:', profile.id, profile.exName);
@@ -349,6 +400,8 @@ export default function ProfileDrawer({
                 } catch (e) { }
             }
 
+            if (!isMounted.current) return;
+
             // Reload profiles to update UI
             await loadProfiles();
 
@@ -357,14 +410,18 @@ export default function ProfileDrawer({
                 onProfileDeleted();
             }
 
-            setShowSuccessModal(true);
-            setTimeout(() => {
-                setShowSuccessModal(false);
-            }, 2500);
+            if (isMounted.current) {
+                setShowSuccessModal(true);
+                setTimeout(() => {
+                    if (isMounted.current) setShowSuccessModal(false);
+                }, 2500);
+            }
 
         } catch (error) {
             console.error('Error deleting profile:', error);
-            showAlert('Error', 'No se pudo eliminar el perfil completamente. Intenta de nuevo.', [{ text: 'OK' }], 'error');
+            if (isMounted.current) {
+                showAlert('Error', 'No se pudo eliminar el perfil completamente. Intenta de nuevo.', [{ text: 'OK' }], 'error');
+            }
         }
     };
 
@@ -403,15 +460,15 @@ export default function ProfileDrawer({
                     onPress={handleNewSimulation}
                 >
                     <Plus size={20} color={!isDark ? '#111' : '#fff'} />
-                    <Text style={[styles.newSimText, !isDark && { color: '#111' }]}>Nueva simulación</Text>
+                    <Text style={[styles.newSimText, !isDark && { color: '#111' }]}>{t('drawer_new_simulation')}</Text>
                 </TouchableOpacity>
 
                 {/* Profiles List */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Tus perfiles</Text>
+                    <Text style={styles.sectionTitle}>{t('drawer_your_profiles')}</Text>
                     {profiles.length === 0 ? (
                         <Text style={styles.emptyText}>
-                            No hay perfiles aún. Crea uno nuevo arriba.
+                            {t('drawer_no_profiles')}
                         </Text>
                     ) : (
                         profiles.map(profile => (
@@ -444,7 +501,7 @@ export default function ProfileDrawer({
                                         {profile.exName}
                                     </Text>
                                     <Text style={[styles.profileChatHint, variant === 'sidebar' && { fontSize: 10 }]} numberOfLines={1}>
-                                        {profile.lastMessage ? profile.lastMessage : 'Pulsa para chatear →'}
+                                        {profile.lastMessage ? profile.lastMessage : t('drawer_tap_to_chat')}
                                     </Text>
                                 </Pressable>
 
@@ -452,9 +509,10 @@ export default function ProfileDrawer({
                                     <TouchableOpacity
                                         style={styles.deleteBtn}
                                         onPress={() => handleDeleteProfile(profile)}
+                                        hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                                     >
-                                        <Trash2 size={14} color="#ef4444" />
-                                        <Text style={styles.deleteBtnText}>Eliminar</Text>
+                                        <Trash2 size={16} color="#ef4444" />
+                                        <Text style={styles.deleteBtnText}>{t('drawer_delete')}</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -480,158 +538,55 @@ export default function ProfileDrawer({
                     <View>
                         <Text style={styles.coachText}>Coach IA</Text>
                         <Text style={[styles.profileChatHint, { marginTop: 2 }]} numberOfLines={1}>
-                            {coachPreview ? coachPreview : 'Tu espacio seguro →'}
+                            {coachPreview ? coachPreview : t('drawer_coach_subtitle')}
                         </Text>
                     </View>
                 </Pressable>
+
+                {/* Divider */}
+                <View style={{ height: 1, backgroundColor: isDark ? '#333' : '#e5e7eb', marginVertical: 16 }} />
+
+                {/* General Menu Items */}
+                <View style={{ marginBottom: 20 }}>
+                    <TouchableOpacity
+                        style={[styles.menuItem, selectedMenuItem === 'profile.index' && styles.menuItemActive]}
+                        onPress={() => { onClose(); router.push('/profile'); }}
+                    >
+                        <User size={20} color={isDark ? '#E5E7EB' : '#4B5563'} />
+                        <Text style={[styles.menuText, isDark && { color: '#E5E7EB' }]}>{t('drawer_my_profile')}</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.menuItem, selectedMenuItem === 'preferences' && styles.menuItemActive]}
+                        onPress={() => { onClose(); router.push('/preferences'); }}
+                    >
+                        <Settings size={20} color={isDark ? '#E5E7EB' : '#4B5563'} />
+                        <Text style={[styles.menuText, isDark && { color: '#E5E7EB' }]}>{t('drawer_preferences')}</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.menuItem}
+                        onPress={toggleTheme}
+                    >
+                        {isDark ? <Sun size={20} color={isDark ? '#E5E7EB' : '#4B5563'} /> : <Moon size={20} color={isDark ? '#E5E7EB' : '#4B5563'} />}
+                        <Text style={[styles.menuText, isDark && { color: '#E5E7EB' }]}>{isDark ? t('drawer_theme_light') : t('drawer_theme_dark')}</Text>
+                    </TouchableOpacity>
+
+                    {!isPremium && (
+                        <TouchableOpacity
+                            style={[styles.menuItem, { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderRadius: 8, marginTop: 8 }]}
+                            onPress={() => { onClose(); router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall'); }}
+                        >
+                            <Crown size={20} color="#f59e0b" />
+                            <Text style={[styles.menuText, { color: '#f59e0b', fontWeight: 'bold' }]}>Premium</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
             </ScrollView>
 
             {/* Footer */}
             <View style={[styles.footer, !isDark && { borderTopColor: '#e5e7eb' }]}>
-                {showUserMenu && (
-                    <View style={[
-                        styles.userMenuContent,
-                        !isDark && { backgroundColor: '#ffffff', borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.1, elevation: 4 },
-                        { bottom: '100%', marginBottom: 10, maxHeight: 400 }
-                    ]}>
-                        <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-                            <Pressable
-                                style={({ pressed }) => [
-                                    styles.userMenuItem,
-                                    hoveredMenuItem === 'profile' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
-                                    pressed && { opacity: 0.7 }
-                                ]}
-                                onPress={() => { if (variant === 'overlay') onClose(); router.push('/profile'); }}
-                                // @ts-ignore
-                                onHoverIn={() => setHoveredMenuItem('profile')}
-                                // @ts-ignore
-                                onHoverOut={() => setHoveredMenuItem(null)}
-                            >
-                                <User size={16} color="#9ca3af" />
-                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>Mi Perfil</Text>
-                            </Pressable>
-
-                            <Pressable
-                                style={({ pressed }) => [
-                                    styles.userMenuItem,
-                                    hoveredMenuItem === 'preferences' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
-                                    pressed && { opacity: 0.7 }
-                                ]}
-                                onPress={() => { if (variant === 'overlay') onClose(); router.push('/preferences'); }}
-                                // @ts-ignore
-                                onHoverIn={() => setHoveredMenuItem('preferences')}
-                                // @ts-ignore
-                                onHoverOut={() => setHoveredMenuItem(null)}
-                            >
-                                <Settings size={16} color="#9ca3af" />
-                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>Preferencias</Text>
-                            </Pressable>
-
-                            {/* Theme Toggle in Menu */}
-                            <Pressable
-                                style={({ pressed }) => [
-                                    styles.userMenuItem,
-                                    hoveredMenuItem === 'theme' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
-                                    pressed && { opacity: 0.7 }
-                                ]}
-                                onPress={() => {
-                                    toggleTheme();
-                                }}
-                                // @ts-ignore
-                                onHoverIn={() => setHoveredMenuItem('theme')}
-                                // @ts-ignore
-                                onHoverOut={() => setHoveredMenuItem(null)}
-                            >
-                                {isDark ? <Sun size={16} color="#9ca3af" /> : <Moon size={16} color="#9ca3af" />}
-                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>
-                                    {isDark ? 'Modo Claro' : 'Modo Oscuro'}
-                                </Text>
-                            </Pressable>
-
-                            {!isGuest && (
-                                <Pressable
-                                    style={({ pressed }) => [
-                                        styles.userMenuItem,
-                                        hoveredMenuItem === 'switch' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
-                                        pressed && { opacity: 0.7 }
-                                    ]}
-                                    onPress={handleLogout}
-                                    // @ts-ignore
-                                    onHoverIn={() => setHoveredMenuItem('switch')}
-                                    // @ts-ignore
-                                    onHoverOut={() => setHoveredMenuItem(null)}
-                                >
-                                    <LogIn size={16} color="#9ca3af" />
-                                    <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>Cambiar cuenta</Text>
-                                </Pressable>
-                            )}
-
-                            <Pressable
-                                style={({ pressed }) => [
-                                    styles.userMenuItem,
-                                    hoveredMenuItem === 'privacy' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
-                                    pressed && { opacity: 0.7 }
-                                ]}
-                                onPress={() => { if (variant === 'overlay') onClose(); router.push('/legal/privacy'); }}
-                                // @ts-ignore
-                                onHoverIn={() => setHoveredMenuItem('privacy')}
-                                // @ts-ignore
-                                onHoverOut={() => setHoveredMenuItem(null)}
-                            >
-                                <Lock size={16} color="#9ca3af" />
-                                <Text style={[styles.userMenuText, !isDark && { color: '#374151' }]}>Privacidad</Text>
-                            </Pressable>
-
-                            {!isPremium && (
-                                <TouchableOpacity
-                                    style={[styles.upgradeMenuItem, !isDark && { backgroundColor: '#fef3c7' }]}
-                                    onPress={() => {
-                                        if (variant === 'overlay') onClose();
-                                        router.push(Platform.OS === 'web' ? '/subscribe' : '/paywall');
-                                    }}
-                                >
-                                    <Crown size={16} color="#f59e0b" />
-                                    <Text style={styles.upgradeMenuText}>Ver Planes Premium</Text>
-                                </TouchableOpacity>
-                            )}
-                            <View style={[styles.userMenuDivider, !isDark && { backgroundColor: '#e5e7eb' }]} />
-                            {isGuest ? (
-                                <Pressable
-                                    style={({ pressed }) => [
-                                        styles.userMenuItem,
-                                        hoveredMenuItem === 'login' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
-                                        pressed && { opacity: 0.7 }
-                                    ]}
-                                    onPress={() => { if (variant === 'overlay') onClose(); router.push('/auth'); }}
-                                    // @ts-ignore
-                                    onHoverIn={() => setHoveredMenuItem('login')}
-                                    // @ts-ignore
-                                    onHoverOut={() => setHoveredMenuItem(null)}
-                                >
-                                    <LogIn size={16} color="#22c55e" />
-                                    <Text style={[styles.userMenuText, { color: '#22c55e' }]}>Iniciar sesión</Text>
-                                </Pressable>
-                            ) : (
-                                <Pressable
-                                    style={({ pressed }) => [
-                                        styles.userMenuItem,
-                                        hoveredMenuItem === 'logout' && (isDark ? { backgroundColor: '#333' } : { backgroundColor: '#f3f4f6' }),
-                                        pressed && { opacity: 0.7 }
-                                    ]}
-                                    onPress={handleLogout}
-                                    // @ts-ignore
-                                    onHoverIn={() => setHoveredMenuItem('logout')}
-                                    // @ts-ignore
-                                    onHoverOut={() => setHoveredMenuItem(null)}
-                                >
-                                    <LogOut size={16} color="#ef4444" />
-                                    <Text style={[styles.userMenuText, { color: '#ef4444' }]}>Cerrar sesión</Text>
-                                </Pressable>
-                            )}
-                        </ScrollView>
-                    </View>
-                )}
-
+                {/* User Info (Clickable for toggle) */}
                 <TouchableOpacity
                     style={styles.userBtn}
                     onPress={() => setShowUserMenu(!showUserMenu)}
@@ -641,16 +596,36 @@ export default function ProfileDrawer({
                     </View>
                     <View style={styles.userInfo}>
                         <Text style={[styles.userName, !isDark && { color: '#111' }]} numberOfLines={1}>
-                            {isGuest ? 'Invitado' : (userEmail || 'Mi cuenta')}
+                            {isGuest ? t('drawer_guest') : (userEmail || 'Mi cuenta')}
                         </Text>
                         <Text style={isGuest ? styles.userPlanFree : (isPremium ? styles.userPlan : styles.userPlanFree)}>
-                            {isGuest ? 'Plan Gratuito' : (isPremium ? 'Premium' : 'Plan Gratuito')}
+                            {isGuest ? t('drawer_free_plan') : (isPremium ? 'Premium' : t('drawer_free_plan'))}
                         </Text>
                     </View>
-                    {showUserMenu ? <ChevronUp size={16} color="#9ca3af" /> : <ChevronDown size={16} color="#9ca3af" />}
+                    {/* Toggle Icon */}
+                    {showUserMenu ? (
+                        <ChevronDown size={18} color="#9ca3af" />
+                    ) : (
+                        <ChevronUp size={18} color="#9ca3af" />
+                    )}
                 </TouchableOpacity>
+
+                {/* Inline Account Switcher Dropdown */}
+                {showUserMenu && (
+                    <View style={[styles.switcherInline, !isDark && { backgroundColor: '#f9fafb', borderColor: '#e5e7eb' }]}>
+                        <UserAccountSwitcher
+                            onClose={() => setShowUserMenu(false)}
+                            variant="inline"
+                            onAddAccount={() => {
+                                setShowUserMenu(false);
+                                onClose();
+                                router.push('/auth?action=switch');
+                            }}
+                        />
+                    </View>
+                )}
             </View>
-        </Animated.View>
+        </Animated.View >
     );
 
     const renderAlerts = () => (
@@ -874,6 +849,22 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    menuItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        gap: 12,
+        borderRadius: 8,
+    },
+    menuItemActive: {
+        backgroundColor: 'rgba(255,255,255,0.05)',
+    },
+    menuText: {
+        fontSize: 15,
+        color: '#4B5563',
+        fontWeight: '500',
+    },
     accountTitle: {
         color: '#fff',
         fontSize: 14,
@@ -897,20 +888,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '700',
     },
-    menuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 12,
-        borderRadius: 8,
-        gap: 12,
-        marginBottom: 4,
-    },
-    menuItemText: {
-        color: '#fff',
-        fontSize: 15,
-        fontWeight: '500',
-    },
+
     profileItemSidebar: {
         paddingVertical: 6,
         paddingHorizontal: 8,
@@ -935,6 +913,14 @@ const styles = StyleSheet.create({
         borderColor: '#333',
         zIndex: 100,
         maxHeight: 280, // Prevent growing too tall
+    },
+    switcherOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    switcherPosition: {
+        paddingBottom: 40,
     },
     upgradeMenuItem: {
         flexDirection: 'row',
@@ -1157,5 +1143,13 @@ const styles = StyleSheet.create({
         color: '#000',
         fontWeight: '700',
         fontSize: 14,
+    },
+    switcherInline: {
+        marginTop: 10,
+        backgroundColor: '#111',
+        borderRadius: 16,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#333',
     },
 });

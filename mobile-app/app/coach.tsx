@@ -17,12 +17,15 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Send, Heart, Sparkles, Crown, Image as ImageIcon, X, HelpCircle, LogOut, Flag, MoreVertical, Moon, Sun } from 'lucide-react-native';
+import { ArrowLeft, Send, Heart, Sparkles, Crown, Image as ImageIcon, X, HelpCircle, LogOut, Flag, MoreVertical, Moon, Sun, Menu } from 'lucide-react-native';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { storage } from '../lib/storage';
 import { supabase } from '../lib/supabase';
 import UpgradeBanner from '../components/UpgradeBanner';
+import ProfileDrawer from '../components/ProfileDrawer';
 import { useSubscription } from '@/lib/SubscriptionContext';
+import { useTheme } from '../lib/ThemeContext';
+import { useLanguage } from '../lib/i18n';
 import { reportAIContent } from '../lib/aiContentModeration';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
@@ -39,6 +42,8 @@ const FREE_COACH_MESSAGE_LIMIT = 15;
 
 export default function CoachScreen() {
     const router = useRouter();
+    const { isDark, toggleTheme } = useTheme();
+    const { t, language } = useLanguage();
     const scrollViewRef = useRef<ScrollView>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputText, setInputText] = useState('');
@@ -46,6 +51,7 @@ export default function CoachScreen() {
     const [reportModalVisible, setReportModalVisible] = useState(false);
     const [reportData, setReportData] = useState({ id: '', content: '' });
     const [userId, setUserId] = useState<string>('');
+    const [drawerVisible, setDrawerVisible] = useState(false);
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => {
@@ -61,7 +67,6 @@ export default function CoachScreen() {
     const [dailyMessageCount, setDailyMessageCount] = useState(0);
     const [showLimitWarning, setShowLimitWarning] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
-    const [isDark, setIsDark] = useState(false); // Default to Light theme
 
     // Custom Alert State
     interface AlertConfig {
@@ -190,55 +195,45 @@ export default function CoachScreen() {
         }
 
         try {
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+            // Using 'mobile-chat' which handles system prompt and images server-side
+            const { data, error } = await supabase.functions.invoke('mobile-chat', {
+                body: {
+                    message: currentInput || (imageToSend ? "Analiza esta imagen" : ""),
+                    imageBase64: imageToSend, // Send base64 image directly
+                    userId: userId,
+                    // Optional: pass partial context if needed, but server handles history better usually
+                    // previousMessages: updatedMessages.slice(-5)
+                }
+            });
 
-            const context = updatedMessages.slice(-6).map(m =>
-                `${m.role === 'user' ? 'Usuario' : 'Coach'}: ${m.content}${m.image ? ' [imagen]' : ''}`
-            ).join('\n');
-
-            let systemPrompt = `Eres un coach de bienestar emocional especializado en relaciones. Tu rol es:
-- Escuchar con empatía y sin juzgar
-- Ayudar al usuario a procesar sus emociones sobre rupturas
-- Dar consejos prácticos pero amables
-- Fomentar el autocuidado y crecimiento personal
-- NUNCA dar consejos médicos o de salud mental específicos
-- Sugerir buscar ayuda profesional cuando sea apropiado
-
-Responde de forma cálida, breve (2-3 oraciones máximo), y en español.
-
-CONTEXTO:
-${context}
-
-MENSAJE: "${currentInput || '(El usuario envió una imagen)'}"
-${imageToSend ? '\nNOTA: El usuario te está enviando una imagen. Describe brevemente tu observación y responde de forma empática.' : ''}
-
-RESPONDE:`;
-
-            let result;
-            if (imageToSend) {
-                // Multimodal request with image
-                const promptParts = [
-                    { text: systemPrompt },
-                    {
-                        inlineData: {
-                            mimeType: "image/jpeg",
-                            data: imageToSend
-                        }
-                    }
-                ];
-                result = await model.generateContent(promptParts as any);
-            } else {
-                result = await model.generateContent(systemPrompt);
+            if (error) {
+                console.error('[Coach] Supabase Function Error:', error);
+                throw new Error(error.message || 'Error connecting to AI Coach');
             }
 
-            const response = await result.response;
+            if (!data || !data.text) {
+                throw new Error('No response from AI Coach');
+            }
+
             const assistantMessage: Message = {
                 role: 'assistant',
-                content: response.text(),
+                content: data.text,
             };
             setMessages([...updatedMessages, assistantMessage]);
+
+            // Save suggested replies if available (could be used in UI later)
+            if (data.suggestedReplies) {
+                console.log('[Coach] Suggested replies:', data.suggestedReplies);
+            }
+
         } catch (error) {
             console.error('[Coach] Error:', error);
+            // Optional: Show error to user
+            const errorMessage: Message = {
+                role: 'assistant',
+                content: "Lo siento, tuve un problema de conexión. ¿Podrías intentarlo de nuevo?",
+            };
+            setMessages([...updatedMessages, errorMessage]);
         } finally {
             setIsTyping(false);
         }
@@ -251,7 +246,7 @@ RESPONDE:`;
             <StatusBar style={isDark ? "light" : "dark"} />
 
             {/* Header */}
-            <SafeAreaView edges={['top']} style={styles.headerSafe}>
+            <SafeAreaView edges={['top']} style={[styles.headerSafe, isDark && styles.headerSafeDark]}>
                 <View style={styles.header}>
                     <TouchableOpacity
                         onPress={() => {
@@ -261,13 +256,22 @@ RESPONDE:`;
                                 router.replace('/(tabs)');
                             }
                         }}
-                        style={styles.backButton}
+                        style={[styles.backButton, isDark && styles.backButtonDark]}
                     >
-                        <ArrowLeft size={22} color="#9ca3af" />
+                        <ArrowLeft size={22} color={isDark ? "#fff" : "#9ca3af"} />
                     </TouchableOpacity>
-                    <Text style={[styles.headerTitle, isDark && { color: '#fff' }]}>Coach IA</Text>
+
+                    {/* Hamburger Menu in Coach Screen */}
+                    <TouchableOpacity
+                        onPress={() => setDrawerVisible(true)}
+                        style={[styles.backButton, isDark && styles.backButtonDark, { marginLeft: 8 }]}
+                    >
+                        <Menu size={22} color={isDark ? "#fff" : "#9ca3af"} />
+                    </TouchableOpacity>
+
+                    <Text style={[styles.headerTitle, { color: isDark ? '#fff' : '#000', marginLeft: 12 }]}>{t('coach_title')}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        <TouchableOpacity onPress={() => setIsDark(!isDark)} style={{ padding: 4 }}>
+                        <TouchableOpacity onPress={toggleTheme} style={{ padding: 4 }}>
                             {isDark ? <Sun size={22} color="#fff" /> : <Moon size={22} color="#374151" />}
                         </TouchableOpacity>
                         {isPremium ? (
@@ -279,7 +283,7 @@ RESPONDE:`;
                         )}
                     </View>
                 </View>
-            </SafeAreaView>
+            </SafeAreaView >
 
             <KeyboardAvoidingView
                 style={styles.chatContainer}
@@ -290,29 +294,30 @@ RESPONDE:`;
                     style={styles.messagesContainer}
                     contentContainerStyle={styles.messagesContent}
                     showsVerticalScrollIndicator={false}
+                    keyboardDismissMode="on-drag"
                 >
                     {messages.length === 0 && (
                         <View style={styles.emptyChat}>
                             <View style={styles.emptyChatIcon}>
                                 <Heart size={28} color="#ec4899" />
                             </View>
-                            <Text style={[styles.emptyChatTitle, isDark && { color: '#fff' }]}>Coach de Bienestar</Text>
-                            <Text style={styles.emptyChatSubtitle}>
-                                Estoy aquí para escucharte y ayudarte a procesar tus emociones.
+                            <Text style={[styles.emptyChatTitle, { color: isDark ? '#fff' : '#000' }]}>{t('coach_wellness_title')}</Text>
+                            <Text style={[styles.emptyChatSubtitle, { color: isDark ? '#ccc' : '#666' }]}>
+                                {t('coach_subtitle')}
                             </Text>
 
                             <View style={styles.suggestionsContainer}>
                                 {[
-                                    '¿Cómo puedo superar a mi ex?',
-                                    'Me siento triste hoy',
-                                    '¿Es normal extrañar a alguien?',
+                                    t('coach_suggestion1'),
+                                    t('coach_suggestion2'),
+                                    t('coach_suggestion3'),
                                 ].map((suggestion, i) => (
                                     <TouchableOpacity
                                         key={i}
                                         style={[styles.suggestion, isDark && { backgroundColor: '#1f2937', borderColor: '#374151' }]}
                                         onPress={() => setInputText(suggestion)}
                                     >
-                                        <Text style={[styles.suggestionText, isDark && { color: '#e5e7eb' }]}>{suggestion}</Text>
+                                        <Text style={[styles.suggestionText, { color: isDark ? '#ccc' : '#555' }]}>{suggestion}</Text>
                                     </TouchableOpacity>
                                 ))}
                             </View>
@@ -412,7 +417,7 @@ RESPONDE:`;
                 )}
 
                 {/* Input Area */}
-                <SafeAreaView edges={['bottom']} style={styles.inputSafe}>
+                <SafeAreaView edges={['bottom']} style={[styles.inputSafe, isDark && styles.inputSafeDark]}>
                     {/* Image Preview */}
                     {selectedImage && (
                         <View style={styles.imagePreviewContainer}>
@@ -452,7 +457,7 @@ RESPONDE:`;
                             style={[styles.input, isDark && { color: '#fff', backgroundColor: '#1f2937', borderColor: '#374151' }]}
                             value={inputText}
                             onChangeText={setInputText}
-                            placeholder="¿Cómo te sientes hoy?"
+                            placeholder={t('coach_placeholder')}
                             placeholderTextColor={isDark ? "#9ca3af" : "#6b7280"}
                             multiline
                             maxLength={1000}
@@ -528,6 +533,23 @@ RESPONDE:`;
                     </View>
                 </View>
             </Modal>
+            {/* Profile Drawer */}
+            <ProfileDrawer
+                visible={drawerVisible}
+                onClose={() => setDrawerVisible(false)}
+                // Use current user/profile data if available, or guest
+                currentProfileId={null}
+                onProfileSwitch={(profile) => {
+                    setDrawerVisible(false);
+                    // Handle switch - Navigate to chat with this profile
+                    router.replace('/'); // Go home which usually loads current profile
+                    setTimeout(() => {
+                        // Logic to switch profile is handled inside drawer usually, 
+                        // but we might need to ensure the app reloads the new profile.
+                        // For now, replacing to root index is safest.
+                    }, 100);
+                }}
+            />
         </View >
     );
 }
@@ -542,6 +564,10 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#f3f4f6',
     },
+    headerSafeDark: {
+        backgroundColor: '#000000',
+        borderBottomColor: '#1f2937',
+    },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -553,6 +579,9 @@ const styles = StyleSheet.create({
         padding: 8,
         borderRadius: 12,
         backgroundColor: '#f3f4f6',
+    },
+    backButtonDark: {
+        backgroundColor: '#1f2937',
     },
     headerTitle: {
         fontSize: 17,
@@ -715,6 +744,10 @@ const styles = StyleSheet.create({
         backgroundColor: '#ffffff',
         borderTopWidth: 1,
         borderTopColor: '#f3f4f6',
+    },
+    inputSafeDark: {
+        backgroundColor: '#000000',
+        borderTopColor: '#1f2937',
     },
     inputContainer: {
         flexDirection: 'row',

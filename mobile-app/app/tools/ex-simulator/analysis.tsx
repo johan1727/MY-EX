@@ -40,11 +40,13 @@ import { canCreateProfileThisMonth, incrementMonthlyProfileCount } from '@/lib/e
 import { useSubscription } from '@/lib/SubscriptionContext';
 
 import { useTheme } from '@/lib/ThemeContext';
+import { useLanguage } from '@/lib/i18n';
 import AnalysisLoadingPremium from '@/components/AnalysisLoadingPremium';
 
 export default function AnalysisScreen() {
     const router = useRouter();
     const { isDark } = useTheme(); // Global Theme
+    const { t } = useLanguage();
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState<any>(null);
 
@@ -283,7 +285,7 @@ export default function AnalysisScreen() {
                         marginTop: 20,
                         color: isDark ? '#aaa' : '#555',
                         fontStyle: 'italic'
-                    }}>Verificando estado...</Text>
+                    }}>{t('analysis_verifying')}</Text>
                 </View>
             </View>
         );
@@ -304,7 +306,7 @@ export default function AnalysisScreen() {
                     </View>
 
                     <Text style={{ color: isDark ? '#fff' : '#111', fontSize: 24, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' }}>
-                        ⚠️ Tipo de Relación Dudoso
+                        {t('analysis_valid_warning')}
                     </Text>
 
                     <View style={{
@@ -315,7 +317,7 @@ export default function AnalysisScreen() {
                             {formatValidationMessage(validationWarning.validation)}
                         </Text>
                         <Text style={{ color: isDark ? '#9ca3af' : '#6b7280', fontSize: 14, marginTop: 16, textAlign: 'center' }}>
-                            ¿Quieres continuar de todos modos?
+                            {t('analysis_valid_continue')}
                         </Text>
                     </View>
 
@@ -330,7 +332,7 @@ export default function AnalysisScreen() {
                             }}
                         >
                             <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>
-                                Continuar Análisis
+                                {t('analysis_btn_continue')}
                             </Text>
                         </TouchableOpacity>
 
@@ -346,7 +348,7 @@ export default function AnalysisScreen() {
                             }}
                         >
                             <Text style={{ color: isDark ? '#9ca3af' : '#6b7280', fontSize: 16 }}>
-                                Cancelar y Corregir
+                                {t('analysis_btn_cancel')}
                             </Text>
                         </TouchableOpacity>
                     </View>
@@ -373,12 +375,12 @@ export default function AnalysisScreen() {
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                         <ArrowLeft size={24} color={isDark ? "#fff" : "#000"} />
                     </TouchableOpacity>
-                    <Text style={[styles.headerTitle, !isDark && { color: '#000' }]}>Análisis</Text>
+                    <Text style={[styles.headerTitle, !isDark && { color: '#000' }]}>{t('analysis_title')}</Text>
                     <View style={styles.headerSpacer} />
                 </SafeAreaView>
                 <View style={styles.emptyContainer}>
                     <Brain size={64} color="#6b7280" />
-                    <Text style={[styles.emptyText, !isDark && { color: '#374151' }]}>No hay perfil para analizar</Text>
+                    <Text style={[styles.emptyText, !isDark && { color: '#374151' }]}>{t('analysis_no_profile')}</Text>
 
 
 
@@ -395,7 +397,7 @@ export default function AnalysisScreen() {
                             borderRadius: 12
                         }}
                     >
-                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>Reintentar</Text>
+                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>{t('analysis_retry')}</Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -434,7 +436,7 @@ export default function AnalysisScreen() {
 
                 showAlert(
                     '✅ Perfil eliminado',
-                    'El perfil corrupto ha sido eliminado. Ahora puedes crear uno nuevo.',
+                    'El perfil corrupto ha sido eliminado. Ahora puedes crear uno nuevo.', // TODO: Translate alerts if needed
                     [{ text: 'Aceptar', onPress: () => { closeAlert(); router.replace('/tools/ex-simulator/import'); } }],
                     'success'
                 );
@@ -458,9 +460,9 @@ export default function AnalysisScreen() {
                 </SafeAreaView>
                 <View style={styles.emptyContainer}>
                     <Brain size={64} color="#ef4444" />
-                    <Text style={styles.emptyText}>El perfil está vacío o corrupto</Text>
+                    <Text style={styles.emptyText}>{t('analysis_error_corrupt')}</Text>
                     <Text style={{ color: '#6b7280', marginTop: 8, fontSize: 14, textAlign: 'center', paddingHorizontal: 20 }}>
-                        El análisis no se completó correctamente. Elimina este perfil y crea uno nuevo.
+                        {t('analysis_error_desc')}
                     </Text>
 
                     <TouchableOpacity
@@ -478,7 +480,7 @@ export default function AnalysisScreen() {
                     >
                         <Trash2 size={20} color="#fff" />
                         <Text style={{ color: '#fff', fontWeight: '600', fontSize: 16 }}>
-                            Eliminar y reintentar
+                            {t('analysis_delete_retry')}
                         </Text>
                     </TouchableOpacity>
 
@@ -487,7 +489,7 @@ export default function AnalysisScreen() {
                         style={{ marginTop: 12 }}
                     >
                         <Text style={{ color: '#a855f7', fontSize: 14 }}>
-                            Crear nuevo análisis sin eliminar
+                            {t('analysis_create_new')}
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -567,7 +569,7 @@ export default function AnalysisScreen() {
                     <TouchableOpacity onPress={() => router.push('/')} style={styles.backButton}>
                         <ArrowLeft size={24} color={isDark ? "#fff" : "#000"} />
                     </TouchableOpacity>
-                    <Text style={[styles.headerTitle, !isDark && { color: '#000' }]}>Análisis de {name}</Text>
+                    <Text style={[styles.headerTitle, !isDark && { color: '#000' }]}>{t('analysis_of')} {name}</Text>
                     <View style={styles.headerSpacer} />
                 </View>
             </SafeAreaView>
@@ -590,11 +592,11 @@ export default function AnalysisScreen() {
                         <View style={styles.summaryInfo}>
                             <Text style={styles.summaryName}>{name}</Text>
                             <Text style={styles.summaryStats}>
-                                {messageCount.toLocaleString()} mensajes analizados
+                                {messageCount.toLocaleString()} {t('analysis_msgs_analyzed')}
                             </Text>
                             <View style={styles.badge}>
                                 <Sparkles size={12} color="#22c55e" />
-                                <Text style={styles.badgeText}>Análisis Profundo IA</Text>
+                                <Text style={styles.badgeText}>{t('analysis_deep_ai')}</Text>
                             </View>
                         </View>
                     </View>
@@ -607,7 +609,7 @@ export default function AnalysisScreen() {
                     <View style={styles.simpleCardHeader}>
                         <MessageCircle size={18} color="#6366f1" />
                         <Text style={[styles.simpleCardTitle, { color: '#6366f1' }]}>
-                            Estilo de Comunicación
+                            {t('analysis_comm_style')}
                         </Text>
                     </View>
                     <Text style={[styles.simpleCardValue, !isDark && { color: '#1f2937' }]}>
@@ -620,7 +622,7 @@ export default function AnalysisScreen() {
                     <View style={styles.simpleCardHeader}>
                         <Heart size={18} color="#ec4899" />
                         <Text style={[styles.simpleCardTitle, { color: '#ec4899' }]}>
-                            Patrones Emocionales
+                            {t('analysis_emotional_pat')}
                         </Text>
                     </View>
                     <Text style={[styles.simpleCardValue, !isDark && { color: '#1f2937' }]}>
@@ -635,7 +637,7 @@ export default function AnalysisScreen() {
                         <View style={styles.sectionHeader}>
                             <Zap size={20} color="#f59e0b" />
                             <Text style={[styles.sectionTitle, { color: '#f59e0b' }]}>
-                                Radiografía Psicológica
+                                {t('analysis_psych_xray')}
                             </Text>
                         </View>
 
@@ -643,25 +645,25 @@ export default function AnalysisScreen() {
                         {psychologicalXRay.fourHorsemen && (
                             <View style={styles.card}>
                                 <Text style={styles.cardSubtitle}>
-                                    Los 4 Jinetes (Escala de Toxicidad)
+                                    {t('analysis_4_horsemen')}
                                 </Text>
                                 <ScoreBar
-                                    label="⚔️ Crítica (Ataques)"
+                                    label={t('analysis_h_criticism')}
                                     score={getScore(psychologicalXRay.fourHorsemen?.criticism?.score || psychologicalXRay.fourHorsemen?.criticism)}
                                     color="#f59e0b"
                                 />
                                 <ScoreBar
-                                    label="🙄 Desprecio (El peor)"
+                                    label={t('analysis_h_contempt')}
                                     score={getScore(psychologicalXRay.fourHorsemen?.contempt?.score || psychologicalXRay.fourHorsemen?.contempt)}
                                     color="#ef4444"
                                 />
                                 <ScoreBar
-                                    label="🛡️ Defensividad"
+                                    label={t('analysis_h_defensiveness')}
                                     score={getScore(psychologicalXRay.fourHorsemen?.defensiveness?.score || psychologicalXRay.fourHorsemen?.defensiveness)}
                                     color="#60a5fa"
                                 />
                                 <ScoreBar
-                                    label="🧱 Indiferencia (Muro)"
+                                    label={t('analysis_h_stonewalling')}
                                     score={getScore(psychologicalXRay.fourHorsemen?.stonewalling?.score || psychologicalXRay.fourHorsemen?.stonewalling)}
                                     color="#9ca3af"
                                 />
@@ -671,13 +673,13 @@ export default function AnalysisScreen() {
                         {/* Estilo de Apego */}
                         {psychologicalXRay.attachmentStyle && (
                             <View style={[styles.card, { marginTop: 12 }]}>
-                                <Text style={styles.cardSubtitle}>Estilo de Apego Detectado</Text>
+                                <Text style={styles.cardSubtitle}>{t('analysis_attachment_detected')}</Text>
                                 <View style={styles.highlightBox}>
                                     <Text style={[styles.highlightValue, { color: '#f59e0b', fontSize: 20 }]}>
                                         {psychologicalXRay.attachmentStyle.type?.toUpperCase()}
                                     </Text>
                                     <Text style={styles.subInfo}>
-                                        Confianza del análisis: {psychologicalXRay.attachmentStyle.confidence}%
+                                        {t('analysis_confidence')} {psychologicalXRay.attachmentStyle.confidence}%
                                     </Text>
                                 </View>
                                 {psychologicalXRay.attachmentStyle.manifestations?.map((m: any, i: number) => (
@@ -699,7 +701,7 @@ export default function AnalysisScreen() {
                         <View style={styles.simpleCardHeader}>
                             <Users size={18} color="#f59e0b" />
                             <Text style={[styles.simpleCardTitle, { color: '#f59e0b' }]}>
-                                Estilo de Apego
+                                {t('analysis_attachment')}
                             </Text>
                         </View>
                         <Text style={styles.simpleCardValue}>
@@ -713,7 +715,7 @@ export default function AnalysisScreen() {
                     <View style={styles.simpleCardHeader}>
                         <Zap size={18} color="#3b82f6" />
                         <Text style={[styles.simpleCardTitle, { color: '#3b82f6' }]}>
-                            Manejo de Conflictos
+                            {t('analysis_conflict')}
                         </Text>
                     </View>
                     <Text style={styles.simpleCardValue}>
@@ -727,7 +729,7 @@ export default function AnalysisScreen() {
                         <View style={styles.sectionHeader}>
                             <AlertTriangle size={20} color="#ef4444" />
                             <Text style={[styles.sectionTitle, { color: '#ef4444' }]}>
-                                Señales de Alerta
+                                {t('analysis_red_flags')}
                             </Text>
                         </View>
                         {redFlags.map((flag: string, i: number) => (
@@ -744,14 +746,14 @@ export default function AnalysisScreen() {
                         <View style={styles.sectionHeader}>
                             <Heart size={20} color="#ec4899" />
                             <Text style={[styles.sectionTitle, { color: '#ec4899' }]}>
-                                Detalles Íntimos & Apodos
+                                {t('analysis_intimate')}
                             </Text>
                         </View>
 
                         {/* Nicknames */}
                         {intimateDetails.nicknames?.fromExToUser?.length > 0 && (
                             <View style={styles.highlightBox}>
-                                <Text style={styles.highlightLabel}>Te decía:</Text>
+                                <Text style={styles.highlightLabel}>{t('analysis_nicknames_them')}</Text>
                                 <Text style={styles.highlightValue}>
                                     {intimateDetails.nicknames.fromExToUser.join(', ')}
                                 </Text>
@@ -759,7 +761,7 @@ export default function AnalysisScreen() {
                         )}
                         {intimateDetails.nicknames?.fromUserToEx?.length > 0 && (
                             <View style={styles.subInfo}>
-                                <Text style={{ color: '#9ca3af' }}>Tú le decías: </Text>
+                                <Text style={{ color: '#9ca3af' }}>{t('analysis_nicknames_you')} </Text>
                                 <Text style={styles.bold}>{intimateDetails.nicknames.fromUserToEx.join(', ')}</Text>
                             </View>
                         )}
@@ -767,7 +769,7 @@ export default function AnalysisScreen() {
                         {/* Inside Jokes */}
                         {intimateDetails.insideJokes?.length > 0 && (
                             <View style={{ marginTop: 12 }}>
-                                <Text style={styles.triggerLabel}>🎭 Chistes Internos:</Text>
+                                <Text style={styles.triggerLabel}>{t('analysis_jokes')}</Text>
                                 <View style={styles.tagRow}>
                                     {intimateDetails.insideJokes.map((joke: string, i: number) => (
                                         <View key={i} style={styles.tagSuccess}>
@@ -783,7 +785,7 @@ export default function AnalysisScreen() {
                         {/* Specific Love Language */}
                         {intimateDetails.loveLanguageSpecifics?.length > 0 && (
                             <View style={{ marginTop: 12 }}>
-                                <Text style={styles.triggerLabel}>💝 Gestos de Amor Específicos:</Text>
+                                <Text style={styles.triggerLabel}>{t('analysis_love_gestures')}</Text>
                                 <View style={styles.tagRow}>
                                     {intimateDetails.loveLanguageSpecifics.map((gesture: any, i: number) => (
                                         <View key={i} style={styles.tagPositive}>
