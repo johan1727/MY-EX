@@ -2,7 +2,7 @@
   "expo": {
     "name": "REMI",
     "slug": "my-ex-chat",
-    "version": "1.1.7",
+    "version": "1.1.9",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -16,15 +16,14 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.myexcoach.app",
+      "bundleIdentifier": "com.soyremi.remi",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Esta app necesita acceso al micrófono para entrada de voz.",
-        "NSUserNotificationsUsageDescription": "Esta app envía notificaciones motivacionales diarias para apoyar tu proceso de sanación."
+        "NSUserTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you."
       }
     },
     "android": {
       "package": "com.soyremi.remi",
-      "versionCode": 82,
+      "versionCode": 83,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a1025"

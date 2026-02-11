@@ -122,8 +122,8 @@ export default function RootLayout() {
 
                 if (TikTokBusiness) {
                     await TikTokBusiness.init(
-                        process.env.EXPO_PUBLIC_TIKTOK_APP_ID || '',
-                        process.env.EXPO_PUBLIC_TIKTOK_ACCESS_TOKEN || '',
+                        'com.soyremi.remi', // Argument 1: App Bundle ID / Package Name
+                        process.env.EXPO_PUBLIC_TIKTOK_APP_ID || '', // Argument 2: TikTok App ID
                         { debugMode: true } // Force Debug Mode for Test Events
                     );
                     console.log('[TikTok] SDK initialized successfully');
