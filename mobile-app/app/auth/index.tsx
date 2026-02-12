@@ -94,7 +94,7 @@ export default function AuthScreen() {
 
         handleOAuthCallback();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (event === 'SIGNED_IN' && session && !hasNavigated) {
                 setHasNavigated(true);
                 syncLanguageToProfile(session.user.id);
@@ -105,26 +105,15 @@ export default function AuthScreen() {
                         const TikTokBusiness = require('expo-tiktok-business').default;
                         const { TiktokEventName } = require('expo-tiktok-business');
 
-                        console.log('[TikTok] Tracking Login/Registration');
+                        console.log('[TikTok] Tracking user registration/login');
 
-                        // 1. Identify the user (if supported by SDK wrapper, otherwise skip)
-                        // The wrapper might handle this internally or we rely on events
-
-                        // 2. Track "CompleteRegistration" or "Login"
-                        TikTokBusiness.trackEvent(TiktokEventName.COMPLETE_PAYMENT, { // Using COMPLETE_PAYMENT or SUBSCRIBE as proxy if needed, but CUSTOM or REGISTER is better
-                            description: "User Logged In",
-                            contents: [{
-                                content_id: session.user.id,
-                                content_type: "product",
-                                content_name: "User Login"
-                            }]
+                        // Track CompleteRegistration event
+                        await TikTokBusiness.trackEvent(TiktokEventName.COMPLETE_REGISTRATION, {
+                            description: "User successfully logged in",
+                            content_id: session.user.id
                         });
 
-                        // Better: Track standard 'Subscribe' or 'CompleteRegistration' if available in Enum
-                        // Checking Enum: SUBSCRIBE is available. 
-                        TikTokBusiness.trackEvent(TiktokEventName.SUBSCRIBE, {
-                            description: "User Login/Signup Success"
-                        });
+                        console.log('[TikTok] CompleteRegistration event tracked');
 
                     } catch (e) {
                         console.log('[TikTok] Tracking error', e);
