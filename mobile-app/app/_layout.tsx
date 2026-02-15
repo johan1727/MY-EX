@@ -112,25 +112,31 @@ export default function RootLayout() {
     }, [showSplash, shareIntentHandled, hasShareIntent, shareIntent]);
 
     // Initialize TikTok Ads
-    // Initialize TikTok Ads with Permission
     useEffect(() => {
         const initTikTok = async () => {
             try {
-                // Request IDFA/Tracking Permission (Critical for "Get IDFA" error)
+                // Request IDFA/Tracking Permission
                 const { status } = await requestTrackingPermissionsAsync();
                 console.log('[TikTok] Tracking permission:', status);
 
                 if (TikTokBusiness) {
-                    await TikTokBusiness.init(
-                        'com.soyremi.remi', // Argument 1: App Bundle ID / Package Name
-                        process.env.EXPO_PUBLIC_TIKTOK_APP_ID || '', // Argument 2: TikTok App ID
-                        { debugMode: true } // Force Debug Mode for Test Events
+                    // Use correct API: initialize() not init()
+                    const success = await TikTokBusiness.initialize(
+                        'com.soyremi.remi', // App ID / Package Name
+                        process.env.EXPO_PUBLIC_TIKTOK_APP_ID || '', // TikTok App ID
+                        {
+                            debugMode: true, // Enable debug mode
+                            autoTrackAppLifecycle: true, // Auto-track LAUNCH event
+                            autoTrackRouteChanges: false // We'll track manually
+                        }
                     );
-                    console.log('[TikTok] SDK initialized successfully');
 
-                    // Force "Launch" event to appear in dashboard immediately
-                    await TikTokBusiness.trackEvent(TiktokEventName.LAUNCH, {});
-                    console.log('[TikTok] Launch event tracked manually');
+                    if (success) {
+                        console.log('[TikTok] SDK initialized successfully');
+                        // The LAUNCH event is tracked automatically by autoTrackAppLifecycle
+                    } else {
+                        console.error('[TikTok] SDK initialization failed');
+                    }
                 } else {
                     console.warn('[TikTok] Module not found');
                 }
