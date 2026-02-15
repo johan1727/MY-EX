@@ -1,8 +1,8 @@
 import { storage } from './storage';
 
-const DAILY_LIMIT = 30;
-const BURST_LIMIT = 10;
-const BURST_WINDOW_MS = 3 * 60 * 60 * 1000; // 3 hours
+const DAILY_LIMIT = 100;
+const BURST_LIMIT = 35;
+const BURST_WINDOW_MS = 1 * 60 * 60 * 1000; // 1 hour
 
 interface UsageData {
     date: string;       // YYYY-MM-DD

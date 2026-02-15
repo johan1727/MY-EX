@@ -53,7 +53,7 @@ export const SUBSCRIPTION_CONFIG: Record<SubscriptionTier, {
             vault: false,
             exportDiary: false,
             simulatorAnalyses: 1,
-            simulatorChatMessages: 20
+            simulatorChatMessages: 100
         }
     },
     [SubscriptionTier.EXPLORER]: {
