@@ -476,9 +476,9 @@ const detectInitialLanguage = (): Language => {
     if (Platform.OS === 'web') {
         if (typeof navigator !== 'undefined') {
             const browserLang = navigator.language || (navigator as any).userLanguage;
-            return browserLang?.toLowerCase().startsWith('es') ? 'es' : 'en';
+            return browserLang?.toLowerCase().startsWith('es') ? 'es' : 'es';
         }
-        return 'en';
+        return 'es';
     }
 
 
@@ -490,9 +490,9 @@ const detectInitialLanguage = (): Language => {
         if (languageCode?.startsWith('es')) {
             return 'es';
         }
-        // Check if language code starts with 'en'
+        // If it starts with 'en', we still return 'es' as requested (Spanish as base)
         if (languageCode?.startsWith('en')) {
-            return 'en';
+            return 'es';
         }
     }
 

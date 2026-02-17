@@ -1,0 +1,595 @@
+> Task :gradle-plugin:settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:shared:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:shared:compileJava NO-SOURCE
+> Task :gradle-plugin:shared:processResources NO-SOURCE
+> Task :gradle-plugin:shared:classes UP-TO-DATE
+> Task :gradle-plugin:shared:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:processResources NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:jar UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:settings-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:react-native-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-module-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-module-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-module-gradle-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:react-native-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:jar UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:jar UP-TO-DATE
+> Task :expo-module-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :expo-module-gradle-plugin:compileJava NO-SOURCE
+> Task :expo-module-gradle-plugin:classes UP-TO-DATE
+> Task :expo-module-gradle-plugin:jar UP-TO-DATE
+
+> Configure project :
+[32m[ExpoRootProject][0m Using the following versions:
+  - buildTools:  [32m36.0.0[0m
+  - minSdk:      [32m24[0m
+  - compileSdk:  [32m36[0m
+  - targetSdk:   [32m36[0m
+  - ndk:         [32m27.1.12297006[0m
+  - kotlin:      [32m2.1.20[0m
+  - ksp:         [32m2.1.20-2.0.1[0m
+
+> Configure project :expo
+
+Using expo modules
+  - [32msiteed-expo-audio-studio[0m (0.1.0)
+  - [32mexpo-constants[0m (18.0.13)
+  - [32mexpo-modules-core[0m (3.0.29)
+  - [32mexpo-share-intent[0m (unspecified)
+  - [33m[?][0m [32mexpo-application[0m (7.0.8)
+  - [33m[?][0m [32mexpo-asset[0m (12.0.12)
+  - [33m[?][0m [32mexpo-av[0m (16.0.8)
+  - [33m[?][0m [32mexpo-blur[0m (15.0.8)
+  - [33m[?][0m [32mexpo-clipboard[0m (8.0.8)
+  - [33m[?][0m [32mexpo-device[0m (8.0.10)
+  - [33m[?][0m [32mexpo-document-picker[0m (14.0.8)
+  - [33m[?][0m [32mexpo-file-system[0m (19.0.21)
+  - [33m[?][0m [32mexpo-font[0m (14.0.11)
+  - [33m[?][0m [32mexpo-haptics[0m (15.0.8)
+  - [33m[?][0m [32mexpo-image-loader[0m (6.0.0)
+  - [33m[?][0m [32mexpo-image-picker[0m (17.0.10)
+  - [33m[?][0m [32mexpo-keep-awake[0m (15.0.8)
+  - [33m[?][0m [32mexpo-linear-gradient[0m (15.0.8)
+  - [33m[?][0m [32mexpo-linking[0m (8.0.11)
+  - [33m[?][0m [32mexpo-local-authentication[0m (17.0.8)
+  - [33m[?][0m [32mexpo-localization[0m (17.0.8)
+  - [33m[?][0m [32mexpo-notifications[0m (0.32.16)
+  - [33m[?][0m [32mexpo-secure-store[0m (15.0.8)
+  - [33m[?][0m [32mexpo-sharing[0m (14.0.8)
+  - [33m[?][0m [32mexpo-speech[0m (14.0.8)
+  - [33m[?][0m [32mexpo-system-ui[0m (6.0.9)
+  - [33m[?][0m [32mexpo-web-browser[0m (15.0.10)
+
+
+> Configure project :react-native-reanimated
+Android gradle plugin: 8.11.0
+Gradle: 8.14.3
+
+> Task :expo-modules-core:preBuild UP-TO-DATE
+> Task :expo-share-intent:preBuild UP-TO-DATE
+> Task :react-native-reanimated:assertLatestReactNativeWithNewArchitectureTask SKIPPED
+> Task :expo:generatePackagesList UP-TO-DATE
+> Task :react-native-reanimated:assertMinimalReactNativeVersionTask SKIPPED
+> Task :react-native-purchases:preBuild UP-TO-DATE
+> Task :expo:preBuild UP-TO-DATE
+> Task :siteed-expo-audio-studio:preBuild UP-TO-DATE
+> Task :expo:preDebugBuild UP-TO-DATE
+> Task :expo:writeDebugAarMetadata UP-TO-DATE
+> Task :app:generateAutolinkingNewArchitectureFiles UP-TO-DATE
+> Task :expo-modules-core:preDebugBuild UP-TO-DATE
+> Task :lottie-react-native:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-safe-area-context:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :expo-modules-core:writeDebugAarMetadata UP-TO-DATE
+> Task :expo-share-intent:preDebugBuild UP-TO-DATE
+> Task :react-native-community_datetimepicker:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :expo-share-intent:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-purchases:preDebugBuild UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-screens:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-purchases:writeDebugAarMetadata UP-TO-DATE
+> Task :sentry_react-native:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :siteed-expo-audio-studio:preDebugBuild UP-TO-DATE
+> Task :siteed-expo-audio-studio:writeDebugAarMetadata UP-TO-DATE
+> Task :expo:generateDebugResValues UP-TO-DATE
+> Task :expo:generateDebugResources UP-TO-DATE
+> Task :react-native-community_datetimepicker:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :app:generateAutolinkingPackageList UP-TO-DATE
+> Task :lottie-react-native:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :lottie-react-native:preBuild UP-TO-DATE
+> Task :react-native-community_datetimepicker:preBuild UP-TO-DATE
+> Task :react-native-google-signin_google-signin:preBuild UP-TO-DATE
+> Task :lottie-react-native:preDebugBuild UP-TO-DATE
+> Task :react-native-google-signin_google-signin:preDebugBuild UP-TO-DATE
+> Task :react-native-community_datetimepicker:preDebugBuild UP-TO-DATE
+> Task :lottie-react-native:writeDebugAarMetadata UP-TO-DATE
+> Task :app:generateCodegenSchemaFromJavaScript SKIPPED
+> Task :react-native-community_datetimepicker:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-google-signin_google-signin:writeDebugAarMetadata UP-TO-DATE
+> Task :sentry_react-native:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :expo-share-intent:generateDebugResValues UP-TO-DATE
+> Task :react-native-screens:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :sentry_react-native:preBuild UP-TO-DATE
+> Task :expo-modules-core:generateDebugResValues UP-TO-DATE
+> Task :sentry_react-native:preDebugBuild UP-TO-DATE
+> Task :react-native-screens:preBuild UP-TO-DATE
+> Task :lottie-react-native:generateDebugResValues UP-TO-DATE
+> Task :react-native-screens:preDebugBuild UP-TO-DATE
+> Task :sentry_react-native:writeDebugAarMetadata UP-TO-DATE
+> Task :expo-modules-core:generateDebugResources UP-TO-DATE
+> Task :expo:packageDebugResources UP-TO-DATE
+> Task :react-native-screens:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-community_datetimepicker:generateDebugResValues UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateDebugResValues UP-TO-DATE
+> Task :expo-share-intent:generateDebugResources UP-TO-DATE
+> Task :react-native-purchases:generateDebugResValues UP-TO-DATE
+> Task :app:generateCodegenArtifactsFromSchema SKIPPED
+> Task :react-native-google-signin_google-signin:generateDebugResources UP-TO-DATE
+> Task :lottie-react-native:generateDebugResources UP-TO-DATE
+> Task :react-native-purchases:generateDebugResources UP-TO-DATE
+> Task :expo-modules-core:packageDebugResources UP-TO-DATE
+> Task :app:generateReactNativeEntryPoint UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-screens:generateDebugResValues UP-TO-DATE
+> Task :sentry_react-native:generateDebugResValues UP-TO-DATE
+> Task :expo-share-intent:packageDebugResources UP-TO-DATE
+> Task :react-native-purchases:packageDebugResources UP-TO-DATE
+> Task :expo:extractDeepLinksDebug UP-TO-DATE
+> Task :siteed-expo-audio-studio:generateDebugResValues UP-TO-DATE
+> Task :lottie-react-native:packageDebugResources UP-TO-DATE
+> Task :react-native-google-signin_google-signin:packageDebugResources UP-TO-DATE
+> Task :expo-modules-core:extractDeepLinksDebug UP-TO-DATE
+> Task :expo:processDebugManifest UP-TO-DATE
+> Task :expo-share-intent:extractDeepLinksDebug UP-TO-DATE
+> Task :siteed-expo-audio-studio:generateDebugResources UP-TO-DATE
+> Task :lottie-react-native:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-share-intent:processDebugManifest UP-TO-DATE
+> Task :react-native-google-signin_google-signin:extractDeepLinksDebug UP-TO-DATE
+> Task :siteed-expo-audio-studio:packageDebugResources UP-TO-DATE
+> Task :react-native-purchases:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-reanimated:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :sentry_react-native:generateDebugResources UP-TO-DATE
+> Task :sentry_react-native:packageDebugResources UP-TO-DATE
+> Task :sentry_react-native:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-reanimated:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :sentry_react-native:processDebugManifest UP-TO-DATE
+> Task :siteed-expo-audio-studio:extractDeepLinksDebug UP-TO-DATE
+> Task :siteed-expo-audio-studio:processDebugManifest UP-TO-DATE
+> Task :react-native-community_datetimepicker:generateDebugResources UP-TO-DATE
+> Task :expo-modules-core:processDebugManifest UP-TO-DATE
+> Task :react-native-reanimated:prepareReanimatedHeadersForPrefabs UP-TO-DATE
+> Task :react-native-google-signin_google-signin:processDebugManifest UP-TO-DATE
+> Task :expo:compileDebugLibraryResources UP-TO-DATE
+> Task :expo-share-intent:compileDebugLibraryResources UP-TO-DATE
+> Task :lottie-react-native:processDebugManifest UP-TO-DATE
+> Task :react-native-reanimated:prepareWorkletsHeadersForPrefabs UP-TO-DATE
+> Task :react-native-reanimated:preBuild UP-TO-DATE
+> Task :expo-modules-core:compileDebugLibraryResources UP-TO-DATE
+> Task :expo-share-intent:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-reanimated:preDebugBuild UP-TO-DATE
+> Task :react-native-reanimated:writeDebugAarMetadata UP-TO-DATE
+> Task :lottie-react-native:compileDebugLibraryResources UP-TO-DATE
+> Task :expo-modules-core:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-purchases:processDebugManifest UP-TO-DATE
+> Task :react-native-reanimated:generateDebugResValues UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-svg:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-screens:generateDebugResources UP-TO-DATE
+> Task :expo-modules-core:generateDebugRFile UP-TO-DATE
+> Task :expo:parseDebugLocalResources UP-TO-DATE
+> Task :expo-share-intent:generateDebugRFile UP-TO-DATE
+> Task :react-native-community_datetimepicker:packageDebugResources UP-TO-DATE
+> Task :lottie-react-native:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-community_datetimepicker:extractDeepLinksDebug UP-TO-DATE
+> Task :lottie-react-native:generateDebugRFile UP-TO-DATE
+> Task :react-native-community_datetimepicker:processDebugManifest UP-TO-DATE
+> Task :siteed-expo-audio-studio:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-google-signin_google-signin:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-community_datetimepicker:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-reanimated:generateDebugResources UP-TO-DATE
+> Task :expo:generateDebugRFile UP-TO-DATE
+> Task :react-native-reanimated:packageDebugResources UP-TO-DATE
+> Task :react-native-reanimated:extractDeepLinksDebug UP-TO-DATE
+> Task :siteed-expo-audio-studio:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-community_datetimepicker:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-purchases:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-reanimated:processDebugManifest UP-TO-DATE
+> Task :react-native-reanimated:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-community_datetimepicker:generateDebugRFile UP-TO-DATE
+> Task :react-native-purchases:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-screens:packageDebugResources UP-TO-DATE
+> Task :expo:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-modules-core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :sentry_react-native:compileDebugLibraryResources UP-TO-DATE
+> Task :expo-modules-core:generateDebugBuildConfig UP-TO-DATE
+> Task :expo:generateDebugBuildConfig UP-TO-DATE
+> Task :expo-share-intent:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-share-intent:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-screens:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-share-intent:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-screens:processDebugManifest UP-TO-DATE
+> Task :react-native-screens:compileDebugLibraryResources UP-TO-DATE
+> Task :siteed-expo-audio-studio:generateDebugRFile UP-TO-DATE
+> Task :siteed-expo-audio-studio:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-async-storage_async-storage:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-async-storage_async-storage:preBuild UP-TO-DATE
+> Task :siteed-expo-audio-studio:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-async-storage_async-storage:preDebugBuild UP-TO-DATE
+> Task :siteed-expo-audio-studio:javaPreCompileDebug UP-TO-DATE
+> Task :lottie-react-native:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-async-storage_async-storage:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-reanimated:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugResValues UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugResources UP-TO-DATE
+> Task :lottie-react-native:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-purchases:generateDebugRFile UP-TO-DATE
+> Task :react-native-community_datetimepicker:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-async-storage_async-storage:packageDebugResources UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateDebugRFile UP-TO-DATE
+> Task :react-native-safe-area-context:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-community_datetimepicker:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-async-storage_async-storage:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-safe-area-context:preBuild UP-TO-DATE
+> Task :react-native-google-signin_google-signin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-safe-area-context:preDebugBuild UP-TO-DATE
+> Task :react-native-safe-area-context:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-reanimated:generateDebugRFile UP-TO-DATE
+> Task :react-native-safe-area-context:generateDebugResValues UP-TO-DATE
+> Task :react-native-async-storage_async-storage:processDebugManifest UP-TO-DATE
+> Task :react-native-safe-area-context:generateDebugResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:compileDebugLibraryResources UP-TO-DATE
+> Task :sentry_react-native:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-screens:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-purchases:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :sentry_react-native:generateDebugRFile UP-TO-DATE
+> Task :react-native-async-storage_async-storage:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-safe-area-context:packageDebugResources UP-TO-DATE
+> Task :react-native-reanimated:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-screens:generateDebugRFile UP-TO-DATE
+> Task :react-native-svg:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-safe-area-context:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-screens:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-safe-area-context:processDebugManifest UP-TO-DATE
+> Task :react-native-screens:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugRFile UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-purchases:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-svg:preBuild UP-TO-DATE
+> Task :react-native-safe-area-context:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-svg:preDebugBuild UP-TO-DATE
+> Task :sentry_react-native:generateDebugBuildConfig UP-TO-DATE
+> Task :sentry_react-native:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-safe-area-context:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-safe-area-context:generateDebugRFile UP-TO-DATE
+> Task :react-native-safe-area-context:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-safe-area-context:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-reanimated:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-reanimated:packageNdkLibs NO-SOURCE
+> Task :react-native-async-storage_async-storage:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-svg:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-svg:generateDebugResValues UP-TO-DATE
+> Task :react-native-svg:generateDebugResources UP-TO-DATE
+> Task :react-native-svg:packageDebugResources UP-TO-DATE
+> Task :react-native-svg:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-svg:processDebugManifest UP-TO-DATE
+> Task :react-native-svg:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-svg:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-screens:compileDebugKotlin UP-TO-DATE
+> Task :react-native-async-storage_async-storage:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-community_datetimepicker:compileDebugKotlin UP-TO-DATE
+> Task :react-native-safe-area-context:compileDebugKotlin UP-TO-DATE
+> Task :lottie-react-native:compileDebugKotlin UP-TO-DATE
+> Task :react-native-community_datetimepicker:javaPreCompileDebug UP-TO-DATE
+> Task :lottie-react-native:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-safe-area-context:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-async-storage_async-storage:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-purchases:compileDebugKotlin UP-TO-DATE
+> Task :expo:mergeDebugShaders UP-TO-DATE
+> Task :react-native-purchases:javaPreCompileDebug UP-TO-DATE
+> Task :expo:compileDebugShaders NO-SOURCE
+> Task :expo:generateDebugAssets UP-TO-DATE
+> Task :expo:mergeDebugAssets UP-TO-DATE
+> Task :lottie-react-native:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-safe-area-context:compileDebugJavaWithJavac UP-TO-DATE
+> Task :expo-share-intent:mergeDebugShaders UP-TO-DATE
+> Task :lottie-react-native:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-purchases:compileDebugJavaWithJavac UP-TO-DATE
+> Task :expo-share-intent:compileDebugShaders NO-SOURCE
+> Task :react-native-safe-area-context:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileDebugKotlin UP-TO-DATE
+> Task :react-native-purchases:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :lottie-react-native:mergeDebugShaders UP-TO-DATE
+> Task :expo-share-intent:generateDebugAssets UP-TO-DATE
+> Task :lottie-react-native:compileDebugShaders NO-SOURCE
+> Task :lottie-react-native:generateDebugAssets UP-TO-DATE
+> Task :react-native-google-signin_google-signin:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-purchases:mergeDebugShaders UP-TO-DATE
+> Task :react-native-purchases:compileDebugShaders NO-SOURCE
+> Task :react-native-purchases:generateDebugAssets UP-TO-DATE
+> Task :expo-share-intent:mergeDebugAssets UP-TO-DATE
+> Task :react-native-async-storage_async-storage:mergeDebugShaders UP-TO-DATE
+> Task :react-native-purchases:mergeDebugAssets UP-TO-DATE
+> Task :lottie-react-native:mergeDebugAssets UP-TO-DATE
+> Task :react-native-safe-area-context:mergeDebugShaders UP-TO-DATE
+> Task :siteed-expo-audio-studio:mergeDebugShaders UP-TO-DATE
+> Task :react-native-async-storage_async-storage:compileDebugShaders NO-SOURCE
+> Task :siteed-expo-audio-studio:compileDebugShaders NO-SOURCE
+> Task :siteed-expo-audio-studio:generateDebugAssets UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugAssets UP-TO-DATE
+> Task :react-native-safe-area-context:compileDebugShaders NO-SOURCE
+> Task :react-native-safe-area-context:generateDebugAssets UP-TO-DATE
+> Task :react-native-async-storage_async-storage:mergeDebugAssets UP-TO-DATE
+> Task :react-native-svg:generateDebugRFile UP-TO-DATE
+> Task :lottie-react-native:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-svg:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-svg:javaPreCompileDebug UP-TO-DATE
+> Task :sentry_react-native:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-screens:mergeDebugShaders
+> Task :sentry_react-native:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :sentry_react-native:mergeDebugShaders UP-TO-DATE
+> Task :sentry_react-native:compileDebugShaders NO-SOURCE
+> Task :sentry_react-native:generateDebugAssets UP-TO-DATE
+> Task :react-native-screens:compileDebugShaders NO-SOURCE
+> Task :react-native-screens:generateDebugAssets UP-TO-DATE
+> Task :react-native-svg:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-svg:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-svg:mergeDebugShaders UP-TO-DATE
+> Task :react-native-svg:compileDebugShaders NO-SOURCE
+> Task :react-native-svg:generateDebugAssets UP-TO-DATE
+> Task :react-native-svg:mergeDebugAssets UP-TO-DATE
+> Task :react-native-async-storage_async-storage:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-purchases:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-svg:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-screens:mergeDebugAssets
+> Task :lottie-react-native:processDebugJavaRes UP-TO-DATE
+> Task :react-native-screens:javaPreCompileDebug
+> Task :siteed-expo-audio-studio:mergeDebugAssets UP-TO-DATE
+> Task :sentry_react-native:mergeDebugAssets UP-TO-DATE
+> Task :sentry_react-native:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-async-storage_async-storage:processDebugJavaRes NO-SOURCE
+> Task :react-native-svg:processDebugJavaRes NO-SOURCE
+> Task :sentry_react-native:processDebugJavaRes NO-SOURCE
+> Task :react-native-purchases:processDebugJavaRes UP-TO-DATE
+> Task :react-native-async-storage_async-storage:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :lottie-react-native:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :sentry_react-native:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :react-native-purchases:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :expo:mergeDebugJniLibFolders UP-TO-DATE
+> Task :expo:mergeDebugNativeLibs NO-SOURCE
+> Task :expo:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :expo-share-intent:mergeDebugJniLibFolders UP-TO-DATE
+> Task :expo-share-intent:mergeDebugNativeLibs NO-SOURCE
+> Task :expo-share-intent:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :lottie-react-native:mergeDebugJniLibFolders
+> Task :lottie-react-native:mergeDebugNativeLibs NO-SOURCE
+> Task :lottie-react-native:copyDebugJniLibsProjectOnly
+> Task :react-native-async-storage_async-storage:mergeDebugJniLibFolders
+> Task :react-native-async-storage_async-storage:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-async-storage_async-storage:copyDebugJniLibsProjectOnly
+> Task :react-native-purchases:mergeDebugJniLibFolders UP-TO-DATE
+> Task :react-native-purchases:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-purchases:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-safe-area-context:mergeDebugAssets UP-TO-DATE
+> Task :react-native-safe-area-context:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-svg:mergeDebugJniLibFolders
+> Task :react-native-svg:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-safe-area-context:processDebugJavaRes UP-TO-DATE
+> Task :react-native-svg:copyDebugJniLibsProjectOnly
+> Task :siteed-expo-audio-studio:mergeDebugJniLibFolders UP-TO-DATE
+> Task :sentry_react-native:mergeDebugJniLibFolders
+> Task :sentry_react-native:mergeDebugNativeLibs NO-SOURCE
+> Task :expo-modules-core:compileDebugKotlin UP-TO-DATE
+> Task :react-native-safe-area-context:mergeDebugJniLibFolders
+> Task :react-native-safe-area-context:mergeDebugNativeLibs NO-SOURCE
+> Task :sentry_react-native:copyDebugJniLibsProjectOnly
+> Task :expo-modules-core:javaPreCompileDebug
+> Task :siteed-expo-audio-studio:mergeDebugNativeLibs NO-SOURCE
+> Task :siteed-expo-audio-studio:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :expo:stripDebugDebugSymbols NO-SOURCE
+> Task :expo:copyDebugJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :expo:extractDeepLinksForAarDebug UP-TO-DATE
+> Task :expo:prepareDebugArtProfile UP-TO-DATE
+> Task :expo:prepareLintJarForPublish UP-TO-DATE
+> Task :expo-share-intent:stripDebugDebugSymbols NO-SOURCE
+> Task :expo-share-intent:copyDebugJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :expo-share-intent:extractDeepLinksForAarDebug UP-TO-DATE
+> Task :expo-share-intent:prepareDebugArtProfile UP-TO-DATE
+> Task :expo-share-intent:prepareLintJarForPublish UP-TO-DATE
+> Task :lottie-react-native:stripDebugDebugSymbols NO-SOURCE
+
+> Task :expo-constants:createExpoConfig
+The NODE_ENV environment variable is required but was not specified. Ensure the project is bundled with Expo CLI or NODE_ENV is set. Using only .env.local and .env
+
+> Task :lottie-react-native:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-safe-area-context:copyDebugJniLibsProjectOnly
+> Task :react-native-async-storage_async-storage:stripDebugDebugSymbols NO-SOURCE
+> Task :expo-modules-core:mergeDebugShaders
+> Task :react-native-async-storage_async-storage:copyDebugJniLibsProjectAndLocalJars
+> Task :lottie-react-native:extractDebugAnnotations
+> Task :lottie-react-native:extractDeepLinksForAarDebug
+> Task :lottie-react-native:mergeDebugGeneratedProguardFiles
+> Task :lottie-react-native:mergeDebugConsumerProguardFiles
+> Task :lottie-react-native:prepareDebugArtProfile
+> Task :lottie-react-native:prepareLintJarForPublish
+
+> Task :expo-constants:createExpoConfig
+env: load .env.local .env
+env: export EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY EXPO_PUBLIC_GEMINI_API_KEY EXPO_PUBLIC_REVENUECAT_ANDROID_KEY EXPO_PUBLIC_ELEVENLABS_API_KEY
+
+> Task :react-native-safe-area-context:bundleLibRuntimeToDirDebug
+> Task :react-native-purchases:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-purchases:copyDebugJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :react-native-purchases:extractDebugAnnotations UP-TO-DATE
+> Task :react-native-purchases:extractDeepLinksForAarDebug UP-TO-DATE
+> Task :react-native-purchases:mergeDebugGeneratedProguardFiles
+> Task :react-native-purchases:mergeDebugConsumerProguardFiles
+> Task :react-native-purchases:prepareDebugArtProfile UP-TO-DATE
+> Task :react-native-purchases:prepareLintJarForPublish UP-TO-DATE
+> Task :react-native-async-storage_async-storage:extractDebugAnnotations
+> Task :react-native-async-storage_async-storage:extractDeepLinksForAarDebug
+> Task :lottie-react-native:mergeDebugJavaResource
+> Task :react-native-async-storage_async-storage:mergeDebugGeneratedProguardFiles
+> Task :react-native-async-storage_async-storage:mergeDebugConsumerProguardFiles
+> Task :react-native-async-storage_async-storage:prepareDebugArtProfile
+> Task :react-native-purchases:mergeDebugJavaResource
+> Task :react-native-async-storage_async-storage:prepareLintJarForPublish
+> Task :react-native-safe-area-context:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-safe-area-context:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-async-storage_async-storage:mergeDebugJavaResource
+
+> Task :react-native-google-signin_google-signin:compileDebugJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :react-native-safe-area-context:extractDebugAnnotations
+> Task :react-native-safe-area-context:extractDeepLinksForAarDebug
+> Task :lottie-react-native:syncDebugLibJars
+> Task :react-native-safe-area-context:mergeDebugGeneratedProguardFiles
+> Task :react-native-safe-area-context:mergeDebugConsumerProguardFiles
+> Task :react-native-safe-area-context:prepareDebugArtProfile
+> Task :react-native-safe-area-context:prepareLintJarForPublish
+> Task :lottie-react-native:bundleDebugAar
+> Task :lottie-react-native:assembleDebug
+> Task :react-native-svg:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-purchases:syncDebugLibJars
+> Task :react-native-svg:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-purchases:bundleDebugAar
+> Task :react-native-purchases:assembleDebug
+> Task :sentry_react-native:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-async-storage_async-storage:syncDebugLibJars
+> Task :sentry_react-native:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-safe-area-context:mergeDebugJavaResource
+
+> Task :react-native-google-signin_google-signin:compileDebugJavaWithJavac
+Note: D:\TODO\MY EX\my-ex-coach\mobile-app\node_modules\@react-native-google-signin\google-signin\android\src\main\java\com\reactnativegooglesignin\RNGoogleSigninModule.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :react-native-async-storage_async-storage:bundleDebugAar
+> Task :react-native-async-storage_async-storage:assembleDebug
+> Task :siteed-expo-audio-studio:stripDebugDebugSymbols NO-SOURCE
+> Task :siteed-expo-audio-studio:copyDebugJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :siteed-expo-audio-studio:extractDeepLinksForAarDebug UP-TO-DATE
+> Task :siteed-expo-audio-studio:prepareDebugArtProfile UP-TO-DATE
+> Task :siteed-expo-audio-studio:prepareLintJarForPublish UP-TO-DATE
+
+> Task :react-native-community_datetimepicker:compileDebugJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :react-native-google-signin_google-signin:mergeDebugShaders
+> Task :react-native-google-signin_google-signin:compileDebugShaders NO-SOURCE
+> Task :react-native-google-signin_google-signin:generateDebugAssets UP-TO-DATE
+> Task :react-native-google-signin_google-signin:mergeDebugAssets
+> Task :react-native-google-signin_google-signin:bundleLibCompileToJarDebug
+> Task :react-native-safe-area-context:syncDebugLibJars
+> Task :react-native-safe-area-context:bundleDebugAar
+> Task :react-native-safe-area-context:assembleDebug
+> Task :react-native-community_datetimepicker:mergeDebugShaders UP-TO-DATE
+> Task :react-native-community_datetimepicker:compileDebugShaders NO-SOURCE
+> Task :react-native-community_datetimepicker:generateDebugAssets UP-TO-DATE
+> Task :react-native-community_datetimepicker:mergeDebugAssets UP-TO-DATE
+> Task :react-native-google-signin_google-signin:bundleLibRuntimeToJarDebug
+> Task :react-native-community_datetimepicker:bundleLibCompileToJarDebug
+> Task :react-native-community_datetimepicker:bundleLibRuntimeToJarDebug
+> Task :react-native-google-signin_google-signin:processDebugJavaRes
+> Task :react-native-community_datetimepicker:processDebugJavaRes
+> Task :react-native-google-signin_google-signin:mergeDebugJniLibFolders
+> Task :react-native-community_datetimepicker:mergeDebugJniLibFolders UP-TO-DATE
+> Task :react-native-community_datetimepicker:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-community_datetimepicker:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-google-signin_google-signin:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-google-signin_google-signin:copyDebugJniLibsProjectOnly
+> Task :react-native-community_datetimepicker:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-community_datetimepicker:copyDebugJniLibsProjectAndLocalJars
+
+> Task :react-native-reanimated:compileDebugJavaWithJavac
+D:\TODO\MY EX\my-ex-coach\mobile-app\node_modules\react-native-reanimated\android\src\reactNativeVersionPatch\BorderRadiiDrawableUtils\latest\com\swmansion\reanimated\BorderRadiiDrawableUtils.java:21: error: float cannot be dereferenced
+    return length.resolve((float) bounds.width()).toPixelFromDIP().getHorizontal();
+                                                 ^
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :react-native-google-signin_google-signin:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-google-signin_google-signin:bundleLibRuntimeToDirDebug
+> Task :react-native-google-signin_google-signin:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-community_datetimepicker:extractDebugAnnotations
+> Task :react-native-community_datetimepicker:extractDeepLinksForAarDebug
+
+> Task :react-native-reanimated:compileDebugJavaWithJavac FAILED
+1 error
+
+> Task :react-native-google-signin_google-signin:extractDebugAnnotations
+> Task :react-native-community_datetimepicker:mergeDebugGeneratedProguardFiles
+> Task :sentry_react-native:extractDebugAnnotations
+> Task :react-native-community_datetimepicker:bundleLibRuntimeToDirDebug
+
+> Task :expo-constants:createExpoConfig
+» android: expo-share-intent: your Expo SDK version does not match requirements! v3.2.3 needs ^52, found 54.0.0. Please refer to the compatibility table. https://github.com/achorein/expo-share-intent/#versioning
+
+> Task :react-native-svg:bundleLibRuntimeToDirDebug
+> Task :react-native-svg:extractDebugAnnotations
+> Task :react-native-screens:compileDebugJavaWithJavac
+> Task :expo-modules-core:compileDebugJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+[Incubating] Problems report is available at: file:///D:/TODO/MY%20EX/my-ex-coach/mobile-app/android/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':react-native-reanimated:compileDebugJavaWithJavac'.
+> Compilation failed; see the compiler output below.
+  Note: Recompile with -Xlint:deprecation for details.
+  D:\TODO\MY EX\my-ex-coach\mobile-app\node_modules\react-native-reanimated\android\src\reactNativeVersionPatch\BorderRadiiDrawableUtils\latest\com\swmansion\reanimated\BorderRadiiDrawableUtils.java:21: error: float cannot be dereferenced
+      return length.resolve((float) bounds.width()).toPixelFromDIP().getHorizontal();
+                                                   ^
+  Note: Recompile with -Xlint:unchecked for details.
+  Note: Some input files use or override a deprecated API.
+  Note: Some input files use unchecked or unsafe operations.
+  1 error
+
+* Try:
+> Check your code and dependencies to fix the compilation error(s)
+> Run with --scan to get full insights.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14.3/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 1m 13s
+359 actionable tasks: 80 executed, 279 up-to-date
