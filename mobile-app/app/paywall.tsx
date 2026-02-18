@@ -287,7 +287,7 @@ export default function PremiumScreen() {
             else if (planId.includes('explorer')) targetTier = 'explorer';
 
             if (TIER_RANKS[tier] > TIER_RANKS[targetTier]) {
-                showAlert(t('alert_active_subscription_title'), t('alert_downgrade_not_supported'));
+                showAlert((t as any)('alert_active_subscription_title'), (t as any)('alert_downgrade_not_supported'));
                 return;
             }
             if (TIER_RANKS[tier] === TIER_RANKS[targetTier] && !planId.includes('credits')) { // Extra safety check
@@ -376,7 +376,7 @@ export default function PremiumScreen() {
             <SafeAreaView edges={['top']} style={styles.headerSafe}>
 
 
-                <View style={styles.footer}>
+                <View style={styles.header}>
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                         <ArrowLeft size={24} color="#fff" />
                     </TouchableOpacity>
@@ -486,7 +486,7 @@ export default function PremiumScreen() {
                                 </View>
 
                                 <View style={styles.planFeatures}>
-                                    {plan.features.map((feature, i) => (
+                                    {plan.features.slice(0, 4).map((feature, i) => (
                                         <View key={i} style={styles.featureRow}>
                                             <Check size={14} color="#22c55e" />
                                             <Text style={styles.featureText}>{feature}</Text>
@@ -506,6 +506,7 @@ export default function PremiumScreen() {
                                         </Text>
                                     )}
                                 </View>
+                                <Text style={styles.trustText}>{t('paywall_disclaimer')}</Text>
                             </TouchableOpacity>
                         );
                     })}
@@ -515,7 +516,7 @@ export default function PremiumScreen() {
                 <View style={[styles.plansContainer, { marginTop: 24 }]}>
                     <View style={styles.sectionHeader}>
                         <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>
-                            {t('paywall_addons_title') === 'paywall_addons_title' ? 'Paquetes de Minutos' : t('paywall_addons_title')}
+                            {(t as any)('paywall_addons_title') === 'paywall_addons_title' ? 'Paquetes de Minutos' : (t as any)('paywall_addons_title')}
                         </Text>
                     </View>
 
@@ -543,9 +544,9 @@ export default function PremiumScreen() {
                                 </View>
                             </View>
                             <Text style={styles.planDescription}>{pkg.product.description}</Text>
-                            <View style={[styles.selectButton, { backgroundColor: '#8b5cf6', marginTop: 12 }]}>
-                                <Text style={styles.selectButtonText}>
-                                    {purchasing ? '...' : (t('paywall_buy_now') === 'paywall_buy_now' ? 'Comprar Pack' : t('paywall_buy_now'))}
+                            <View style={[styles.selectBtn, { backgroundColor: '#8b5cf6', marginTop: 12 }]}>
+                                <Text style={styles.selectBtnText}>
+                                    {purchasing ? '...' : ((t as any)('paywall_buy_now') === 'paywall_buy_now' ? 'Comprar Pack' : (t as any)('paywall_buy_now'))}
                                 </Text>
                             </View>
                         </TouchableOpacity>
@@ -821,7 +822,7 @@ const styles = StyleSheet.create({
         fontWeight: '800',
     },
     planPeriod: {
-        fontSize: 14,
+        fontSize: 12,
         color: '#6b7280',
         marginLeft: 4,
     },
@@ -861,6 +862,12 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '700',
         color: '#fff',
+    },
+    trustText: {
+        marginTop: 10,
+        fontSize: 11,
+        color: '#9ca3af',
+        textAlign: 'center',
     },
     disclaimer: {
         fontSize: 12,

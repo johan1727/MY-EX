@@ -84,6 +84,8 @@ export default function ActiveCallScreen() {
     // States
     const [callState, setCallState] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
     const [statusText, setStatusText] = useState('Mantén presionado para hablar');
+    const [callError, setCallError] = useState<string | null>(null);
+    const lastAudioUriRef = useRef<string | null>(null);
     const [usagePercent, setUsagePercent] = useState(0);
     const [recording, setRecording] = useState<Audio.Recording | null>(null);
     const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -93,6 +95,7 @@ export default function ActiveCallScreen() {
     const [isHandsFree, setIsHandsFree] = useState(true);
     const [isVADListening, setIsVADListening] = useState(false); // Track VAD activity
     const silenceTimer = useRef<NodeJS.Timeout | null>(null);
+    const networkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const lastVoiceTime = useRef<number>(Date.now());
 
     // Animation for mode transitions
@@ -139,6 +142,7 @@ export default function ActiveCallScreen() {
             }
             if (usageTimer.current) clearInterval(usageTimer.current);
             if (silenceTimer.current) clearTimeout(silenceTimer.current);
+            if (networkTimeoutRef.current) clearTimeout(networkTimeoutRef.current);
 
             // Log remaining unlogged time on exit (Best Effort)
             const pending = sessionSeconds.current - lastLoggedSeconds.current;
@@ -453,6 +457,7 @@ export default function ActiveCallScreen() {
 
         setCallState('thinking');
         setStatusText('💭 Pensando...');
+        setCallError(null);
 
         try {
             await recording.stopAndUnloadAsync();
@@ -460,6 +465,7 @@ export default function ActiveCallScreen() {
             setRecording(null);
 
             if (uri) {
+                lastAudioUriRef.current = uri;
                 await processAudioResponse(uri);
             }
         } catch (e) {
@@ -477,16 +483,17 @@ export default function ActiveCallScreen() {
                 if (!chatSession.current) throw new Error("Chat session failed to init");
             }
 
-            let base64Audio = '';
-            // Convert audio to Base64
-            base64Audio = await FileSystem.readAsStringAsync(audioUri, { encoding: FileSystem.EncodingType.Base64 });
+            const base64Audio = await readFileAsBase64Chunks(audioUri, 64 * 1024);
 
-            // Send to Gemini Chat Session (Persistent History)
-            const result = await chatSession.current.sendMessage([
-                { inlineData: { data: base64Audio, mimeType: 'audio/m4a' } }
-            ]);
+            const result = await withTimeout(
+                chatSession.current.sendMessage([
+                    { inlineData: { data: base64Audio, mimeType: 'audio/m4a' } }
+                ]),
+                20000,
+                'Gemini'
+            );
 
-            const responseText = result.response.text();
+            const responseText = (result as any).response.text();
 
             const cleanReply = responseText
                 .replace(/[\(\[\{].*?[\)\]\}]/g, '') // Remove (text), [text], {text}
@@ -498,7 +505,11 @@ export default function ActiveCallScreen() {
             if (!isMounted.current) return;
 
             // Start TTS with CLEAN text
-            const audioPath = await elevenLabsService.streamTextToSpeech(cleanReply, finalVoiceId);
+            const audioPath = await withTimeout(
+                elevenLabsService.streamTextToSpeech(cleanReply, finalVoiceId),
+                20000,
+                'TTS'
+            );
 
             if (isMounted.current) {
                 await playResponse(audioPath, cleanReply);
@@ -544,12 +555,54 @@ export default function ActiveCallScreen() {
             console.error('Process Error:', error);
             if (!isMounted.current) return;
             setStatusText('Error de conexión');
+            setCallError('No se pudo procesar el audio.');
             setCallState('idle');
-            // If Hands Free, retry listening after error delay?
-            if (isHandsFree) {
-                setTimeout(() => { if (isMounted.current) startRecording(); }, 3000);
-            }
         }
+    };
+
+    const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+        return new Promise<T>((resolve, reject) => {
+            if (networkTimeoutRef.current) clearTimeout(networkTimeoutRef.current);
+            networkTimeoutRef.current = setTimeout(() => {
+                reject(new Error(`${label} timeout`));
+            }, ms);
+            promise
+                .then(resolve)
+                .catch(reject)
+                .finally(() => {
+                    if (networkTimeoutRef.current) clearTimeout(networkTimeoutRef.current);
+                    networkTimeoutRef.current = null;
+                });
+        });
+    };
+
+    const readFileAsBase64Chunks = async (uri: string, chunkSize: number) => {
+        const info = await FileSystem.getInfoAsync(uri, { size: true });
+        const totalSize = 'size' in info ? (info as { size?: number }).size || 0 : 0;
+        if (!totalSize) {
+            return FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        }
+        let offset = 0;
+        let base64 = '';
+        while (offset < totalSize) {
+            const length = Math.min(chunkSize, totalSize - offset);
+            const chunk = await FileSystem.readAsStringAsync(uri, {
+                encoding: FileSystem.EncodingType.Base64,
+                position: offset,
+                length
+            } as any);
+            base64 += chunk;
+            offset += length;
+        }
+        return base64;
+    };
+
+    const handleRetry = async () => {
+        if (!lastAudioUriRef.current) return;
+        setCallError(null);
+        setCallState('thinking');
+        setStatusText('💭 Reintentando...');
+        await processAudioResponse(lastAudioUriRef.current);
     };
 
     const playResponse = async (uri: string, text: string) => {
@@ -663,6 +716,15 @@ export default function ActiveCallScreen() {
 
                 {/* Floating Glass Card for Text */}
                 <View style={styles.textCard}>
+                    <Text style={styles.statusBadge}>
+                        {callState === 'listening'
+                            ? 'Escuchando'
+                            : callState === 'thinking'
+                                ? 'Procesando'
+                                : callState === 'speaking'
+                                    ? 'Hablando'
+                                    : 'En espera'}
+                    </Text>
                     {callState === 'speaking' ? (
                         <TypewriterText
                             text={statusText}
@@ -673,6 +735,14 @@ export default function ActiveCallScreen() {
                         <Text style={[styles.mainStatus, { opacity: 0.6, fontSize: 16 }]}>
                             {statusText}
                         </Text>
+                    )}
+                    {callError && (
+                        <View style={styles.errorRow}>
+                            <Text style={styles.errorText}>{callError}</Text>
+                            <TouchableOpacity onPress={handleRetry} style={styles.retryButton}>
+                                <Text style={styles.retryText}>Reintentar</Text>
+                            </TouchableOpacity>
+                        </View>
                     )}
                 </View>
 
@@ -693,7 +763,22 @@ export default function ActiveCallScreen() {
             {/* Footer */}
             {!isHandsFree && (
                 <View style={styles.bottomBar}>
-                    <View style={{ width: 60 }} />
+                    <TouchableOpacity
+                        onPress={() => {
+                            if (callState === 'speaking' && sound) {
+                                sound.stopAsync().catch(() => null);
+                                setCallState('idle');
+                                setStatusText('Tu turno...');
+                            }
+                            if (callState === 'listening' && recording) {
+                                stopRecording();
+                            }
+                        }}
+                        style={[styles.talkButton, { width: 56, height: 56, borderRadius: 28, borderColor: '#ef4444' }]}
+                        disabled={callState === 'thinking'}
+                    >
+                        <Ionicons name="stop" size={22} color="#ef4444" />
+                    </TouchableOpacity>
 
                     {/* Talk Button (Hold) */}
                     <TouchableOpacity
@@ -782,6 +867,36 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: 100
+    },
+    statusBadge: {
+        fontSize: 11,
+        letterSpacing: 1,
+        textTransform: 'uppercase',
+        color: '#A1A1AA',
+        marginBottom: 8
+    },
+    errorRow: {
+        marginTop: 12,
+        width: '100%',
+        alignItems: 'center'
+    },
+    errorText: {
+        color: '#F87171',
+        fontSize: 12,
+        marginBottom: 8
+    },
+    retryButton: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(248,113,113,0.4)',
+        backgroundColor: 'rgba(248,113,113,0.1)'
+    },
+    retryText: {
+        color: '#FCA5A5',
+        fontWeight: '600',
+        fontSize: 12
     },
     mainStatus: {
         color: 'white',
