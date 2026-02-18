@@ -145,7 +145,8 @@ export const AnalysisProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 messageCount: parsedMessages.length,
                 createdAt: new Date().toISOString(),
                 tokenCount: masterPromptResult.tokenCount,
-                masterPrompt: masterPromptResult.masterPrompt
+                masterPrompt: masterPromptResult.masterPrompt,
+                temporalContext: masterPromptResult.temporalContext // Fix #8: Save temporal context
             };
 
             // 5. Save

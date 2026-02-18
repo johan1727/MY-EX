@@ -323,7 +323,7 @@ export default function ExSimulatorChat() {
             if (!limitResult.allowed) {
                 Keyboard.dismiss();
                 if (limitResult.reason === 'daily') {
-                    Alert.alert('Límite Diario Alcanzado', 'Has usado tus 30 mensajes de hoy. Vuelve mañana o mejora tu plan.');
+                    Alert.alert('Límite Diario Alcanzado', 'Has usado tus 15 mensajes de hoy. Vuelve mañana o desbloquea Premium para mensajes ilimitados.');
                     setShowUpgradeModal(true);
                 } else if (limitResult.reason === 'burst') {
                     // Alert.alert('Recargando Energía', `Has consumido tus 10 mensajes. Tómate un descanso, recargaremos en ${limitResult.waitTime} minutos.`);

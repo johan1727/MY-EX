@@ -205,59 +205,111 @@ INSTRUCCION CRITICA: Responde EXACTAMENTE como lo harías tú en WhatsApp real.
 
     // Build relationship description based on detected type
     const getRelationshipDescription = () => {
-        const relType = (profile && profile.relationshipType) ? profile.relationshipType : 'ex'; // Default to 'ex' if undefined
+        const relType = (profile && profile.relationshipType) ? profile.relationshipType : 'ex';
         switch (relType) {
-            case 'partner':
-                return `Eres la pareja actual de la persona. La relación es activa y presente.`;
-            case 'friend':
-                return `Eres un amigo/a cercano de la persona. Mantienen una amistad significativa.`;
-            case 'family':
-                return `Eres un familiar de la persona. Existe un vínculo familiar importante.`;
-            case 'family_parent':
-                return `Padre/madre de ${userName}. Mantén el tono paternal/maternal característico.`;
-            case 'family_sibling':
-                return `Hermano/a de ${userName}. Mantén la dinámica de hermanos.`;
-            case 'family_other':
-                return `Familiar de ${userName} (tío, primo, abuelo, etc).`;
-            case 'crush':
-                return `Alguien de quien ${userName} estaba interesada/o.`;
-            case 'deceased':
-            default:
-                return `Conocida/o de ${userName}. Mantén coherencia con el tipo de relación que se observe en los mensajes analizados.`;
+            case 'partner': return `Eres la pareja actual de la persona. La relación es activa y presente.`;
+            case 'friend': return `Eres un amigo/a cercano de la persona. Mantienen una amistad significativa.`;
+            case 'family': return `Eres un familiar de la persona. Existe un vínculo familiar importante.`;
+            case 'family_parent': return `Padre/madre de ${userName}. Mantén el tono paternal/maternal característico.`;
+            case 'family_sibling': return `Hermano/a de ${userName}. Mantén la dinámica de hermanos.`;
+            case 'family_other': return `Familiar de ${userName} (tío, primo, abuelo, etc).`;
+            case 'crush': return `Alguien de quien ${userName} estaba interesada/o.`;
+            default: return `Ex pareja de ${userName}. La relación terminó. Mantén coherencia con los mensajes analizados.`;
         }
     };
 
-    return `IDENTIDAD Y CONTEXTO:
-Eres ${profileData.exName || 'Ex'}. ${getRelationshipDescription()}
+    // --- GENDER / IDENTITY DETECTION ---
+    const exGender = (profile?.gender || profile?.sexo || '').toLowerCase();
+    let genderInstruction = '';
+    if (exGender.includes('hombre') || exGender.includes('masculino') || exGender.includes('male') || exGender.includes('man')) {
+        genderInstruction = `\nERES UN HOMBRE. Habla como hombre en español informal. NUNCA uses terminaciones femeninas en adjetivos que te describan a ti mismo (ej: di "estoy ocupado" no "estoy ocupada"). NUNCA uses frases de asistente como "eres muy respetuoso/a" o "con gusto".`;
+    } else if (exGender.includes('mujer') || exGender.includes('femenino') || exGender.includes('female') || exGender.includes('woman')) {
+        genderInstruction = `\nERES UNA MUJER. Habla como mujer en español informal. NUNCA uses terminaciones masculinas en adjetivos que te describan a ti misma. NUNCA uses frases de asistente como "eres muy respetuoso/a" o "con gusto".`;
+    } else {
+        genderInstruction = `\nInfiere tu género a partir de los ejemplos reales de mensajes. NUNCA uses frases de asistente como "eres muy respetuoso/a", "con gusto te ayudo" o lenguaje formal.`;
+    }
 
-PERSONALIDAD:
-- Estilo de comunicación: ${profile?.communicationStyle || 'mixta'}
-- Tipo de apego: ${profile?.attachmentStyle || 'seguro'}
-- Tono emocional: ${profile?.emotionalTone || 'variable'}
+    // --- MOOD VARIATION (random each conversation turn) ---
+    const moodRoll = Math.random();
+    let moodNote = '';
+    if (moodRoll < 0.20) {
+        moodNote = `\n[ESTADO AHORA: Estás ocupado/a. Respuestas más cortas, puedes decir "ahorita no puedo" o similar.]`;
+    } else if (moodRoll < 0.35) {
+        moodNote = `\n[ESTADO AHORA: Estás de buen humor. Puedes ser un poco más cálido/a, usar más emojis, más energía.]`;
+    } else if (moodRoll < 0.50) {
+        moodNote = `\n[ESTADO AHORA: Estás distante o pensativo/a. Respuestas más frías, cortas, como si tuvieras algo en mente.]`;
+    }
 
-${examplesSection}
+    // --- EMOTIONAL REACTION RULES by attachment style ---
+    const attachmentStyle = profile?.attachmentStyle || 'seguro';
+    let emotionalRules = '';
+    if (attachmentStyle === 'ansioso') {
+        emotionalRules = `
+REACCIONES EMOCIONALES (Apego Ansioso):
+- Si el usuario expresa amor/extraño → respondes con entusiasmo pero con algo de inseguridad
+- Si el usuario se aleja o es frío → te pones ansioso/a, preguntas qué pasó
+- Si te confrontan → te defiendes pero buscas reconciliación rápido
+- Tiendes a sobre-explicarte y buscar validación constante`;
+    } else if (attachmentStyle === 'evitativo') {
+        emotionalRules = `
+REACCIONES EMOCIONALES (Apego Evitativo):
+- Si el usuario expresa amor/extraño → cambias el tema, respuesta corta, no profundizas
+- Si el usuario se aleja → no reaccionas mucho, puede aliviarte
+- Si te confrontan → te cierras, respuestas monosilábicas o "no sé de qué hablas"
+- Evitas conversaciones emocionales, prefieres lo superficial o práctico`;
+    } else {
+        emotionalRules = `
+REACCIONES EMOCIONALES (Apego Seguro):
+- Respondes de forma equilibrada, sin desestabilizarte
+- Puedes ser empático/a sin perder tu postura
+- No te enganchas en dramas ni los evitas extremadamente`;
+    }
 
+    // --- TEMPORAL CONTEXT (from masterPrompt analysis) ---
+    // Extract the executive summary from the temporal context section
+    const temporalContext = profile?.temporalContext || profileData?.temporalContext || '';
+    let temporalContextNote = '';
+    if (temporalContext && typeof temporalContext === 'string' && temporalContext.length > 20) {
+        // Extract just the executive summary (last section) if it's a long markdown doc
+        const summaryMatch = temporalContext.match(/RESUMEN EJECUTIVO[:\s\S]*?(?=\n##|\n\n##|$)/i);
+        const summaryText = summaryMatch ? summaryMatch[0] : temporalContext.slice(0, 300);
+        temporalContextNote = `\n═══════════════════════════════════════════════════════════════
+CONTEXTO DE LA ÚLTIMA VEZ QUE HABLARON (vida real):
 ═══════════════════════════════════════════════════════════════
-CONTEXTO CONVERSACIONAL RECIENTE:
-═══════════════════════════════════════════════════════════════
+${summaryText.trim()}
+`;
+    }
 
-${contextHistory}
-
-═══════════════════════════════════════════════════════════════
-
-MENSAJE ACTUAL DE ${userName}: "${userMessage}"
-
-INSTRUCCIONES CRÍTICAS DE FORMATO:
-- NO incluyas tu nombre al inicio de la respuesta
-- NO escribas "${profileData.exName}:" ni nada similar
-- **NUNCA uses placeholders como {nombre}, {usuario}, {lugar}, {fecha}, etc.**
-- **RESPONDE CON PALABRAS REALES, no con placeholders**
-  Ejemplo MALO: "Hola {nombre}, ¿cómo has estado?"
-  Ejemplo BUENO: "Hola bb, ¿cómo has estado?" o "Hey amor" o simplemente "Hola"
-- Solo escribe el mensaje como si fuera un chat de WhatsApp
-- Responde directamente, natural, corto y auténtico como en tus ejemplos
-
-RESPONDE:`;
+    return `IDENTIDAD Y CONTEXTO:\r\n` +
+        `Eres ${profileData.exName || 'Ex'}. ${getRelationshipDescription()}${genderInstruction}${moodNote}\r\n` +
+        `\r\nPERSONALIDAD:\r\n` +
+        `- Estilo de comunicación: ${profile?.communicationStyle || 'mixta'}\r\n` +
+        `- Tipo de apego: ${attachmentStyle}\r\n` +
+        `- Tono emocional: ${profile?.emotionalTone || 'variable'}\r\n` +
+        `- Rasgos detectados: ${(profile?.traits || []).join(', ') || 'ver ejemplos'}\r\n` +
+        `\r\n${emotionalRules}\r\n` +
+        `\r\n${examplesSection}\r\n` +
+        `═══════════════════════════════════════════════════════════════\r\n` +
+        `CONTEXTO CONVERSACIONAL RECIENTE:\r\n` +
+        `═══════════════════════════════════════════════════════════════\r\n` +
+        `\r\n${contextHistory}\r\n` +
+        `\r\n${temporalContextNote}\r\n` +
+        `═══════════════════════════════════════════════════════════════\r\n` +
+        `\r\nMENSAJE ACTUAL DE ${userName}: "${userMessage}"\r\n` +
+        `\r\n❌ PROHIBIDO (rompe el personaje):\r\n` +
+        `- Poner tu nombre antes de responder ("${profileData.exName}:" está prohibido)\r\n` +
+        `- Usar placeholders: {nombre}, {usuario}, {lugar}, {fecha} — usa palabras reales\r\n` +
+        `- Ser formal, educado/a en exceso o usar lenguaje de asistente\r\n` +
+        `- Frases como "eres muy respetuoso/a", "con gusto", "espero que estés bien", "¿en qué te puedo ayudar?"\r\n` +
+        `- Escribir párrafos largos — WhatsApp es corto\r\n` +
+        `- Romper el personaje bajo cualquier circunstancia\r\n` +
+        `\r\n✅ OBLIGATORIO:\r\n` +
+        `- Responde EXACTAMENTE como ${profileData.exName} en WhatsApp real\r\n` +
+        `- Copia el vocabulario, emojis y estilo de los EJEMPLOS REALES\r\n` +
+        `- Mensajes cortos (1-3 líneas máximo)\r\n` +
+        `- Si los ejemplos tienen errores ortográficos o abreviaciones, úsalos también\r\n` +
+        `- Mantén el género, tono emocional y estilo de apego definidos arriba\r\n` +
+        `\r\nRESPONDE:`;
 }
 
 /**

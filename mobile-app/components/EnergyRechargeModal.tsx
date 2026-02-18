@@ -55,11 +55,11 @@ export default function EnergyRechargeModal({
                             </View>
                         </View>
 
-                        <Text style={styles.title}>Energía Agotada</Text>
+                        <Text style={styles.title}>¿Quieres seguir hablando?</Text>
 
                         <Text style={styles.description}>
-                            Has usado tus <Text style={styles.highlight}>10 mensajes</Text> rápidos.
-                            Tomate un respiro para mantener la calidad de la conexión.
+                            Usaste tus <Text style={styles.highlight}>5 mensajes</Text> de esta sesión.
+                            Con Premium tienes mensajes <Text style={styles.highlight}>ilimitados</Text> y acceso completo a REMI.
                         </Text>
 
                         {/* Timer Card */}
@@ -83,7 +83,7 @@ export default function EnergyRechargeModal({
                                     end={{ x: 1, y: 0 }}
                                     style={styles.gradientButton}
                                 >
-                                    <Text style={styles.upgradeText}>Saltar Espera (Premium)</Text>
+                                    <Text style={styles.upgradeText}>✨ Desbloquear Premium — Sin límites</Text>
                                     <Zap size={16} color="white" fill="white" />
                                 </LinearGradient>
                             </TouchableOpacity>
@@ -92,7 +92,7 @@ export default function EnergyRechargeModal({
                                 style={styles.dismissButton}
                                 onPress={onDismiss}
                             >
-                                <Text style={styles.dismissText}>Entendido, esperaré</Text>
+                                <Text style={styles.dismissText}>Prefiero esperar {waitTimeMinutes} min</Text>
                             </TouchableOpacity>
                         </View>
 

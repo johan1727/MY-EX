@@ -19,6 +19,7 @@ import { PurchasesPackage } from 'react-native-purchases';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../lib/i18n';
 import { useSubscription, SubscriptionTier } from '../lib/SubscriptionContext';
+import TikTokBusiness from 'expo-tiktok-business';
 
 // Helper to rank tiers
 const TIER_RANKS: Record<SubscriptionTier, number> = {
@@ -124,6 +125,16 @@ export default function PremiumScreen() {
             return;
         }
         loadOfferings();
+        // Track paywall view for TikTok funnel analysis
+        try {
+            TikTokBusiness.trackEvent('ViewContent', {
+                content_type: 'product',
+                content_id: 'paywall_screen',
+                description: 'User viewed paywall',
+            });
+        } catch (e) {
+            console.log('[TikTok] ViewContent tracking failed:', e);
+        }
     }, []);
 
     const [debugInfo, setDebugInfo] = useState<string>('');
@@ -318,6 +329,17 @@ export default function PremiumScreen() {
             const { success, error } = await purchasePackage(pkgToBuy);
 
             if (success) {
+                // Track purchase event for TikTok
+                try {
+                    TikTokBusiness.trackEvent('Purchase', {
+                        content_type: 'product',
+                        content_id: planId,
+                        currency: 'MXN',
+                        value: pkgToBuy.product.price,
+                    });
+                } catch (e) {
+                    console.log('[TikTok] Purchase tracking failed:', e);
+                }
                 showAlert(
                     `🎉 ${t('alert_purchase_success_title')}`,
                     t('alert_purchase_success_msg'),

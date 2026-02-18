@@ -1,7 +1,7 @@
 import { storage } from './storage';
 
-const DAILY_LIMIT = 30;
-const BURST_LIMIT = 10;
+const DAILY_LIMIT = 15;
+const BURST_LIMIT = 10; // Increased from 5 to avoid frustrating free users
 const BURST_WINDOW_MS = 3 * 60 * 60 * 1000; // 3 hours
 
 interface UsageData {

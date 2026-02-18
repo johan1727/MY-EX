@@ -59,6 +59,7 @@ export const translations = {
     paywall_title: { en: 'Premium Plans', es: 'Planes Premium' },
     paywall_hero_title: { en: 'Choose your Plan', es: 'Elige tu Plan' },
     paywall_hero_subtitle: { en: 'Unlock the full power of REMI', es: 'Desbloquea todo el poder de REMI' },
+    write_message: { en: 'Type a message...', es: 'Escribe un mensaje...' },
     paywall_monthly: { en: 'Monthly', es: 'Mensual' },
     paywall_yearly: { en: 'Yearly', es: 'Anual' },
     paywall_popular: { en: 'MOST POPULAR', es: 'MÁS POPULAR' },

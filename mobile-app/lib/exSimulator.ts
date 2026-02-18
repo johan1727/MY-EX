@@ -771,8 +771,8 @@ export async function analyzePersonality(
     const isFriend = relationshipType === 'friend';
     console.log(`[analyzePersonality] 🚀 STARTING OPTIMIZED 6-STAGE ANALYSIS (type: ${relationshipType || 'ex'})`);
 
-    if (!GEMINI_API_KEY) {
-        throw new Error('API Key de Gemini no configurada.');
+    if (!GEMINI_API_KEY || GEMINI_API_KEY.length < 10) {
+        throw new Error('API Key de Gemini no configurada o inválida. Verifica tu configuración.');
     }
 
     // 🌍 NUEVO: Detectar idioma del chat

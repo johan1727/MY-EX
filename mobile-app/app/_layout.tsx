@@ -17,6 +17,7 @@ import { AnalysisProgressIndicator } from '../components/AnalysisProgressIndicat
 import WebAnalytics from '../components/WebAnalytics';
 import HotjarTracking from '../components/HotjarTracking';
 import { NotificationManager } from '../lib/notifications';
+import AppErrorBoundary from '../components/AppErrorBoundary';
 import * as Sentry from '@sentry/react-native';
 import TikTokBusiness, { TiktokEventName } from 'expo-tiktok-business';
 import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
@@ -47,7 +48,7 @@ export default function RootLayout() {
     const [loading, setLoading] = useState(true);
     const [showSplash, setShowSplash] = useState(true);
     const [isLocked, setIsLocked] = useState(false);
-    const [shareIntentHandled, setShareIntentHandled] = useState(false);
+    const processingRef = useRef(false); // Use ref to avoid blocking re-triggers
     const [showShareModal, setShowShareModal] = useState(false);
     const [shareModalType, setShareModalType] = useState<'file' | 'text'>('file');
     const authRedirectDone = useRef(false);
@@ -57,11 +58,12 @@ export default function RootLayout() {
     // Handle shared files from WhatsApp (only on native)
     const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntent({ debug: true });
 
-    // Process share intent - MINIMAL VERSION
+    // Process share intent - works even when app is already open on any screen
     useEffect(() => {
-        // ALWAYS process intent, even if splash is showing
-        // if (showSplash) return; // <-- REMOVED BLOCKER
         if (!hasShareIntent || !shareIntent) return;
+        // Prevent double-processing the same intent
+        if (processingRef.current) return;
+        processingRef.current = true;
 
         try {
             console.log('[ShareIntent] Detected share intent');
@@ -74,7 +76,6 @@ export default function RootLayout() {
 
                 // Save to storage
                 storage.setItem('sharedText', sharedText);
-                setShareIntentHandled(true);
                 resetShareIntent();
 
                 // Show custom modal
@@ -93,7 +94,6 @@ export default function RootLayout() {
                     console.log('[ShareIntent] File path:', path);
                     storage.setItem('sharedFileUri', path);
                     storage.setItem('sharedFileName', file?.fileName || 'chat.txt');
-                    setShareIntentHandled(true);
                     resetShareIntent();
 
                     // Show custom modal
@@ -108,8 +108,11 @@ export default function RootLayout() {
         } catch (err) {
             console.error('[ShareIntent] Error:', err);
             resetShareIntent();
+        } finally {
+            // Always reset so the next share intent can be processed
+            processingRef.current = false;
         }
-    }, [showSplash, shareIntentHandled, hasShareIntent, shareIntent]);
+    }, [hasShareIntent, shareIntent]);
 
     // Initialize TikTok Ads
     // Initialize TikTok Ads with Permission
@@ -121,7 +124,7 @@ export default function RootLayout() {
                 console.log('[TikTok] Tracking permission:', status);
 
                 if (TikTokBusiness) {
-                    await TikTokBusiness.init(
+                    await (TikTokBusiness as any).init(
                         process.env.EXPO_PUBLIC_TIKTOK_APP_ID || '',
                         process.env.EXPO_PUBLIC_TIKTOK_ACCESS_TOKEN || '',
                         { debugMode: true } // Force Debug Mode for Test Events
@@ -159,18 +162,15 @@ export default function RootLayout() {
     // Handle modal actions
     const handleShareAnalyze = () => {
         setShowShareModal(false);
-        // Reset so user can export another file later
-        setTimeout(() => setShareIntentHandled(false), 1000);
         router.push('/tools/ex-simulator/import');
     };
 
     const handleShareCancel = () => {
         setShowShareModal(false);
-        // Clear stored data and reset for next export
+        // Clear stored data so next export starts fresh
         storage.removeItem('sharedText');
         storage.removeItem('sharedFileUri');
         storage.removeItem('sharedFileName');
-        setShareIntentHandled(false);
     };
 
     useEffect(() => {
@@ -181,8 +181,17 @@ export default function RootLayout() {
         });
 
         // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             setSession(session);
+
+            // Fix #5: Clear local profiles on logout to prevent data leak between users
+            if (!session) {
+                console.log('🔒 Logout detected - clearing local sensitive data...');
+                await storage.removeItem('exSimulator_allProfiles');
+                await storage.removeItem('exSimulator_currentProfile');
+                // Optional: Clear active conversation history too if desired, 
+                // but let's start with profiles which is the main privacy concern.
+            }
         });
 
         return () => subscription.unsubscribe();
@@ -279,40 +288,42 @@ export default function RootLayout() {
     }
 
     return (
-        <ThemeProvider>
-            <AnalysisProvider>
-                <SubscriptionProvider>
-                    <View style={{ flex: 1 }}>
-                        <Stack screenOptions={{ headerShown: false }}>
-                            <Stack.Screen name="welcome" />
-                            <Stack.Screen name="auth" />
-                            <Stack.Screen name="auth/callback" />
-                            <Stack.Screen name="(tabs)" />
-                            <Stack.Screen name="tools/decoder" />
-                            <Stack.Screen name="tools/panic" />
-                            {/* Main Simulator is now /(tabs)/chat, keeping import as tool */}
-                            <Stack.Screen name="tools/ex-simulator/import" />
-                            <Stack.Screen name="tools/ex-simulator/analysis" />
-                            <Stack.Screen name="tools/journal" />
-                            <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
-                            <Stack.Screen name="subscribe" options={{ presentation: 'modal', headerShown: false }} />
-                        </Stack>
-                        <ShareIntentModal
-                            visible={showShareModal}
-                            onAnalyze={handleShareAnalyze}
-                            onCancel={handleShareCancel}
-                            type={shareModalType}
-                        />
-                        <CookieConsent />
-                        <WebAnalytics />
-                        <HotjarTracking />
-                        {/* Show progress indicator for any active background analysis - REMOVED PER USER REQUEST */}
-                        {/* <AnalysisProgressIndicator /> */}
-                        <StatusBar style="light" />
-                    </View>
-                </SubscriptionProvider>
-            </AnalysisProvider>
-        </ThemeProvider>
+        <AppErrorBoundary>
+            <ThemeProvider>
+                <AnalysisProvider>
+                    <SubscriptionProvider>
+                        <View style={{ flex: 1 }}>
+                            <Stack screenOptions={{ headerShown: false }}>
+                                <Stack.Screen name="welcome" />
+                                <Stack.Screen name="auth" />
+                                <Stack.Screen name="auth/callback" />
+                                <Stack.Screen name="(tabs)" />
+                                <Stack.Screen name="tools/decoder" />
+                                <Stack.Screen name="tools/panic" />
+                                {/* Main Simulator is now /(tabs)/chat, keeping import as tool */}
+                                <Stack.Screen name="tools/ex-simulator/import" />
+                                <Stack.Screen name="tools/ex-simulator/analysis" />
+                                <Stack.Screen name="tools/journal" />
+                                <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
+                                <Stack.Screen name="subscribe" options={{ presentation: 'modal', headerShown: false }} />
+                            </Stack>
+                            <ShareIntentModal
+                                visible={showShareModal}
+                                onAnalyze={handleShareAnalyze}
+                                onCancel={handleShareCancel}
+                                type={shareModalType}
+                            />
+                            <CookieConsent />
+                            <WebAnalytics />
+                            <HotjarTracking />
+                            {/* Show progress indicator for any active background analysis - REMOVED PER USER REQUEST */}
+                            {/* <AnalysisProgressIndicator /> */}
+                            <StatusBar style="light" />
+                        </View>
+                    </SubscriptionProvider>
+                </AnalysisProvider>
+            </ThemeProvider>
+        </AppErrorBoundary>
     );
 }
 

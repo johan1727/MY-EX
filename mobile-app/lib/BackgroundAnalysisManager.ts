@@ -514,6 +514,7 @@ export class BackgroundAnalysisManager {
                 messageCount: messages.length,
                 createdAt: new Date().toISOString(),
                 masterPrompt: masterPromptResult?.masterPrompt,
+                temporalContext: masterPromptResult?.temporalContext, // Fix #8: Save temporal context
                 tokenCount: masterPromptResult?.tokenCount
             };
 

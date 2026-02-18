@@ -68,11 +68,12 @@ export default function ExChatScreen() {
         load();
     }, [profile_id]);
 
-    // Save messages on change
+    // Save messages on change (keep only last 100 to prevent storage bloat)
     useEffect(() => {
         if (profile && messages.length > 0) {
             const historyKey = `exSimulator_conversation_${profile.id}`;
-            storage.setItem(historyKey, JSON.stringify(messages));
+            const toSave = messages.slice(-100); // Fix #1: limit to 100 messages
+            storage.setItem(historyKey, JSON.stringify(toSave));
         }
     }, [messages, profile]);
 
@@ -92,6 +93,9 @@ export default function ExChatScreen() {
         setInputText('');
         setSelectedImage(null);
         setIsTyping(true);
+
+        // Fix #7: Realistic delay before showing typing indicator (like WhatsApp)
+        await new Promise(resolve => setTimeout(resolve, 1200 + Math.random() * 800));
 
         // Auto scroll
         setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
@@ -269,7 +273,7 @@ export default function ExChatScreen() {
                             ]}>
                                 {!isUser && (
                                     <View style={styles.avatar}>
-                                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>{profile.exName[0]}</Text>
+                                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>{profile.exName?.[0] || '?'}</Text>
                                     </View>
                                 )}
 
