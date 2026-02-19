@@ -19,7 +19,7 @@ import { PurchasesPackage } from 'react-native-purchases';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../lib/i18n';
 import { useSubscription, SubscriptionTier } from '../lib/SubscriptionContext';
-import TikTokBusiness from 'expo-tiktok-business';
+import TikTokBusiness, { TiktokEventName } from 'expo-tiktok-business';
 
 // Helper to rank tiers
 const TIER_RANKS: Record<SubscriptionTier, number> = {
@@ -321,22 +321,60 @@ export default function PremiumScreen() {
             return;
         }
 
+        // Track InitiateCheckout — user tapped a plan and is about to purchase
+        try {
+            TikTokBusiness.trackEvent(TiktokEventName.INITIATE_CHECKOUT, {
+                content_type: 'product',
+                content_id: planId,
+                currency: 'MXN',
+                value: pkgToBuy.product.price,
+            });
+        } catch (e) {
+            console.log('[TikTok] InitiateCheckout tracking failed:', e);
+        }
+
         // 3. Execute Purchase
         try {
             setPurchasing(true);
             console.log('🛒 Purchasing:', pkgToBuy.identifier);
 
+            // Track StartTrial if this is a free trial package
+            const isTrial = pkgToBuy.identifier.toLowerCase().includes('freetrial') ||
+                pkgToBuy.product?.introPrice?.price === 0;
+            if (isTrial && !isCredit) {
+                try {
+                    TikTokBusiness.trackEvent('StartTrial', {
+                        content_id: planId,
+                        description: 'Free trial started',
+                    });
+                    console.log('[TikTok] StartTrial event tracked');
+                } catch (e) {
+                    console.log('[TikTok] StartTrial tracking failed:', e);
+                }
+            }
+
             const { success, error } = await purchasePackage(pkgToBuy);
 
             if (success) {
-                // Track purchase event for TikTok
+                // Track Subscribe/Purchase event for TikTok
                 try {
-                    TikTokBusiness.trackEvent('Purchase', {
-                        content_type: 'product',
-                        content_id: planId,
-                        currency: 'MXN',
-                        value: pkgToBuy.product.price,
-                    });
+                    if (!isCredit) {
+                        // Subscription → use SUBSCRIBE (standard TikTok event)
+                        TikTokBusiness.trackEvent(TiktokEventName.SUBSCRIBE, {
+                            content_type: 'product',
+                            content_id: planId,
+                            currency: 'MXN',
+                            value: pkgToBuy.product.price,
+                        });
+                    } else {
+                        // Credit pack → use COMPLETE_PAYMENT
+                        TikTokBusiness.trackEvent(TiktokEventName.COMPLETE_PAYMENT, {
+                            content_type: 'product',
+                            content_id: planId,
+                            currency: 'MXN',
+                            value: pkgToBuy.product.price,
+                        });
+                    }
                 } catch (e) {
                     console.log('[TikTok] Purchase tracking failed:', e);
                 }
