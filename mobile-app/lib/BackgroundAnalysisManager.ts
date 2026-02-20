@@ -7,6 +7,17 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EventEmitter } from 'events';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+
+// Configure how notifications appear when app is in foreground
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+    }),
+});
 import { analyzePersonality } from './exSimulator';
 import { generateMasterPrompt } from './masterPromptGenerator';
 import { saveProfile } from './profileSync';
@@ -706,7 +717,46 @@ export class BackgroundAnalysisManager {
         // Emit global completion event for auto-navigation
         progressEmitter.emit('analysis_completed', { exName, profileId });
 
-        // TODO: Implement actual push notification with expo-notifications
+        // Push notification (only on native, not on web)
+        if (Platform.OS !== 'web') {
+            this.schedulePushNotification(exName).catch(err =>
+                console.warn('[BackgroundAnalysis] Push notification failed:', err)
+            );
+        }
+    }
+
+    /**
+     * Request permission and schedule local push notification
+     */
+    static async schedulePushNotification(exName: string): Promise<void> {
+        try {
+            const { status: existingStatus } = await Notifications.getPermissionsAsync();
+            let finalStatus = existingStatus;
+
+            if (existingStatus !== 'granted') {
+                const { status } = await Notifications.requestPermissionsAsync();
+                finalStatus = status;
+            }
+
+            if (finalStatus !== 'granted') {
+                console.log('[BackgroundAnalysis] Notification permission denied');
+                return;
+            }
+
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: `✨ Perfil de ${exName} listo`,
+                    body: 'El análisis terminó. Descubre qué reveló la IA sobre su personalidad.',
+                    sound: true,
+                    data: { exName },
+                },
+                trigger: null, // Immediately
+            });
+
+            console.log('[BackgroundAnalysis] ✅ Push notification scheduled for:', exName);
+        } catch (err) {
+            console.warn('[BackgroundAnalysis] Could not schedule notification:', err);
+        }
     }
 
     /**

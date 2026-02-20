@@ -14,20 +14,23 @@ import { useTheme } from '@/lib/ThemeContext';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-// Engaging messages instead of technical ones
+// Emotional, specific messages that feel personal and compelling
 const ENGAGING_MESSAGES = [
-    "🧠 Descifrando patrones emocionales únicos...",
-    "✨ Analizando la química de tu relación...",
-    "💫 Detectando momentos clave del vínculo...",
-    "🎭 Comprendiendo dinámicas de personalidad...",
-    "💝 Identificando lenguajes de amor...",
-    "🌟 Mapeando evolución emocional...",
-    "🔮 Revelando insights profundos...",
-    "💭 Procesando miles de conversaciones...",
-    "🎯 Construyendo perfil psicológico avanzado...",
-    "⚡ Aplicando inteligencia emocional...",
-    "🌈 Analizando espectro de sentimientos...",
-    "🧩 Conectando piezas del rompecabezas...",
+    "💭 Leyendo entre líneas de cada mensaje...",
+    "🌙 Analizando sus palabras de medianoche...",
+    "💔 Encontrando el punto exacto donde todo cambió...",
+    "🔍 Detectando lo que nunca te dijo en voz alta...",
+    "✨ Reconstruyendo cómo te veía de verdad...",
+    "🧠 Mapeando sus patrones emocionales ocultos...",
+    "💬 Comparando lo que escribía con lo que sentía...",
+    "🎭 Identificando sus máscaras y sus verdades...",
+    "💝 Descubriendo cómo expresaba (o no) el amor...",
+    "⚡ Analizando sus respuestas en momentos difíciles...",
+    "📊 Midiendo la evolución de su apego contigo...",
+    "🌊 Siguiendo el hilo emocional de la relación...",
+    "🧩 Conectando patrones que tú quizás no notaste...",
+    "🔮 Construyendo una imagen real de quién es...",
+    "💫 Casi listo — los insights más profundos vienen...",
 ];
 
 interface Particle {
@@ -80,7 +83,7 @@ export default function AnalysisLoadingPremium({
         const interval = setInterval(() => {
             const randomMessage = ENGAGING_MESSAGES[Math.floor(Math.random() * ENGAGING_MESSAGES.length)];
             setDisplayMessage(randomMessage);
-        }, 3000);
+        }, 2500);
 
         return () => clearInterval(interval);
     }, []);

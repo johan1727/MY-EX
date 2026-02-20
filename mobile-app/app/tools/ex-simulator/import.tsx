@@ -133,6 +133,14 @@ export default function ImportChat() {
 
 
     const [showRegistrationReminder, setShowRegistrationReminder] = useState(false);
+    const [consentChecked, setConsentChecked] = useState(false);
+
+    // Pre-check consent if user already accepted before
+    useEffect(() => {
+        storage.getItem('exSimulator_consentAccepted').then(val => {
+            if (val === 'true') setConsentChecked(true);
+        });
+    }, []);
 
     // UI Improvements: Auto-detect participants
     const [detectedParticipants, setDetectedParticipants] = useState<{ name: string; count: number }[]>([]);
@@ -1115,7 +1123,8 @@ export default function ImportChat() {
     // Validation is now handled in analysis.tsx with progress display
 
     if (step === 'guide') {
-        return <ExportGuide onClose={() => setStep('terms')} onBack={() => router.replace('/(tabs)')} />;
+        // Saltar directamente a upload — los términos se aceptan con checkbox inline en el formulario
+        return <ExportGuide onClose={() => setStep('upload')} onBack={() => router.replace('/(tabs)')} />;
     }
 
     if (step === 'terms') {
@@ -1693,6 +1702,52 @@ export default function ImportChat() {
                             )}
                         </View>
 
+                        {/* ✅ INLINE CONSENT CHECKBOX — casual, no-intrusive */}
+                        <TouchableOpacity
+                            onPress={async () => {
+                                const next = !consentChecked;
+                                setConsentChecked(next);
+                                if (next) await storage.setItem('exSimulator_consentAccepted', 'true');
+                            }}
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'flex-start',
+                                marginTop: 24,
+                                marginBottom: 4,
+                                paddingHorizontal: 4,
+                                gap: 10,
+                            }}
+                            activeOpacity={0.7}
+                        >
+                            {/* Custom checkbox box */}
+                            <View style={{
+                                width: 20,
+                                height: 20,
+                                borderRadius: 5,
+                                borderWidth: 1.5,
+                                borderColor: consentChecked ? '#a855f7' : (isDark ? '#555' : '#ccc'),
+                                backgroundColor: consentChecked ? '#a855f7' : 'transparent',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                marginTop: 1,
+                                flexShrink: 0,
+                            }}>
+                                {consentChecked && (
+                                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700', lineHeight: 14 }}>✓</Text>
+                                )}
+                            </View>
+                            <Text style={{ flex: 1, fontSize: 12, color: isDark ? '#9ca3af' : '#6b7280', lineHeight: 18 }}>
+                                Entiendo que esta es una <Text style={{ fontWeight: '600', color: isDark ? '#c4b5fd' : '#7c3aed' }}>simulación de IA</Text>, no una persona real. Acepto los{' '}
+                                <Text
+                                    style={{ color: '#a855f7', textDecorationLine: 'underline' }}
+                                    onPress={(e) => {
+                                        e.stopPropagation?.();
+                                        router.push('/legal/terms');
+                                    }}
+                                >términos de uso</Text> y asumo responsabilidad por el uso de esta herramienta.
+                            </Text>
+                        </TouchableOpacity>
+
                         <TouchableOpacity
                             style={{
                                 backgroundColor: isDark ? '#fff' : '#000',
@@ -1700,16 +1755,16 @@ export default function ImportChat() {
                                 borderRadius: 24, // Pill shape
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                marginTop: 32,
+                                marginTop: 16,
                                 marginBottom: 40,
                                 shadowColor: isDark ? "#fff" : "#000",
                                 shadowOffset: { width: 0, height: 4 },
                                 shadowOpacity: 0.2,
                                 shadowRadius: 12,
                                 elevation: 5,
-                                opacity: (isAnalyzing || !exName || !relationshipType) ? 0.5 : 1
+                                opacity: (isAnalyzing || !exName || !relationshipType || !consentChecked) ? 0.4 : 1
                             }}
-                            disabled={isAnalyzing || !exName || !relationshipType} // Use global isAnalyzing
+                            disabled={isAnalyzing || !exName || !relationshipType || !consentChecked}
                             onPress={handleAnalyze}
                         >
                             {isAnalyzing ? (
